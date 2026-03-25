@@ -1,0 +1,177 @@
+import { notFound } from "next/navigation"
+import { requireHousehold } from "@/lib/session"
+import { getShoppingList } from "@/lib/queries/shopping-list"
+import { ListHeader } from "./list-header"
+import { ListFilters } from "./list-filters"
+import { ItemList } from "./item-list"
+import { AddItemSheet } from "./add-item-sheet"
+
+interface ListPageProps {
+  params: Promise<{ id: string }>
+}
+
+export default async function ListPage({ params }: ListPageProps) {
+  const { id } = await params
+  const { membership } = await requireHousehold()
+
+  const list = await getShoppingList(id, membership.householdId)
+
+  if (!list) {
+    notFound()
+  }
+
+  const members = list.household.members.map((m) => ({
+    id: m.user.id,
+    name: m.user.name ?? m.user.email,
+    email: m.user.email,
+  }))
+
+  const categories = list.household.categories.map((c) => ({
+    id: c.id,
+    name: c.name,
+    icon: c.icon,
+    color: c.color,
+  }))
+
+  const items = list.items.map((item) => ({
+    id: item.id,
+    name: item.name,
+    description: item.description,
+    priority: item.priority,
+    phase: item.phase,
+    dueDate: item.dueDate ? item.dueDate.toISOString() : null,
+    estimatedPrice: item.estimatedPrice ? Number(item.estimatedPrice) : null,
+    url: item.url,
+    storeName: item.storeName,
+    status: item.status,
+    purchasedAt: item.purchasedAt ? item.purchasedAt.toISOString() : null,
+    category: item.category
+      ? {
+          id: item.category.id,
+          name: item.category.name,
+          icon: item.category.icon,
+          color: item.category.color,
+        }
+      : null,
+    assignedTo: item.assignedTo
+      ? {
+          id: item.assignedTo.id,
+          name: item.assignedTo.name ?? item.assignedTo.email,
+          email: item.assignedTo.email,
+        }
+      : null,
+    listId: item.listId,
+    createdAt: item.createdAt.toISOString(),
+    updatedAt: item.updatedAt.toISOString(),
+  }))
+
+  const totalSum = items.reduce(
+    (sum, item) =>
+      item.status !== "SKIPPED" && item.estimatedPrice
+        ? sum + item.estimatedPrice
+        : sum,
+    0
+  )
+
+  const purchasedSum = items.reduce(
+    (sum, item) =>
+      item.status === "PURCHASED" && item.estimatedPrice
+        ? sum + item.estimatedPrice
+        : sum,
+    0
+  )
+
+  const categoryTotals = items
+    .filter((item) => item.status !== "SKIPPED")
+    .reduce(
+      (acc, item) => {
+        const catName = item.category?.name ?? "Uten kategori"
+        const catColor = item.category?.color ?? null
+        const catIcon = item.category?.icon ?? null
+        if (!acc[catName]) {
+          acc[catName] = { total: 0, count: 0, color: catColor, icon: catIcon }
+        }
+        acc[catName].total += item.estimatedPrice ?? 0
+        acc[catName].count += 1
+        return acc
+      },
+      {} as Record<
+        string,
+        { total: number; count: number; color: string | null; icon: string | null }
+      >
+    )
+
+  return (
+    <div className="flex flex-col gap-6">
+      <ListHeader
+        listId={list.id}
+        listName={list.name}
+        totalSum={totalSum}
+        purchasedSum={purchasedSum}
+        itemCount={items.length}
+        purchasedCount={items.filter((i) => i.status === "PURCHASED").length}
+        shareLinks={list.shareLinks.map((sl) => ({
+          id: sl.id,
+          token: sl.token,
+          isActive: sl.isActive,
+        }))}
+      />
+
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <ListFilters
+          categories={categories}
+          members={members}
+        />
+        <AddItemSheet
+          listId={list.id}
+          categories={categories}
+          members={members}
+        />
+      </div>
+
+      <ItemList
+        items={items}
+        categories={categories}
+        members={members}
+        listId={list.id}
+      />
+
+      {Object.keys(categoryTotals).length > 0 && (
+        <div className="rounded-xl border bg-card p-4 ring-1 ring-foreground/10 shadow-xs">
+          <h3 className="font-heading text-base font-medium mb-3">
+            Oppsummering per kategori
+          </h3>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {Object.entries(categoryTotals)
+              .sort((a, b) => b[1].total - a[1].total)
+              .map(([name, data]) => (
+                <div
+                  key={name}
+                  className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2"
+                >
+                  <div className="flex items-center gap-2">
+                    {data.icon && (
+                      <span className="text-base">{data.icon}</span>
+                    )}
+                    <span className="text-sm font-medium">{name}</span>
+                    <span className="text-xs text-muted-foreground">
+                      ({data.count} {data.count === 1 ? "ting" : "ting"})
+                    </span>
+                  </div>
+                  <span className="text-sm font-medium tabular-nums">
+                    {data.total > 0
+                      ? new Intl.NumberFormat("nb-NO", {
+                          style: "currency",
+                          currency: "NOK",
+                          maximumFractionDigits: 0,
+                        }).format(data.total)
+                      : "—"}
+                  </span>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

@@ -1,0 +1,15 @@
+export const DEFAULT_CATEGORIES = [
+  { name: "Møbler", icon: "sofa", color: "#8B6F47" },
+  { name: "Elektronikk", icon: "monitor", color: "#4A6FA5" },
+  { name: "Kjøkken", icon: "chef-hat", color: "#C17817" },
+  { name: "Bad", icon: "bath", color: "#5B9BD5" },
+  { name: "Soverom", icon: "bed-double", color: "#7B68AE" },
+  { name: "Stue", icon: "lamp", color: "#D4A853" },
+  { name: "Verktøy", icon: "wrench", color: "#6B7280" },
+  { name: "Hage", icon: "flower-2", color: "#6B8E4E" },
+  { name: "Rengjøring", icon: "sparkles", color: "#2BAAE2" },
+  { name: "Tekstiler", icon: "shirt", color: "#C06B8A" },
+  { name: "Belysning", icon: "lightbulb", color: "#EAB308" },
+  { name: "Oppbevaring", icon: "archive", color: "#8B7355" },
+  { name: "Annet", icon: "box", color: "#9CA3AF" },
+] as const

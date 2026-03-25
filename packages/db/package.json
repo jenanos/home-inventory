@@ -1,0 +1,27 @@
+{
+  "name": "@workspace/db",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "pnpm db:generate",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:studio": "prisma studio",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.10.1"
+  },
+  "devDependencies": {
+    "@workspace/typescript-config": "workspace:*",
+    "prisma": "^6.10.1",
+    "tsx": "^4.19.4",
+    "typescript": "^5.9.3"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./seed-categories": "./src/seed-categories.ts"
+  }
+}

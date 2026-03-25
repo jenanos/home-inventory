@@ -1,0 +1,52 @@
+"use client"
+
+import Link from "next/link"
+import { usePathname } from "next/navigation"
+import { LayoutDashboard, ShoppingCart, Settings } from "lucide-react"
+import { cn } from "@workspace/ui/lib/utils"
+
+interface MobileNavProps {
+  lists: { id: string; name: string }[]
+}
+
+export function MobileNav({ lists }: MobileNavProps) {
+  const pathname = usePathname()
+
+  const items = [
+    { href: "/", label: "Oversikt", icon: LayoutDashboard },
+    {
+      href: lists[0] ? `/lists/${lists[0].id}` : "/",
+      label: "Lister",
+      icon: ShoppingCart,
+    },
+    { href: "/settings", label: "Innstillinger", icon: Settings },
+  ]
+
+  return (
+    <nav className="bg-card/95 border-border fixed inset-x-0 bottom-0 z-50 border-t backdrop-blur-sm md:hidden">
+      <div className="flex items-center justify-around">
+        {items.map((item) => {
+          const isActive =
+            item.href === "/"
+              ? pathname === "/"
+              : pathname.startsWith(item.href)
+          return (
+            <Link
+              key={item.label}
+              href={item.href}
+              className={cn(
+                "flex min-h-[56px] min-w-[64px] flex-col items-center justify-center gap-1 px-3 py-2 text-xs transition-colors",
+                isActive
+                  ? "text-primary"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <item.icon className="h-5 w-5" />
+              <span>{item.label}</span>
+            </Link>
+          )
+        })}
+      </div>
+    </nav>
+  )
+}
