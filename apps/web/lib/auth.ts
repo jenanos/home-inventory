@@ -1,3 +1,5 @@
+// TODO: Vurder oppgradering fra next-auth@5.0.0-beta.30 til stabil v5-release.
+// Se også @auth/core override i rot package.json (pnpm.overrides).
 import NextAuth from "next-auth"
 import type { NextAuthConfig } from "next-auth"
 import { PrismaAdapter } from "@auth/prisma-adapter"
