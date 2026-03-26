@@ -17,12 +17,7 @@ FROM node:22-alpine AS builder
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 WORKDIR /app
 
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
-COPY --from=deps /app/packages/db/node_modules ./packages/db/node_modules
-COPY --from=deps /app/packages/ui/node_modules ./packages/ui/node_modules
-COPY --from=deps /app/packages/eslint-config/node_modules ./packages/eslint-config/node_modules
-COPY --from=deps /app/packages/typescript-config/node_modules ./packages/typescript-config/node_modules
+COPY --from=deps /app/ ./
 COPY . .
 
 RUN pnpm --filter @workspace/db prisma generate
