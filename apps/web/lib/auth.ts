@@ -4,18 +4,54 @@ import { PrismaAdapter } from "@auth/prisma-adapter"
 import { db } from "@workspace/db"
 import Resend from "next-auth/providers/resend"
 
+const prismaAdapter = PrismaAdapter(db)
+
+const adapter: typeof prismaAdapter = {
+  ...prismaAdapter,
+  async useVerificationToken(params) {
+    // @auth/core may omit identifier from the callback URL query params.
+    // The Prisma adapter requires both fields for the compound unique lookup,
+    // so we fall back to finding by token alone when identifier is missing.
+    const existing = await db.verificationToken.findFirst({
+      where: { token: params.token },
+    })
+    if (!existing) return null
+    return db.verificationToken.delete({
+      where: {
+        identifier_token: {
+          identifier: existing.identifier,
+          token: existing.token,
+        },
+      },
+    })
+  },
+}
+
+// In dev mode, store the callback URL on globalThis so the verify page
+// can auto-redirect without requiring the user to copy a long URL
+// from the terminal (which often gets truncated).
+// globalThis is shared across all server-side module evaluations in the same process.
+const g = globalThis as unknown as { __devCallbackUrl?: string | null }
+export function setDevCallbackUrl(url: string) {
+  g.__devCallbackUrl = url
+}
+export function getDevCallbackUrl() {
+  const url = g.__devCallbackUrl
+  g.__devCallbackUrl = null
+  return url ?? null
+}
+
 const config = {
-  adapter: PrismaAdapter(db),
+  adapter,
   providers: [
     Resend({
       apiKey: process.env.RESEND_API_KEY,
       from: process.env.EMAIL_FROM ?? "Home Inventory <noreply@resend.dev>",
       ...(process.env.NODE_ENV === "development" && {
-        sendVerificationRequest({ url }) {
+        sendVerificationRequest({ url }: { url: string }) {
+          setDevCallbackUrl(url)
           console.log("\n════════════════════════════════════════")
-          console.log("  🔗 Magic link sign-in URL (dev mode)")
-          console.log("════════════════════════════════════════")
-          console.log(`\n  ${url}\n`)
+          console.log("  🔗 Magic link (auto-redirecting)")
           console.log("════════════════════════════════════════\n")
         },
       }),

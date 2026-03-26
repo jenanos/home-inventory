@@ -45,7 +45,7 @@ export async function createShoppingItem(input: CreateItemInput) {
   })
 
   revalidatePath(`/lists/${input.listId}`)
-  return item
+  return { ...item, estimatedPrice: item.estimatedPrice ? Number(item.estimatedPrice) : null }
 }
 
 interface UpdateItemInput {
@@ -89,7 +89,7 @@ export async function updateShoppingItem(input: UpdateItemInput) {
   })
 
   revalidatePath(`/lists/${item.listId}`)
-  return updated
+  return { ...updated, estimatedPrice: updated.estimatedPrice ? Number(updated.estimatedPrice) : null }
 }
 
 export async function deleteShoppingItem(itemId: string) {

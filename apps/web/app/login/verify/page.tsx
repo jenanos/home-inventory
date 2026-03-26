@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation"
 import Link from "next/link"
 import {
   Card,
@@ -8,7 +9,17 @@ import {
 import { Button } from "@workspace/ui/components/button"
 import { MailCheck, ArrowLeft } from "lucide-react"
 
-export default function VerifyPage() {
+export default async function VerifyPage() {
+  // In dev mode, auto-redirect to the magic link callback URL
+  // to avoid terminal URL truncation issues
+  if (process.env.NODE_ENV === "development") {
+    const { getDevCallbackUrl } = await import("@/lib/auth")
+    const callbackUrl = getDevCallbackUrl()
+    if (callbackUrl) {
+      redirect(callbackUrl)
+    }
+  }
+
   return (
     <div className="flex min-h-svh items-center justify-center bg-background p-4">
       <div className="w-full max-w-sm">

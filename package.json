@@ -20,5 +20,10 @@
   "packageManager": "pnpm@9.15.9",
   "engines": {
     "node": ">=20"
+  },
+  "pnpm": {
+    "overrides": {
+      "@auth/core": "0.41.1"
+    }
   }
 }
