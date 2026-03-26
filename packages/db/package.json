@@ -6,9 +6,9 @@
   "scripts": {
     "build": "pnpm db:generate",
     "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev",
-    "db:seed": "tsx prisma/seed.ts",
-    "db:studio": "prisma studio",
+    "db:migrate": "dotenv -e ../../.env -- prisma migrate dev",
+    "db:seed": "dotenv -e ../../.env -- tsx prisma/seed.ts",
+    "db:studio": "dotenv -e ../../.env -- prisma studio",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -16,6 +16,7 @@
   },
   "devDependencies": {
     "@workspace/typescript-config": "workspace:*",
+    "dotenv-cli": "^11.0.0",
     "prisma": "^6.10.1",
     "tsx": "^4.19.4",
     "typescript": "^5.9.3"
