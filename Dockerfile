@@ -20,6 +20,9 @@ WORKDIR /app
 COPY --from=deps /app/ ./
 COPY . .
 
+# Ensure public dir exists (Next.js standalone expects it)
+RUN mkdir -p apps/web/public
+
 RUN pnpm --filter @workspace/db prisma generate
 RUN pnpm build --filter web
 
@@ -35,15 +38,16 @@ ENV PORT=3000
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
-# Copy Next.js standalone output
+# Copy Next.js standalone output (includes node_modules with traced deps)
 COPY --from=builder /app/apps/web/.next/standalone ./
 COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
 COPY --from=builder /app/apps/web/public ./apps/web/public
 
-# Copy Prisma client and migrations
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+# Copy Prisma schema and migrations for migrate deploy
 COPY --from=builder /app/packages/db/prisma ./packages/db/prisma
+
+# Install prisma CLI for runtime migrations
+RUN npm install -g prisma@6
 
 # Copy start script
 COPY start.sh ./start.sh

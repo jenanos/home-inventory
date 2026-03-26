@@ -2,7 +2,7 @@
 set -e
 
 echo "Running Prisma migrations..."
-npx prisma migrate deploy --schema=./packages/db/prisma/schema.prisma
+prisma migrate deploy --schema=./packages/db/prisma/schema.prisma
 
 if [ "$SEED_ON_START" = "true" ]; then
   echo "Seeding database..."
