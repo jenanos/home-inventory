@@ -10,6 +10,15 @@ const config = {
     Resend({
       apiKey: process.env.RESEND_API_KEY,
       from: process.env.EMAIL_FROM ?? "Home Inventory <noreply@resend.dev>",
+      ...(process.env.NODE_ENV === "development" && {
+        sendVerificationRequest({ url }) {
+          console.log("\n════════════════════════════════════════")
+          console.log("  🔗 Magic link sign-in URL (dev mode)")
+          console.log("════════════════════════════════════════")
+          console.log(`\n  ${url}\n`)
+          console.log("════════════════════════════════════════\n")
+        },
+      }),
     }),
   ],
   pages: {

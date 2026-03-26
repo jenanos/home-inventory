@@ -68,6 +68,15 @@ When a new component is needed in the app, first check if it already exists in p
 
 Reference: https://ui.shadcn.com/docs/monorepo
 
+## Production Deployment
+
+- Image bygges automatisk av GitHub Actions ved push til main
+- Image: ghcr.io/jenanos/home-inventory:main
+- Serveren kjører Docker Compose med Postgres som separat container
+- Caddy håndterer TLS og reverse proxy
+- Watchtower auto-puller nye images hvert 5. minutt
+- Prisma-migrasjoner kjøres automatisk ved container-oppstart
+
 ## Code Conventions
 
 - TypeScript everywhere, avoid `any` — use proper types
