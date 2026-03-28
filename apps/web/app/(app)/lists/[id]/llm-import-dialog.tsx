@@ -237,7 +237,8 @@ export function LlmImportDialog({ listId, listName, categories }: LlmImportDialo
 
         handleReset()
         setOpen(false)
-      } catch {
+      } catch (err) {
+        console.error("LLM import failed:", err)
         setImportError("Noe gikk galt under importen. Prøv igjen.")
       }
     })
@@ -252,8 +253,13 @@ export function LlmImportDialog({ listId, listName, categories }: LlmImportDialo
     setImportError(null)
   }
 
+  function handleOpenChange(v: boolean) {
+    setOpen(v)
+    if (!v) handleReset()
+  }
+
   return (
-    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) handleReset() }}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">
           <BotMessageSquare className="h-4 w-4" data-icon="inline-start" />
