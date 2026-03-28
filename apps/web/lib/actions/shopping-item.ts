@@ -108,6 +108,54 @@ export async function deleteShoppingItem(itemId: string) {
   revalidatePath(`/lists/${item.listId}`)
 }
 
+interface BulkCreateItemInput {
+  name: string
+  description?: string
+  categoryName?: string
+  priority?: Priority
+  phase?: Phase
+  estimatedPrice?: number
+  url?: string
+  storeName?: string
+}
+
+interface BulkCreateInput {
+  items: BulkCreateItemInput[]
+  listId: string
+  categoryMap: Record<string, string> // categoryName -> categoryId
+}
+
+export async function bulkCreateShoppingItems(input: BulkCreateInput) {
+  const { membership } = await requireHousehold()
+
+  const list = await db.shoppingList.findUnique({
+    where: { id: input.listId },
+  })
+  if (!list || list.householdId !== membership.householdId) {
+    throw new Error("List not found")
+  }
+
+  const validPriorities = new Set(["HIGH", "MEDIUM", "LOW"])
+  const validPhases = new Set(["BEFORE_MOVE", "FIRST_WEEK", "CAN_WAIT", "NO_RUSH"])
+
+  const data = input.items.map((item) => ({
+    name: item.name,
+    description: item.description || undefined,
+    categoryId: item.categoryName ? input.categoryMap[item.categoryName] ?? undefined : undefined,
+    priority: (item.priority && validPriorities.has(item.priority) ? item.priority : "MEDIUM") as Priority,
+    phase: (item.phase && validPhases.has(item.phase) ? item.phase : undefined) as Phase | undefined,
+    estimatedPrice: item.estimatedPrice ?? undefined,
+    url: item.url || undefined,
+    storeName: item.storeName || undefined,
+    listId: input.listId,
+  }))
+
+  await db.shoppingItem.createMany({ data })
+
+  revalidatePath(`/lists/${input.listId}`)
+  return { count: data.length }
+}
+
 export async function toggleItemPurchased(itemId: string) {
   const { membership } = await requireHousehold()
 

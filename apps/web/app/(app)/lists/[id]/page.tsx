@@ -5,6 +5,7 @@ import { ListHeader } from "./list-header"
 import { ListFilters } from "./list-filters"
 import { ItemList } from "./item-list"
 import { AddItemSheet } from "./add-item-sheet"
+import { LlmImportDialog } from "./llm-import-dialog"
 
 interface ListPageProps {
   params: Promise<{ id: string }>
@@ -142,11 +143,18 @@ export default async function ListPage({ params }: ListPageProps) {
           categories={categories}
           members={members}
         />
-        <AddItemSheet
-          listId={list.id}
-          categories={categories}
-          members={members}
-        />
+        <div className="flex items-center gap-2">
+          <LlmImportDialog
+            listId={list.id}
+            listName={list.name}
+            categories={categories}
+          />
+          <AddItemSheet
+            listId={list.id}
+            categories={categories}
+            members={members}
+          />
+        </div>
       </div>
 
       <ItemList
