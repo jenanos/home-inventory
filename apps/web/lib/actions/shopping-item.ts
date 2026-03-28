@@ -108,6 +108,83 @@ export async function deleteShoppingItem(itemId: string) {
   revalidatePath(`/lists/${item.listId}`)
 }
 
+interface BulkCreateAlternativeInput {
+  name: string
+  price?: number
+  url?: string
+  imageUrl?: string
+  storeName?: string
+  notes?: string
+}
+
+interface BulkCreateItemInput {
+  name: string
+  description?: string
+  categoryName?: string
+  priority?: Priority
+  phase?: Phase
+  estimatedPrice?: number
+  url?: string
+  imageUrl?: string
+  storeName?: string
+  alternatives?: BulkCreateAlternativeInput[]
+}
+
+interface BulkCreateInput {
+  items: BulkCreateItemInput[]
+  listId: string
+  categoryMap: Record<string, string> // categoryName -> categoryId
+}
+
+export async function bulkCreateShoppingItems(input: BulkCreateInput) {
+  const { membership } = await requireHousehold()
+
+  const list = await db.shoppingList.findUnique({
+    where: { id: input.listId },
+  })
+  if (!list || list.householdId !== membership.householdId) {
+    throw new Error("List not found")
+  }
+
+  const validPriorities = new Set(["HIGH", "MEDIUM", "LOW"])
+  const validPhases = new Set(["BEFORE_MOVE", "FIRST_WEEK", "CAN_WAIT", "NO_RUSH"])
+
+  const results = await db.$transaction(
+    input.items.map((item) =>
+      db.shoppingItem.create({
+        data: {
+          name: item.name,
+          description: item.description || undefined,
+          categoryId: item.categoryName ? input.categoryMap[item.categoryName] ?? undefined : undefined,
+          priority: (item.priority && validPriorities.has(item.priority) ? item.priority : "MEDIUM") as Priority,
+          phase: (item.phase && validPhases.has(item.phase) ? item.phase : undefined) as Phase | undefined,
+          estimatedPrice: item.estimatedPrice ?? undefined,
+          url: item.url || undefined,
+          imageUrl: item.imageUrl || undefined,
+          storeName: item.storeName || undefined,
+          listId: input.listId,
+          alternatives: item.alternatives && item.alternatives.length > 0
+            ? {
+                create: item.alternatives.map((alt, index) => ({
+                  name: alt.name,
+                  price: alt.price ?? undefined,
+                  url: alt.url || undefined,
+                  imageUrl: alt.imageUrl || undefined,
+                  storeName: alt.storeName || undefined,
+                  notes: alt.notes || undefined,
+                  rank: index,
+                })),
+              }
+            : undefined,
+        },
+      })
+    )
+  )
+
+  revalidatePath(`/lists/${input.listId}`)
+  return { count: results.length }
+}
+
 export async function toggleItemPurchased(itemId: string) {
   const { membership } = await requireHousehold()
 
