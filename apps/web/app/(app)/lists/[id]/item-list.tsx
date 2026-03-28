@@ -57,6 +57,7 @@ export interface AlternativeData {
   name: string
   price: number | null
   url: string | null
+  imageUrl: string | null
   storeName: string | null
   notes: string | null
   rank: number
@@ -72,6 +73,7 @@ export interface ShoppingItemData {
   estimatedPrice: number | null
   effectivePrice: number | null
   url: string | null
+  imageUrl: string | null
   storeName: string | null
   status: "PENDING" | "PURCHASED" | "SKIPPED"
   purchasedAt: string | null
@@ -278,6 +280,14 @@ function MobileItemCard({
         />
       </div>
 
+      {item.imageUrl && (
+        <img
+          src={item.imageUrl}
+          alt={item.name}
+          className="h-10 w-10 rounded-md object-cover shrink-0"
+        />
+      )}
+
       <div
         className="flex-1 min-w-0 cursor-pointer"
         onClick={onEdit}
@@ -411,15 +421,23 @@ function DesktopItemRow({
         />
       </TableCell>
       <TableCell>
-        <div className="flex flex-col">
-          <span
-            className={cn(
-              "font-medium",
-              isPurchased && "line-through text-muted-foreground"
-            )}
-          >
-            {item.name}
-          </span>
+        <div className="flex items-start gap-2.5">
+          {item.imageUrl && (
+            <img
+              src={item.imageUrl}
+              alt={item.name}
+              className="h-9 w-9 rounded-md object-cover shrink-0 mt-0.5"
+            />
+          )}
+          <div className="flex flex-col">
+            <span
+              className={cn(
+                "font-medium",
+                isPurchased && "line-through text-muted-foreground"
+              )}
+            >
+              {item.name}
+            </span>
           {item.description && (
             <span className="text-xs text-muted-foreground line-clamp-1">
               {item.description}
@@ -448,6 +466,7 @@ function DesktopItemRow({
                 Lenke
               </a>
             )}
+          </div>
           </div>
         </div>
       </TableCell>

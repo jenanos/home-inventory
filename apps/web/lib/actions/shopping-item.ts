@@ -108,6 +108,15 @@ export async function deleteShoppingItem(itemId: string) {
   revalidatePath(`/lists/${item.listId}`)
 }
 
+interface BulkCreateAlternativeInput {
+  name: string
+  price?: number
+  url?: string
+  imageUrl?: string
+  storeName?: string
+  notes?: string
+}
+
 interface BulkCreateItemInput {
   name: string
   description?: string
@@ -116,7 +125,9 @@ interface BulkCreateItemInput {
   phase?: Phase
   estimatedPrice?: number
   url?: string
+  imageUrl?: string
   storeName?: string
+  alternatives?: BulkCreateAlternativeInput[]
 }
 
 interface BulkCreateInput {
@@ -138,22 +149,40 @@ export async function bulkCreateShoppingItems(input: BulkCreateInput) {
   const validPriorities = new Set(["HIGH", "MEDIUM", "LOW"])
   const validPhases = new Set(["BEFORE_MOVE", "FIRST_WEEK", "CAN_WAIT", "NO_RUSH"])
 
-  const data = input.items.map((item) => ({
-    name: item.name,
-    description: item.description || undefined,
-    categoryId: item.categoryName ? input.categoryMap[item.categoryName] ?? undefined : undefined,
-    priority: (item.priority && validPriorities.has(item.priority) ? item.priority : "MEDIUM") as Priority,
-    phase: (item.phase && validPhases.has(item.phase) ? item.phase : undefined) as Phase | undefined,
-    estimatedPrice: item.estimatedPrice ?? undefined,
-    url: item.url || undefined,
-    storeName: item.storeName || undefined,
-    listId: input.listId,
-  }))
-
-  await db.shoppingItem.createMany({ data })
+  const results = await db.$transaction(
+    input.items.map((item) =>
+      db.shoppingItem.create({
+        data: {
+          name: item.name,
+          description: item.description || undefined,
+          categoryId: item.categoryName ? input.categoryMap[item.categoryName] ?? undefined : undefined,
+          priority: (item.priority && validPriorities.has(item.priority) ? item.priority : "MEDIUM") as Priority,
+          phase: (item.phase && validPhases.has(item.phase) ? item.phase : undefined) as Phase | undefined,
+          estimatedPrice: item.estimatedPrice ?? undefined,
+          url: item.url || undefined,
+          imageUrl: item.imageUrl || undefined,
+          storeName: item.storeName || undefined,
+          listId: input.listId,
+          alternatives: item.alternatives && item.alternatives.length > 0
+            ? {
+                create: item.alternatives.map((alt, index) => ({
+                  name: alt.name,
+                  price: alt.price ?? undefined,
+                  url: alt.url || undefined,
+                  imageUrl: alt.imageUrl || undefined,
+                  storeName: alt.storeName || undefined,
+                  notes: alt.notes || undefined,
+                  rank: index,
+                })),
+              }
+            : undefined,
+        },
+      })
+    )
+  )
 
   revalidatePath(`/lists/${input.listId}`)
-  return { count: data.length }
+  return { count: results.length }
 }
 
 export async function toggleItemPurchased(itemId: string) {

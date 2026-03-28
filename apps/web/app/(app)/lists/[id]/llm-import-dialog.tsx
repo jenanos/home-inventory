@@ -33,6 +33,15 @@ interface LlmImportDialogProps {
   categories: Array<{ id: string; name: string; icon: string | null }>
 }
 
+interface ParsedAlternative {
+  name: string
+  price?: number
+  url?: string
+  imageUrl?: string
+  storeName?: string
+  notes?: string
+}
+
 interface ParsedItem {
   name: string
   description?: string
@@ -41,7 +50,9 @@ interface ParsedItem {
   phase?: Phase
   estimatedPrice?: number
   url?: string
+  imageUrl?: string
   storeName?: string
+  alternatives?: ParsedAlternative[]
 }
 
 function buildPrompt(listName: string, categories: Array<{ name: string; icon: string | null }>) {
@@ -59,28 +70,59 @@ Svar KUN med en gyldig JSON-array, uten noe annet tekst rundt. Hvert produkt ska
   "phase": "BEFORE_MOVE | FIRST_WEEK | CAN_WAIT | NO_RUSH",
   "estimatedPrice": 1234,
   "url": "https://lenke-til-produkt",
-  "storeName": "Butikknavn"
+  "imageUrl": "https://lenke-til-produktbilde",
+  "storeName": "Butikknavn",
+  "alternatives": [
+    {
+      "name": "Alternativt produktnavn",
+      "price": 1234,
+      "url": "https://lenke-til-alternativ",
+      "imageUrl": "https://lenke-til-bilde",
+      "storeName": "Butikknavn",
+      "notes": "Kort notat om dette alternativet"
+    }
+  ]
 }
 
 Regler:
 - "name" er obligatorisk, alle andre felter er valgfrie
-- "estimatedPrice" skal være et tall i NOK uten valutategn
+- "estimatedPrice" og "price" skal være tall i NOK uten valutategn
 - "priority": HIGH = må ha, MEDIUM = bør ha, LOW = kjekt å ha
 - "phase": BEFORE_MOVE = før innflytting, FIRST_WEEK = første uke, CAN_WAIT = kan vente, NO_RUSH = ingen hast
 - "categoryName" bør matche en av de tilgjengelige kategoriene nøyaktig
+- "imageUrl" skal være en direkte lenke til et produktbilde (JPG/PNG/WebP)
+- "alternatives" er en liste med alternative produkter i prioritert rekkefølge (beste først). Bruk denne når du har researchet flere varianter/merker av samme type produkt
+- Hvert alternativ i listen skal ha minst "name", og gjerne pris, lenke og bilde
 - Svar BARE med JSON-arrayen, ingen ekstra tekst
 
 Eksempel på forventet svar:
 [
   {
-    "name": "KALLAX Hylle",
-    "description": "4x2 hvit, 147x77 cm",
-    "categoryName": "Møbler",
-    "priority": "MEDIUM",
-    "phase": "FIRST_WEEK",
-    "estimatedPrice": 1299,
-    "url": "https://www.ikea.com/no/no/p/kallax-hylle-hvit-20275814/",
-    "storeName": "IKEA"
+    "name": "Vaskemaskin",
+    "description": "8kg, energiklasse A",
+    "categoryName": "Hvitevarer",
+    "priority": "HIGH",
+    "phase": "BEFORE_MOVE",
+    "estimatedPrice": 7999,
+    "storeName": "Elkjøp",
+    "alternatives": [
+      {
+        "name": "Samsung WW80T4540AE",
+        "price": 7999,
+        "url": "https://www.elkjop.no/product/samsung-ww80t4540ae",
+        "imageUrl": "https://www.elkjop.no/image/samsung-ww80t4540ae.jpg",
+        "storeName": "Elkjøp",
+        "notes": "Best i test, 8kg, 1400 rpm"
+      },
+      {
+        "name": "LG F4WV308S6U",
+        "price": 6499,
+        "url": "https://www.power.no/product/lg-f4wv308s6u",
+        "imageUrl": "https://www.power.no/image/lg-f4wv308s6u.jpg",
+        "storeName": "Power",
+        "notes": "AI DD-teknologi, 8kg, god pris"
+      }
+    ]
   }
 ]`
 }
@@ -153,8 +195,46 @@ function parseJsonInput(raw: string): { items: ParsedItem[]; error: string | nul
       if (entry.url && typeof entry.url === "string") {
         item.url = entry.url.trim()
       }
+      if (entry.imageUrl && typeof entry.imageUrl === "string") {
+        item.imageUrl = entry.imageUrl.trim()
+      }
       if (entry.storeName && typeof entry.storeName === "string") {
         item.storeName = entry.storeName.trim()
+      }
+
+      // Parse alternatives
+      if (Array.isArray(entry.alternatives) && entry.alternatives.length > 0) {
+        const alts: ParsedAlternative[] = []
+        for (const altEntry of entry.alternatives) {
+          if (!altEntry || typeof altEntry !== "object") continue
+          if (!altEntry.name || typeof altEntry.name !== "string" || !altEntry.name.trim()) continue
+
+          const alt: ParsedAlternative = {
+            name: String(altEntry.name).trim(),
+          }
+          if (altEntry.price != null) {
+            const altPrice = Number(altEntry.price)
+            if (!isNaN(altPrice) && altPrice >= 0) {
+              alt.price = altPrice
+            }
+          }
+          if (altEntry.url && typeof altEntry.url === "string") {
+            alt.url = altEntry.url.trim()
+          }
+          if (altEntry.imageUrl && typeof altEntry.imageUrl === "string") {
+            alt.imageUrl = altEntry.imageUrl.trim()
+          }
+          if (altEntry.storeName && typeof altEntry.storeName === "string") {
+            alt.storeName = altEntry.storeName.trim()
+          }
+          if (altEntry.notes && typeof altEntry.notes === "string") {
+            alt.notes = altEntry.notes.trim()
+          }
+          alts.push(alt)
+        }
+        if (alts.length > 0) {
+          item.alternatives = alts
+        }
       }
 
       items.push(item)
@@ -373,38 +453,83 @@ export function LlmImportDialog({ listId, listName, categories }: LlmImportDialo
             <ScrollArea className="max-h-72 rounded-lg border">
               <div className="divide-y">
                 {parsedItems.map((item, i) => (
-                  <div key={i} className="flex flex-col gap-1 p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-medium text-sm">{item.name}</span>
-                      {item.estimatedPrice != null && (
-                        <span className="text-sm tabular-nums text-muted-foreground">
-                          {formatPrice(item.estimatedPrice)}
-                        </span>
-                      )}
-                    </div>
-                    {item.description && (
-                      <p className="text-xs text-muted-foreground">{item.description}</p>
+                  <div key={i} className="flex gap-3 p-3">
+                    {item.imageUrl && (
+                      <img
+                        src={item.imageUrl}
+                        alt={item.name}
+                        className="h-12 w-12 rounded-md object-cover shrink-0"
+                      />
                     )}
-                    <div className="flex flex-wrap gap-1.5 mt-0.5">
-                      {item.categoryName && (
-                        <Badge variant="outline" className="text-xs">
-                          {item.categoryName}
-                        </Badge>
+                    <div className="flex flex-col gap-1 min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium text-sm">{item.name}</span>
+                        {item.estimatedPrice != null && (
+                          <span className="text-sm tabular-nums text-muted-foreground">
+                            {formatPrice(item.estimatedPrice)}
+                          </span>
+                        )}
+                      </div>
+                      {item.description && (
+                        <p className="text-xs text-muted-foreground">{item.description}</p>
                       )}
-                      {item.priority && (
-                        <Badge variant="secondary" className="text-xs">
-                          {priorityLabel[item.priority] ?? item.priority}
-                        </Badge>
-                      )}
-                      {item.phase && (
-                        <Badge variant="secondary" className="text-xs">
-                          {phaseLabel[item.phase] ?? item.phase}
-                        </Badge>
-                      )}
-                      {item.storeName && (
-                        <Badge variant="outline" className="text-xs">
-                          {item.storeName}
-                        </Badge>
+                      <div className="flex flex-wrap gap-1.5 mt-0.5">
+                        {item.categoryName && (
+                          <Badge variant="outline" className="text-xs">
+                            {item.categoryName}
+                          </Badge>
+                        )}
+                        {item.priority && (
+                          <Badge variant="secondary" className="text-xs">
+                            {priorityLabel[item.priority] ?? item.priority}
+                          </Badge>
+                        )}
+                        {item.phase && (
+                          <Badge variant="secondary" className="text-xs">
+                            {phaseLabel[item.phase] ?? item.phase}
+                          </Badge>
+                        )}
+                        {item.storeName && (
+                          <Badge variant="outline" className="text-xs">
+                            {item.storeName}
+                          </Badge>
+                        )}
+                        {item.alternatives && item.alternatives.length > 0 && (
+                          <Badge variant="secondary" className="text-xs">
+                            {item.alternatives.length} {item.alternatives.length === 1 ? "alternativ" : "alternativer"}
+                          </Badge>
+                        )}
+                      </div>
+                      {item.alternatives && item.alternatives.length > 0 && (
+                        <div className="mt-1.5 space-y-1 pl-2 border-l-2 border-muted">
+                          {item.alternatives.map((alt, j) => (
+                            <div key={j} className="flex items-center gap-2">
+                              {alt.imageUrl && (
+                                <img
+                                  src={alt.imageUrl}
+                                  alt={alt.name}
+                                  className="h-7 w-7 rounded object-cover shrink-0"
+                                />
+                              )}
+                              <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                <span className="text-xs text-muted-foreground font-medium shrink-0">
+                                  {j + 1}.
+                                </span>
+                                <span className="text-xs truncate">{alt.name}</span>
+                                {alt.storeName && (
+                                  <span className="text-[10px] text-muted-foreground shrink-0">
+                                    ({alt.storeName})
+                                  </span>
+                                )}
+                              </div>
+                              {alt.price != null && (
+                                <span className="text-xs tabular-nums text-muted-foreground shrink-0">
+                                  {formatPrice(alt.price)}
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </div>
                   </div>

@@ -130,6 +130,7 @@ model ShoppingItem {
   dueDate        DateTime?
   estimatedPrice Decimal?   @db.Decimal(10, 2)
   url            String?
+  imageUrl       String?
   storeName      String?
   assignedToId   String?    @db.Uuid
   status         ItemStatus @default(PENDING)
@@ -149,6 +150,7 @@ model ProductAlternative {
   name      String
   price     Decimal? @db.Decimal(10, 2)
   url       String?
+  imageUrl  String?
   storeName String?
   notes     String?
   rank      Int      @default(0)

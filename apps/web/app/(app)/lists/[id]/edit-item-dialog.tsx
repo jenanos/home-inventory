@@ -546,39 +546,48 @@ function AlternativesSection({
                   if (e.key === "Enter" || e.key === " ") setEditingId(alt.id)
                 }}
               >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex flex-col min-w-0">
-                    <span className="text-sm font-medium truncate">
-                      {alt.name}
-                    </span>
-                    {alt.storeName && (
-                      <span className="text-[10px] text-muted-foreground">
-                        {alt.storeName}
+                <div className="flex items-start gap-2">
+                  {alt.imageUrl && (
+                    <img
+                      src={alt.imageUrl}
+                      alt={alt.name}
+                      className="h-9 w-9 rounded object-cover shrink-0"
+                    />
+                  )}
+                  <div className="flex items-start justify-between gap-2 flex-1 min-w-0">
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-sm font-medium truncate">
+                        {alt.name}
                       </span>
-                    )}
-                    {alt.notes && (
-                      <span className="text-[10px] text-muted-foreground line-clamp-1 mt-0.5">
-                        {alt.notes}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {alt.price != null && alt.price > 0 && (
-                      <span className="text-sm font-medium tabular-nums">
-                        {formatCurrency(alt.price)}
-                      </span>
-                    )}
-                    {alt.url && (
-                      <a
-                        href={alt.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="text-primary hover:text-primary/80"
-                      >
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
-                    )}
+                      {alt.storeName && (
+                        <span className="text-[10px] text-muted-foreground">
+                          {alt.storeName}
+                        </span>
+                      )}
+                      {alt.notes && (
+                        <span className="text-[10px] text-muted-foreground line-clamp-1 mt-0.5">
+                          {alt.notes}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {alt.price != null && alt.price > 0 && (
+                        <span className="text-sm font-medium tabular-nums">
+                          {formatCurrency(alt.price)}
+                        </span>
+                      )}
+                      {alt.url && (
+                        <a
+                          href={alt.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-primary hover:text-primary/80"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
