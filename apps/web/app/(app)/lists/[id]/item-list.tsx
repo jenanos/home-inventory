@@ -21,6 +21,7 @@ import {
   Calendar,
   Pencil,
   Package,
+  Layers,
 } from "lucide-react"
 import { toggleItemPurchased } from "@/lib/actions/shopping-item"
 import { EditItemDialog } from "./edit-item-dialog"
@@ -51,6 +52,16 @@ const PHASE_LABELS: Record<string, string> = {
   NO_RUSH: "Ingen hast",
 }
 
+export interface AlternativeData {
+  id: string
+  name: string
+  price: number | null
+  url: string | null
+  storeName: string | null
+  notes: string | null
+  rank: number
+}
+
 export interface ShoppingItemData {
   id: string
   name: string
@@ -59,6 +70,7 @@ export interface ShoppingItemData {
   phase: "BEFORE_MOVE" | "FIRST_WEEK" | "CAN_WAIT" | "NO_RUSH" | null
   dueDate: string | null
   estimatedPrice: number | null
+  effectivePrice: number | null
   url: string | null
   storeName: string | null
   status: "PENDING" | "PURCHASED" | "SKIPPED"
@@ -74,6 +86,7 @@ export interface ShoppingItemData {
     name: string
     email: string
   } | null
+  alternatives: AlternativeData[]
   listId: string
   createdAt: string
   updatedAt: string
@@ -281,14 +294,15 @@ function MobileItemCard({
           >
             {item.name}
           </p>
-          {item.estimatedPrice != null && item.estimatedPrice > 0 && (
+          {item.effectivePrice != null && item.effectivePrice > 0 && (
             <span
               className={cn(
                 "text-sm font-medium tabular-nums shrink-0",
-                isPurchased && "line-through text-muted-foreground"
+                isPurchased && "line-through text-muted-foreground",
+                !item.estimatedPrice && item.alternatives.length > 0 && "text-muted-foreground italic"
               )}
             >
-              {formatCurrency(item.estimatedPrice)}
+              {formatCurrency(item.effectivePrice)}
             </span>
           )}
         </div>
@@ -354,6 +368,13 @@ function MobileItemCard({
               <ExternalLink className="h-2.5 w-2.5" />
               Lenke
             </a>
+          )}
+
+          {item.alternatives.length > 0 && (
+            <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
+              <Layers className="h-2.5 w-2.5" />
+              {item.alternatives.length} alt.
+            </span>
           )}
         </div>
       </div>
@@ -451,15 +472,24 @@ function DesktopItemRow({
         </Badge>
       </TableCell>
       <TableCell>
-        {item.estimatedPrice != null && item.estimatedPrice > 0 ? (
-          <span
-            className={cn(
-              "tabular-nums",
-              isPurchased && "line-through text-muted-foreground"
+        {item.effectivePrice != null && item.effectivePrice > 0 ? (
+          <div className="flex flex-col">
+            <span
+              className={cn(
+                "tabular-nums",
+                isPurchased && "line-through text-muted-foreground",
+                !item.estimatedPrice && item.alternatives.length > 0 && "text-muted-foreground italic"
+              )}
+            >
+              {formatCurrency(item.effectivePrice)}
+            </span>
+            {item.alternatives.length > 0 && (
+              <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
+                <Layers className="h-2.5 w-2.5" />
+                {item.alternatives.length} alt.
+              </span>
             )}
-          >
-            {formatCurrency(item.estimatedPrice)}
-          </span>
+          </div>
         ) : (
           <span className="text-muted-foreground">—</span>
         )}

@@ -33,50 +33,70 @@ export default async function ListPage({ params }: ListPageProps) {
     color: c.color,
   }))
 
-  const items = list.items.map((item) => ({
-    id: item.id,
-    name: item.name,
-    description: item.description,
-    priority: item.priority,
-    phase: item.phase,
-    dueDate: item.dueDate ? item.dueDate.toISOString() : null,
-    estimatedPrice: item.estimatedPrice ? Number(item.estimatedPrice) : null,
-    url: item.url,
-    storeName: item.storeName,
-    status: item.status,
-    purchasedAt: item.purchasedAt ? item.purchasedAt.toISOString() : null,
-    category: item.category
-      ? {
-          id: item.category.id,
-          name: item.category.name,
-          icon: item.category.icon,
-          color: item.category.color,
-        }
-      : null,
-    assignedTo: item.assignedTo
-      ? {
-          id: item.assignedTo.id,
-          name: item.assignedTo.name ?? item.assignedTo.email,
-          email: item.assignedTo.email,
-        }
-      : null,
-    listId: item.listId,
-    createdAt: item.createdAt.toISOString(),
-    updatedAt: item.updatedAt.toISOString(),
-  }))
+  const items = list.items.map((item) => {
+    const alternatives = item.alternatives.map((alt) => ({
+      id: alt.id,
+      name: alt.name,
+      price: alt.price ? Number(alt.price) : null,
+      url: alt.url,
+      storeName: alt.storeName,
+      notes: alt.notes,
+      rank: alt.rank,
+    }))
+
+    // Use top-ranked alternative's price if item has no own price
+    const topAlternative = alternatives[0] ?? null
+    const effectivePrice = item.estimatedPrice
+      ? Number(item.estimatedPrice)
+      : topAlternative?.price ?? null
+
+    return {
+      id: item.id,
+      name: item.name,
+      description: item.description,
+      priority: item.priority,
+      phase: item.phase,
+      dueDate: item.dueDate ? item.dueDate.toISOString() : null,
+      estimatedPrice: item.estimatedPrice ? Number(item.estimatedPrice) : null,
+      effectivePrice,
+      url: item.url,
+      storeName: item.storeName,
+      status: item.status,
+      purchasedAt: item.purchasedAt ? item.purchasedAt.toISOString() : null,
+      category: item.category
+        ? {
+            id: item.category.id,
+            name: item.category.name,
+            icon: item.category.icon,
+            color: item.category.color,
+          }
+        : null,
+      assignedTo: item.assignedTo
+        ? {
+            id: item.assignedTo.id,
+            name: item.assignedTo.name ?? item.assignedTo.email,
+            email: item.assignedTo.email,
+          }
+        : null,
+      alternatives,
+      listId: item.listId,
+      createdAt: item.createdAt.toISOString(),
+      updatedAt: item.updatedAt.toISOString(),
+    }
+  })
 
   const totalSum = items.reduce(
     (sum, item) =>
-      item.status !== "SKIPPED" && item.estimatedPrice
-        ? sum + item.estimatedPrice
+      item.status !== "SKIPPED" && item.effectivePrice
+        ? sum + item.effectivePrice
         : sum,
     0
   )
 
   const purchasedSum = items.reduce(
     (sum, item) =>
-      item.status === "PURCHASED" && item.estimatedPrice
-        ? sum + item.estimatedPrice
+      item.status === "PURCHASED" && item.effectivePrice
+        ? sum + item.effectivePrice
         : sum,
     0
   )
@@ -91,7 +111,7 @@ export default async function ListPage({ params }: ListPageProps) {
         if (!acc[catName]) {
           acc[catName] = { total: 0, count: 0, color: catColor, icon: catIcon }
         }
-        acc[catName].total += item.estimatedPrice ?? 0
+        acc[catName].total += item.effectivePrice ?? 0
         acc[catName].count += 1
         return acc
       },

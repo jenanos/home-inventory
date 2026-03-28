@@ -8,6 +8,9 @@ export async function getShoppingList(listId: string, householdId: string) {
         include: {
           category: true,
           assignedTo: true,
+          alternatives: {
+            orderBy: { rank: "asc" },
+          },
         },
         orderBy: [{ status: "asc" }, { priority: "asc" }, { createdAt: "desc" }],
       },
@@ -44,6 +47,9 @@ export async function getSharedList(token: string) {
             include: {
               category: true,
               assignedTo: true,
+              alternatives: {
+                orderBy: { rank: "asc" },
+              },
             },
             orderBy: [
               { status: "asc" },

@@ -25,18 +25,36 @@ import {
 } from "@workspace/ui/components/popover"
 import { Calendar } from "@workspace/ui/components/calendar"
 import { Separator } from "@workspace/ui/components/separator"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@workspace/ui/components/collapsible"
 import { cn } from "@workspace/ui/lib/utils"
 import {
   Loader2,
   CalendarIcon,
   Trash2,
   Save,
+  Plus,
+  ChevronDown,
+  GripVertical,
+  ArrowUp,
+  ArrowDown,
+  ExternalLink,
+  X,
 } from "lucide-react"
 import {
   updateShoppingItem,
   deleteShoppingItem,
 } from "@/lib/actions/shopping-item"
-import type { ShoppingItemData } from "./item-list"
+import {
+  createAlternative,
+  updateAlternative,
+  deleteAlternative,
+  reorderAlternatives,
+} from "@/lib/actions/product-alternative"
+import type { ShoppingItemData, AlternativeData } from "./item-list"
 import type { Priority, Phase, ItemStatus } from "@workspace/db"
 
 interface EditItemDialogProps {
@@ -339,6 +357,17 @@ export function EditItemDialog({
             </div>
           )}
 
+          {item.status === "PENDING" && (
+            <>
+              <Separator />
+              <AlternativesSection
+                itemId={item.id}
+                alternatives={item.alternatives}
+                disabled={isPending}
+              />
+            </>
+          )}
+
           {error && (
             <p className="text-sm text-destructive" role="alert">
               {error}
@@ -394,5 +423,422 @@ export function EditItemDialog({
         </form>
       </DialogContent>
     </Dialog>
+  )
+}
+
+// ─── Alternatives Section ────────────────────────────────────────
+
+const formatCurrency = (amount: number) =>
+  new Intl.NumberFormat("nb-NO", {
+    style: "currency",
+    currency: "NOK",
+    maximumFractionDigits: 0,
+  }).format(amount)
+
+function AlternativesSection({
+  itemId,
+  alternatives,
+  disabled,
+}: {
+  itemId: string
+  alternatives: AlternativeData[]
+  disabled: boolean
+}) {
+  const [isOpen, setIsOpen] = useState(alternatives.length > 0)
+  const [showAddForm, setShowAddForm] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [isReordering, startReorder] = useTransition()
+
+  function handleMoveUp(index: number) {
+    if (index === 0) return
+    const ordered = alternatives.map((a) => a.id)
+    ;[ordered[index - 1], ordered[index]] = [ordered[index]!, ordered[index - 1]!]
+    startReorder(async () => {
+      await reorderAlternatives(itemId, ordered)
+    })
+  }
+
+  function handleMoveDown(index: number) {
+    if (index === alternatives.length - 1) return
+    const ordered = alternatives.map((a) => a.id)
+    ;[ordered[index], ordered[index + 1]] = [ordered[index + 1]!, ordered[index]!]
+    startReorder(async () => {
+      await reorderAlternatives(itemId, ordered)
+    })
+  }
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <CollapsibleTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          className="w-full justify-between px-0 font-medium"
+        >
+          <span className="flex items-center gap-2">
+            Alternativer
+            {alternatives.length > 0 && (
+              <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                {alternatives.length}
+              </span>
+            )}
+          </span>
+          <ChevronDown
+            className={cn(
+              "h-4 w-4 transition-transform",
+              isOpen && "rotate-180"
+            )}
+          />
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="space-y-2">
+        {alternatives.length === 0 && !showAddForm && (
+          <p className="text-xs text-muted-foreground py-1">
+            Ingen alternativer enda. Legg til ulike produkter du vurderer.
+          </p>
+        )}
+
+        {alternatives.map((alt, index) =>
+          editingId === alt.id ? (
+            <AlternativeEditForm
+              key={alt.id}
+              alternative={alt}
+              onDone={() => setEditingId(null)}
+            />
+          ) : (
+            <div
+              key={alt.id}
+              className={cn(
+                "group flex items-start gap-2 rounded-lg border bg-muted/30 p-2.5",
+                index === 0 && "ring-1 ring-primary/20 bg-primary/5"
+              )}
+            >
+              <div className="flex flex-col items-center gap-0.5 pt-0.5">
+                <button
+                  type="button"
+                  onClick={() => handleMoveUp(index)}
+                  disabled={index === 0 || isReordering || disabled}
+                  className="text-muted-foreground hover:text-foreground disabled:opacity-30"
+                  aria-label="Flytt opp"
+                >
+                  <ArrowUp className="h-3 w-3" />
+                </button>
+                <span className="text-[10px] font-medium text-muted-foreground">
+                  {index + 1}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleMoveDown(index)}
+                  disabled={index === alternatives.length - 1 || isReordering || disabled}
+                  className="text-muted-foreground hover:text-foreground disabled:opacity-30"
+                  aria-label="Flytt ned"
+                >
+                  <ArrowDown className="h-3 w-3" />
+                </button>
+              </div>
+
+              <div
+                className="flex-1 min-w-0 cursor-pointer"
+                onClick={() => setEditingId(alt.id)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") setEditingId(alt.id)
+                }}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-sm font-medium truncate">
+                      {alt.name}
+                    </span>
+                    {alt.storeName && (
+                      <span className="text-[10px] text-muted-foreground">
+                        {alt.storeName}
+                      </span>
+                    )}
+                    {alt.notes && (
+                      <span className="text-[10px] text-muted-foreground line-clamp-1 mt-0.5">
+                        {alt.notes}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {alt.price != null && alt.price > 0 && (
+                      <span className="text-sm font-medium tabular-nums">
+                        {formatCurrency(alt.price)}
+                      </span>
+                    )}
+                    {alt.url && (
+                      <a
+                        href={alt.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-primary hover:text-primary/80"
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )
+        )}
+
+        {showAddForm ? (
+          <AlternativeAddForm
+            itemId={itemId}
+            onDone={() => setShowAddForm(false)}
+          />
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="w-full"
+            onClick={() => setShowAddForm(true)}
+            disabled={disabled}
+          >
+            <Plus className="h-3.5 w-3.5" data-icon="inline-start" />
+            Legg til alternativ
+          </Button>
+        )}
+      </CollapsibleContent>
+    </Collapsible>
+  )
+}
+
+function AlternativeAddForm({
+  itemId,
+  onDone,
+}: {
+  itemId: string
+  onDone: () => void
+}) {
+  const [isPending, startTransition] = useTransition()
+  const [name, setName] = useState("")
+  const [price, setPrice] = useState("")
+  const [url, setUrl] = useState("")
+  const [storeName, setStoreName] = useState("")
+  const [notes, setNotes] = useState("")
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    startTransition(async () => {
+      await createAlternative({
+        itemId,
+        name: name.trim(),
+        price: price ? Number(price) : undefined,
+        url: url.trim() || undefined,
+        storeName: storeName.trim() || undefined,
+        notes: notes.trim() || undefined,
+      })
+      onDone()
+    })
+  }
+
+  return (
+    <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium">Nytt alternativ</span>
+        <button
+          type="button"
+          onClick={onDone}
+          className="text-muted-foreground hover:text-foreground"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      <div className="grid gap-2">
+        <Input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Produktnavn *"
+          className="h-8 text-sm"
+          autoFocus
+          disabled={isPending}
+        />
+        <div className="grid grid-cols-2 gap-2">
+          <Input
+            type="number"
+            min="0"
+            step="1"
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+            placeholder="Pris (kr)"
+            className="h-8 text-sm"
+            disabled={isPending}
+          />
+          <Input
+            value={storeName}
+            onChange={(e) => setStoreName(e.target.value)}
+            placeholder="Butikk"
+            className="h-8 text-sm"
+            disabled={isPending}
+          />
+        </div>
+        <Input
+          type="url"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="Lenke (https://...)"
+          className="h-8 text-sm"
+          disabled={isPending}
+        />
+        <Input
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Notater"
+          className="h-8 text-sm"
+          disabled={isPending}
+        />
+        <Button
+          type="button"
+          size="sm"
+          onClick={handleSubmit}
+          disabled={isPending || !name.trim()}
+          className="w-full"
+        >
+          {isPending ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" data-icon="inline-start" />
+          ) : (
+            <Plus className="h-3.5 w-3.5" data-icon="inline-start" />
+          )}
+          Legg til
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function AlternativeEditForm({
+  alternative,
+  onDone,
+}: {
+  alternative: AlternativeData
+  onDone: () => void
+}) {
+  const [isPending, startTransition] = useTransition()
+  const [isDeleting, startDeleting] = useTransition()
+  const [name, setName] = useState(alternative.name)
+  const [price, setPrice] = useState(
+    alternative.price != null ? String(alternative.price) : ""
+  )
+  const [url, setUrl] = useState(alternative.url ?? "")
+  const [storeName, setStoreName] = useState(alternative.storeName ?? "")
+  const [notes, setNotes] = useState(alternative.notes ?? "")
+
+  function handleSave(e: React.FormEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    startTransition(async () => {
+      await updateAlternative({
+        id: alternative.id,
+        name: name.trim(),
+        price: price ? Number(price) : null,
+        url: url.trim() || null,
+        storeName: storeName.trim() || null,
+        notes: notes.trim() || null,
+      })
+      onDone()
+    })
+  }
+
+  function handleDelete() {
+    startDeleting(async () => {
+      await deleteAlternative(alternative.id)
+      onDone()
+    })
+  }
+
+  return (
+    <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium">Rediger alternativ</span>
+        <button
+          type="button"
+          onClick={onDone}
+          className="text-muted-foreground hover:text-foreground"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      <div className="grid gap-2">
+        <Input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Produktnavn *"
+          className="h-8 text-sm"
+          autoFocus
+          disabled={isPending}
+        />
+        <div className="grid grid-cols-2 gap-2">
+          <Input
+            type="number"
+            min="0"
+            step="1"
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+            placeholder="Pris (kr)"
+            className="h-8 text-sm"
+            disabled={isPending}
+          />
+          <Input
+            value={storeName}
+            onChange={(e) => setStoreName(e.target.value)}
+            placeholder="Butikk"
+            className="h-8 text-sm"
+            disabled={isPending}
+          />
+        </div>
+        <Input
+          type="url"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="Lenke (https://...)"
+          className="h-8 text-sm"
+          disabled={isPending}
+        />
+        <Input
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Notater"
+          className="h-8 text-sm"
+          disabled={isPending}
+        />
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="destructive"
+            size="sm"
+            onClick={handleDelete}
+            disabled={isPending || isDeleting}
+          >
+            {isDeleting ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" data-icon="inline-start" />
+            ) : (
+              <Trash2 className="h-3.5 w-3.5" data-icon="inline-start" />
+            )}
+            Slett
+          </Button>
+          <div className="flex-1" />
+          <Button
+            type="button"
+            size="sm"
+            onClick={handleSave}
+            disabled={isPending || !name.trim()}
+          >
+            {isPending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" data-icon="inline-start" />
+            ) : (
+              <Save className="h-3.5 w-3.5" data-icon="inline-start" />
+            )}
+            Lagre
+          </Button>
+        </div>
+      </div>
+    </div>
   )
 }

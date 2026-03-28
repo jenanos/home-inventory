@@ -9,6 +9,9 @@ export async function getDashboardData(householdId: string) {
           include: {
             category: true,
             assignedTo: true,
+            alternatives: {
+              orderBy: { rank: "asc" },
+            },
           },
         },
       },
@@ -23,14 +26,20 @@ export async function getDashboardData(householdId: string) {
   const allItems = lists.flatMap((l) => l.items)
   const pendingItems = allItems.filter((i) => i.status === "PENDING")
 
+  function getEffectivePrice(item: (typeof allItems)[number]): number {
+    if (item.estimatedPrice) return Number(item.estimatedPrice)
+    const topAlt = item.alternatives[0]
+    return topAlt?.price ? Number(topAlt.price) : 0
+  }
+
   const totalEstimated = allItems.reduce(
-    (sum, i) => sum + (i.estimatedPrice ? Number(i.estimatedPrice) : 0),
+    (sum, i) => sum + getEffectivePrice(i),
     0
   )
   const purchasedTotal = allItems
     .filter((i) => i.status === "PURCHASED")
     .reduce(
-      (sum, i) => sum + (i.estimatedPrice ? Number(i.estimatedPrice) : 0),
+      (sum, i) => sum + getEffectivePrice(i),
       0
     )
 
