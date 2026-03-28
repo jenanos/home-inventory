@@ -552,6 +552,7 @@ function AlternativesSection({
                       src={alt.imageUrl}
                       alt={alt.name}
                       className="h-9 w-9 rounded object-cover shrink-0"
+                      onError={(e) => { e.currentTarget.style.display = "none" }}
                     />
                   )}
                   <div className="flex items-start justify-between gap-2 flex-1 min-w-0">

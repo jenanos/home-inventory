@@ -285,6 +285,7 @@ function MobileItemCard({
           src={item.imageUrl}
           alt={item.name}
           className="h-10 w-10 rounded-md object-cover shrink-0"
+          onError={(e) => { e.currentTarget.style.display = "none" }}
         />
       )}
 
@@ -427,6 +428,7 @@ function DesktopItemRow({
               src={item.imageUrl}
               alt={item.name}
               className="h-9 w-9 rounded-md object-cover shrink-0 mt-0.5"
+              onError={(e) => { e.currentTarget.style.display = "none" }}
             />
           )}
           <div className="flex flex-col">

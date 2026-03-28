@@ -459,6 +459,7 @@ export function LlmImportDialog({ listId, listName, categories }: LlmImportDialo
                         src={item.imageUrl}
                         alt={item.name}
                         className="h-12 w-12 rounded-md object-cover shrink-0"
+                        onError={(e) => { e.currentTarget.style.display = "none" }}
                       />
                     )}
                     <div className="flex flex-col gap-1 min-w-0 flex-1">
@@ -509,6 +510,7 @@ export function LlmImportDialog({ listId, listName, categories }: LlmImportDialo
                                   src={alt.imageUrl}
                                   alt={alt.name}
                                   className="h-7 w-7 rounded object-cover shrink-0"
+                                  onError={(e) => { e.currentTarget.style.display = "none" }}
                                 />
                               )}
                               <div className="flex items-center gap-1.5 min-w-0 flex-1">
