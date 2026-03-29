@@ -9,13 +9,25 @@ import {
 import { Button } from "@workspace/ui/components/button"
 import { MailCheck, ArrowLeft } from "lucide-react"
 
+function isSafeDevRedirectUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    const isHttp = parsed.protocol === "http:" || parsed.protocol === "https:"
+    const isLocalHost =
+      parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1"
+    return isHttp && isLocalHost
+  } catch {
+    return false
+  }
+}
+
 export default async function VerifyPage() {
   // In dev mode, auto-redirect to the magic link callback URL
   // to avoid terminal URL truncation issues
   if (process.env.NODE_ENV === "development") {
     const { getDevCallbackUrl } = await import("@/lib/auth")
     const callbackUrl = getDevCallbackUrl()
-    if (callbackUrl) {
+    if (callbackUrl && isSafeDevRedirectUrl(callbackUrl)) {
       redirect(callbackUrl)
     }
   }
