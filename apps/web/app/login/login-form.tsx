@@ -11,9 +11,11 @@ import { Mail, Loader2 } from "lucide-react"
 export function LoginForm({
   searchParams,
 }: {
-  searchParams: Promise<{ callbackUrl?: string }>
+  searchParams: Promise<{ callbackUrl?: string | string[] }>
 }) {
-  const { callbackUrl } = use(searchParams)
+  const { callbackUrl: rawCallbackUrl } = use(searchParams)
+  const callbackUrl =
+    typeof rawCallbackUrl === "string" ? rawCallbackUrl : undefined
   const router = useRouter()
   const [email, setEmail] = useState("")
   const [isLoading, setIsLoading] = useState(false)
