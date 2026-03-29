@@ -130,7 +130,8 @@ Eksempel på forventet svar:
 
 function cleanMarkdownUrl(value: string): string {
   // Extract URL from markdown link syntax: [text](url)
-  const match = value.match(/\[.*?\]\((.*?)\)/)
+  // Uses greedy match for the URL to handle parentheses within URLs
+  const match = value.match(/\[.*?\]\((.+)\)/)
   return match?.[1]?.trim() || value.trim()
 }
 
