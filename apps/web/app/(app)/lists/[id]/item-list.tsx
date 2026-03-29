@@ -23,6 +23,7 @@ import {
   Package,
   Layers,
 } from "lucide-react"
+import { CategoryIcon } from "@/components/category-icon"
 import { toggleItemPurchased } from "@/lib/actions/shopping-item"
 import { EditItemDialog } from "./edit-item-dialog"
 
@@ -335,7 +336,7 @@ function MobileItemCard({
           {item.category && (
             <Badge variant="secondary" className="text-[10px] px-1.5 h-4">
               {item.category.icon && (
-                <span className="mr-0.5">{item.category.icon}</span>
+                <CategoryIcon name={item.category.icon} className="mr-0.5 h-2.5 w-2.5" />
               )}
               {item.category.name}
             </Badge>
@@ -476,7 +477,7 @@ function DesktopItemRow({
         {item.category ? (
           <Badge variant="secondary" className="text-xs">
             {item.category.icon && (
-              <span className="mr-0.5">{item.category.icon}</span>
+              <CategoryIcon name={item.category.icon} className="mr-0.5 h-3 w-3" />
             )}
             {item.category.name}
           </Badge>

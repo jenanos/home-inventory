@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation"
+import { CategoryIcon } from "@/components/category-icon"
 import { requireHousehold } from "@/lib/session"
 import { getShoppingList } from "@/lib/queries/shopping-list"
 import { ListHeader } from "./list-header"
@@ -181,7 +182,7 @@ export default async function ListPage({ params }: ListPageProps) {
                 >
                   <div className="flex items-center gap-2">
                     {data.icon && (
-                      <span className="text-base">{data.icon}</span>
+                      <CategoryIcon name={data.icon} className="h-4 w-4" />
                     )}
                     <span className="text-sm font-medium">{name}</span>
                     <span className="text-xs text-muted-foreground">
