@@ -10,7 +10,7 @@ import { LoginForm } from "./login-form"
 export default function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ callbackUrl?: string }>
+  searchParams: Promise<{ callbackUrl?: string | string[] }>
 }) {
   return (
     <div className="flex min-h-svh items-center justify-center bg-background p-4">
