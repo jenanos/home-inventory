@@ -14,8 +14,9 @@ export function LoginForm({
   searchParams: Promise<{ callbackUrl?: string | string[] }>
 }) {
   const { callbackUrl: rawCallbackUrl } = use(searchParams)
-  const callbackUrl =
-    typeof rawCallbackUrl === "string" ? rawCallbackUrl : undefined
+  const callbackUrl = Array.isArray(rawCallbackUrl)
+    ? rawCallbackUrl[0]
+    : rawCallbackUrl
   const router = useRouter()
   const [email, setEmail] = useState("")
   const [isLoading, setIsLoading] = useState(false)
