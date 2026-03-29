@@ -90,6 +90,7 @@ Regler:
 - "priority": HIGH = må ha, MEDIUM = bør ha, LOW = kjekt å ha
 - "phase": BEFORE_MOVE = før innflytting, FIRST_WEEK = første uke, CAN_WAIT = kan vente, NO_RUSH = ingen hast
 - "categoryName" bør matche en av de tilgjengelige kategoriene nøyaktig
+- "url" og "imageUrl" skal være rene URL-er (f.eks. https://...), IKKE markdown-lenker som [tekst](url)
 - "imageUrl" skal være en direkte lenke til et produktbilde (JPG/PNG/WebP)
 - "alternatives" er en liste med alternative produkter i prioritert rekkefølge (beste først). Bruk denne når du har researchet flere varianter/merker av samme type produkt
 - Hvert alternativ i listen skal ha minst "name", og gjerne pris, lenke og bilde
@@ -125,6 +126,12 @@ Eksempel på forventet svar:
     ]
   }
 ]`
+}
+
+function cleanMarkdownUrl(value: string): string {
+  // Extract URL from markdown link syntax: [text](url)
+  const match = value.match(/\[.*?\]\((.*?)\)/)
+  return match?.[1]?.trim() || value.trim()
 }
 
 function parseJsonInput(raw: string): { items: ParsedItem[]; error: string | null } {
@@ -193,10 +200,10 @@ function parseJsonInput(raw: string): { items: ParsedItem[]; error: string | nul
         }
       }
       if (entry.url && typeof entry.url === "string") {
-        item.url = entry.url.trim()
+        item.url = cleanMarkdownUrl(entry.url)
       }
       if (entry.imageUrl && typeof entry.imageUrl === "string") {
-        item.imageUrl = entry.imageUrl.trim()
+        item.imageUrl = cleanMarkdownUrl(entry.imageUrl)
       }
       if (entry.storeName && typeof entry.storeName === "string") {
         item.storeName = entry.storeName.trim()
@@ -219,10 +226,10 @@ function parseJsonInput(raw: string): { items: ParsedItem[]; error: string | nul
             }
           }
           if (altEntry.url && typeof altEntry.url === "string") {
-            alt.url = altEntry.url.trim()
+            alt.url = cleanMarkdownUrl(altEntry.url)
           }
           if (altEntry.imageUrl && typeof altEntry.imageUrl === "string") {
-            alt.imageUrl = altEntry.imageUrl.trim()
+            alt.imageUrl = cleanMarkdownUrl(altEntry.imageUrl)
           }
           if (altEntry.storeName && typeof altEntry.storeName === "string") {
             alt.storeName = altEntry.storeName.trim()
@@ -346,7 +353,7 @@ export function LlmImportDialog({ listId, listName, categories }: LlmImportDialo
           LLM-import
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>
             {step === "prompt" && "Kopier prompt til LLM"}
@@ -356,8 +363,8 @@ export function LlmImportDialog({ listId, listName, categories }: LlmImportDialo
         </DialogHeader>
 
         {step === "prompt" && (
-          <div className="flex flex-col gap-4 overflow-hidden">
-            <p className="text-sm text-muted-foreground">
+          <div className="flex flex-col gap-4 flex-1 min-h-0 overflow-hidden">
+            <p className="text-sm text-muted-foreground shrink-0">
               Kopier prompten under og lim den inn i din favoritt-LLM (ChatGPT, Claude, osv.).
               LLM-en vil formatere produktene dine som JSON som du kan importere tilbake hit.
             </p>
@@ -393,13 +400,13 @@ export function LlmImportDialog({ listId, listName, categories }: LlmImportDialo
         )}
 
         {step === "paste" && (
-          <div className="flex flex-col gap-4">
-            <p className="text-sm text-muted-foreground">
+          <div className="flex flex-col gap-4 flex-1 min-h-0 overflow-hidden">
+            <p className="text-sm text-muted-foreground shrink-0">
               Lim inn JSON-svaret du fikk fra LLM-en.
             </p>
 
-            <div className="grid gap-1.5">
-              <Label htmlFor="llm-json-input">JSON fra LLM</Label>
+            <div className="flex flex-col gap-1.5 flex-1 min-h-0">
+              <Label htmlFor="llm-json-input" className="shrink-0">JSON fra LLM</Label>
               <Textarea
                 id="llm-json-input"
                 value={jsonInput}
@@ -409,7 +416,7 @@ export function LlmImportDialog({ listId, listName, categories }: LlmImportDialo
                 }}
                 placeholder={'[\n  {\n    "name": "Produktnavn",\n    ...\n  }\n]'}
                 rows={10}
-                className="font-mono text-xs"
+                className="font-mono text-xs flex-1 min-h-32 resize-y"
               />
             </div>
 
@@ -420,7 +427,7 @@ export function LlmImportDialog({ listId, listName, categories }: LlmImportDialo
               </div>
             )}
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0">
               <Button variant="outline" onClick={() => setStep("prompt")}>
                 <ArrowLeft className="h-4 w-4 mr-1" />
                 Tilbake
@@ -438,8 +445,8 @@ export function LlmImportDialog({ listId, listName, categories }: LlmImportDialo
         )}
 
         {step === "preview" && (
-          <div className="flex flex-col gap-4 overflow-hidden">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-col gap-4 flex-1 min-h-0 overflow-hidden">
+            <div className="flex items-center gap-2 shrink-0">
               <p className="text-sm text-muted-foreground">
                 {parsedItems.length} {parsedItems.length === 1 ? "produkt" : "produkter"} klare for import.
               </p>
