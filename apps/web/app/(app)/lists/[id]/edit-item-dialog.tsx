@@ -44,6 +44,7 @@ import {
   ExternalLink,
   X,
 } from "lucide-react"
+import { CategoryIcon } from "@/components/category-icon"
 import {
   updateShoppingItem,
   deleteShoppingItem,
@@ -210,7 +211,7 @@ export function EditItemDialog({
                   {categories.map((cat) => (
                     <SelectItem key={cat.id} value={cat.id}>
                       <span className="flex items-center gap-1.5">
-                        {cat.icon && <span>{cat.icon}</span>}
+                        {cat.icon && <CategoryIcon name={cat.icon} className="h-3.5 w-3.5" />}
                         {cat.name}
                       </span>
                     </SelectItem>
