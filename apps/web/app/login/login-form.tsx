@@ -18,6 +18,10 @@ export function LoginForm({
   const [email, setEmail] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const safeCallbackUrl =
+    callbackUrl && callbackUrl.startsWith("/") && !callbackUrl.startsWith("//")
+      ? callbackUrl
+      : "/"
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -27,7 +31,7 @@ export function LoginForm({
     try {
       const result = await signIn("resend", {
         email,
-        redirectTo: callbackUrl || "/",
+        redirectTo: safeCallbackUrl,
         redirect: false,
       })
 

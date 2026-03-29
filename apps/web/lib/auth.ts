@@ -14,13 +14,9 @@ const adapter: typeof prismaAdapter = {
     // @auth/core may omit identifier from the callback URL query params.
     // The Prisma adapter requires both fields for the compound unique lookup,
     // so we fall back to finding by token alone when identifier is missing.
-    console.log("[DEBUG useVerificationToken] looking up token:", params.token.slice(0, 12) + "...")
-    const allTokens = await db.verificationToken.findMany()
-    console.log("[DEBUG useVerificationToken] tokens in DB:", allTokens.map(t => t.token.slice(0, 12) + "..."))
     const existing = await db.verificationToken.findFirst({
       where: { token: params.token },
     })
-    console.log("[DEBUG useVerificationToken] found:", !!existing)
     if (!existing) return null
     return db.verificationToken.delete({
       where: {
@@ -38,10 +34,36 @@ const adapter: typeof prismaAdapter = {
 // from the terminal (which often gets truncated).
 // globalThis is shared across all server-side module evaluations in the same process.
 const g = globalThis as unknown as { __devCallbackUrl?: string | null }
+
+function isAllowedDevCallbackUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    const isHttp = parsed.protocol === "http:" || parsed.protocol === "https:"
+    const isLocalHost =
+      parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1"
+    return isHttp && isLocalHost
+  } catch {
+    return false
+  }
+}
+
 export function setDevCallbackUrl(url: string) {
+  if (process.env.NODE_ENV !== "development") {
+    return
+  }
+
+  if (!isAllowedDevCallbackUrl(url)) {
+    g.__devCallbackUrl = null
+    return
+  }
+
   g.__devCallbackUrl = url
 }
 export function getDevCallbackUrl() {
+  if (process.env.NODE_ENV !== "development") {
+    return null
+  }
+
   const url = g.__devCallbackUrl
   g.__devCallbackUrl = null
   return url ?? null
