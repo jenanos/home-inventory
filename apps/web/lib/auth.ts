@@ -14,9 +14,13 @@ const adapter: typeof prismaAdapter = {
     // @auth/core may omit identifier from the callback URL query params.
     // The Prisma adapter requires both fields for the compound unique lookup,
     // so we fall back to finding by token alone when identifier is missing.
+    console.log("[DEBUG useVerificationToken] looking up token:", params.token.slice(0, 12) + "...")
+    const allTokens = await db.verificationToken.findMany()
+    console.log("[DEBUG useVerificationToken] tokens in DB:", allTokens.map(t => t.token.slice(0, 12) + "..."))
     const existing = await db.verificationToken.findFirst({
       where: { token: params.token },
     })
+    console.log("[DEBUG useVerificationToken] found:", !!existing)
     if (!existing) return null
     return db.verificationToken.delete({
       where: {
