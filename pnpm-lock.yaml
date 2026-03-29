@@ -97,6 +97,9 @@ importers:
         specifier: ^6.10.1
         version: 6.19.2(prisma@6.19.2(typescript@5.9.3))(typescript@5.9.3)
     devDependencies:
+      '@types/node':
+        specifier: ^25.1.0
+        version: 25.2.3
       '@workspace/typescript-config':
         specifier: workspace:*
         version: link:../typescript-config

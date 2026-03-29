@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation"
 import Link from "next/link"
 import {
   Card,
@@ -22,13 +21,13 @@ function isSafeDevRedirectUrl(url: string): boolean {
 }
 
 export default async function VerifyPage() {
-  // In dev mode, auto-redirect to the magic link callback URL
-  // to avoid terminal URL truncation issues
+  let devCallbackUrl: string | null = null
+
   if (process.env.NODE_ENV === "development") {
     const { getDevCallbackUrl } = await import("@/lib/auth")
     const callbackUrl = getDevCallbackUrl()
     if (callbackUrl && isSafeDevRedirectUrl(callbackUrl)) {
-      redirect(callbackUrl)
+      devCallbackUrl = callbackUrl
     }
   }
 
@@ -43,10 +42,24 @@ export default async function VerifyPage() {
             <CardTitle className="text-xl">Sjekk e-posten din</CardTitle>
           </CardHeader>
           <CardContent className="text-center">
-            <p className="text-sm text-muted-foreground">
-              Vi har sendt deg en innloggingslenke. Klikk p&aring; lenken i
-              e-posten for &aring; logge inn.
-            </p>
+            {devCallbackUrl ? (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  Utviklingsmodus er aktiv. Bruk knappen under for &aring;
+                  fortsette med den lokale magiske lenken.
+                </p>
+                <div className="mt-6">
+                  <Button className="w-full" asChild>
+                    <a href={devCallbackUrl}>Fortsett til innlogging</a>
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Vi har sendt deg en innloggingslenke. Klikk p&aring; lenken i
+                e-posten for &aring; logge inn.
+              </p>
+            )}
 
             <div className="mt-6">
               <Button variant="ghost" size="sm" asChild>

@@ -144,8 +144,8 @@ export function ItemList({ items, categories, members, listId }: ItemListProps) 
         case "priority":
           return PRIORITY_SORT_ORDER[a.priority] - PRIORITY_SORT_ORDER[b.priority]
         case "price": {
-          const aPrice = a.estimatedPrice ?? 0
-          const bPrice = b.estimatedPrice ?? 0
+          const aPrice = a.effectivePrice ?? 0
+          const bPrice = b.effectivePrice ?? 0
           return bPrice - aPrice
         }
         case "date":

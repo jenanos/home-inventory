@@ -7,10 +7,90 @@ import { db } from "@workspace/db"
 import Resend from "next-auth/providers/resend"
 
 const prismaAdapter = PrismaAdapter(db)
+const isDevelopment = process.env.NODE_ENV === "development"
+const baseUseVerificationToken = prismaAdapter.useVerificationToken?.bind(prismaAdapter)
+
+type DevCallbackState = {
+  url: string
+  createdAt: number
+}
+
+type UsedVerificationToken = {
+  identifier: string
+  token: string
+  expires: Date
+  usedAt: number
+}
+
+const g = globalThis as unknown as {
+  __devCallbackState?: DevCallbackState | null
+  __recentVerificationTokens?: Map<string, UsedVerificationToken>
+}
+
+function getRecentVerificationTokenCache() {
+  g.__recentVerificationTokens ??= new Map<string, UsedVerificationToken>()
+  return g.__recentVerificationTokens
+}
+
+function getVerificationCacheKey(params: { identifier?: string; token: string }) {
+  return `${params.identifier ?? ""}:${params.token}`
+}
+
+function readRecentVerificationToken(params: { identifier?: string; token: string }) {
+  if (!isDevelopment) return null
+
+  const cache = getRecentVerificationTokenCache()
+  const cacheKey = getVerificationCacheKey(params)
+  const cached = cache.get(cacheKey)
+
+  if (!cached) return null
+
+  if (Date.now() - cached.usedAt > 15_000) {
+    cache.delete(cacheKey)
+    return null
+  }
+
+  return {
+    identifier: cached.identifier,
+    token: cached.token,
+    expires: cached.expires,
+  }
+}
+
+function cacheVerificationToken(token: {
+  identifier: string
+  token: string
+  expires: Date
+}) {
+  if (!isDevelopment) return
+
+  const cache = getRecentVerificationTokenCache()
+  cache.set(getVerificationCacheKey(token), {
+    ...token,
+    usedAt: Date.now(),
+  })
+}
 
 const adapter: typeof prismaAdapter = {
   ...prismaAdapter,
   async useVerificationToken(params) {
+    const cached = readRecentVerificationToken(params)
+    if (cached) {
+      return cached
+    }
+
+    if (params.identifier) {
+      if (!baseUseVerificationToken) {
+        throw new Error("Prisma adapter mangler useVerificationToken")
+      }
+
+      const token = await baseUseVerificationToken(params)
+      if (token) {
+        cacheVerificationToken(token)
+      }
+      return token
+    }
+
     // @auth/core may omit identifier from the callback URL query params.
     // The Prisma adapter requires both fields for the compound unique lookup,
     // so we fall back to finding by token alone when identifier is missing.
@@ -18,7 +98,8 @@ const adapter: typeof prismaAdapter = {
       where: { token: params.token },
     })
     if (!existing) return null
-    return db.verificationToken.delete({
+
+    const token = await db.verificationToken.delete({
       where: {
         identifier_token: {
           identifier: existing.identifier,
@@ -26,15 +107,16 @@ const adapter: typeof prismaAdapter = {
         },
       },
     })
+
+    cacheVerificationToken(token)
+    return token
   },
 }
 
 // In dev mode, store the callback URL on globalThis so the verify page
-// can auto-redirect without requiring the user to copy a long URL
-// from the terminal (which often gets truncated).
+// can offer a safe local shortcut without requiring the user to copy
+// a long URL from the terminal (which often gets truncated).
 // globalThis is shared across all server-side module evaluations in the same process.
-const g = globalThis as unknown as { __devCallbackUrl?: string | null }
-
 function isAllowedDevCallbackUrl(url: string): boolean {
   try {
     const parsed = new URL(url)
@@ -48,25 +130,32 @@ function isAllowedDevCallbackUrl(url: string): boolean {
 }
 
 export function setDevCallbackUrl(url: string) {
-  if (process.env.NODE_ENV !== "development") {
+  if (!isDevelopment) {
     return
   }
 
   if (!isAllowedDevCallbackUrl(url)) {
-    g.__devCallbackUrl = null
+    g.__devCallbackState = null
     return
   }
 
-  g.__devCallbackUrl = url
+  g.__devCallbackState = {
+    url,
+    createdAt: Date.now(),
+  }
 }
 export function getDevCallbackUrl() {
-  if (process.env.NODE_ENV !== "development") {
+  if (!isDevelopment) {
     return null
   }
 
-  const url = g.__devCallbackUrl
-  g.__devCallbackUrl = null
-  return url ?? null
+  const state = g.__devCallbackState
+  if (!state) return null
+  if (Date.now() - state.createdAt > 10 * 60_000) {
+    g.__devCallbackState = null
+    return null
+  }
+  return state.url
 }
 
 const config = {
@@ -79,7 +168,7 @@ const config = {
         sendVerificationRequest({ url }: { url: string }) {
           setDevCallbackUrl(url)
           console.log("\n════════════════════════════════════════")
-          console.log("  🔗 Magic link (auto-redirecting)")
+          console.log("  🔗 Magic link klar på /login/verify")
           console.log("════════════════════════════════════════\n")
         },
       }),

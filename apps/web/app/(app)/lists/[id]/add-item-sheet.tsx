@@ -86,19 +86,25 @@ export function AddItemSheet({ listId, categories, members }: AddItemSheetProps)
     e.preventDefault()
     setError(null)
 
+    const normalizedCategoryId =
+      categoryId && categoryId !== "none" ? categoryId : undefined
+    const normalizedPhase = phase && phase !== "none" ? (phase as Phase) : undefined
+    const normalizedAssignedToId =
+      assignedToId && assignedToId !== "none" ? assignedToId : undefined
+
     startTransition(async () => {
       try {
         await createShoppingItem({
           name: name.trim(),
           description: description.trim() || undefined,
-          categoryId: categoryId || undefined,
+          categoryId: normalizedCategoryId,
           priority,
-          phase: (phase as Phase) || undefined,
+          phase: normalizedPhase,
           dueDate: dueDate || undefined,
           estimatedPrice: estimatedPrice ? Number(estimatedPrice) : undefined,
           url: url.trim() || undefined,
           storeName: storeName.trim() || undefined,
-          assignedToId: assignedToId || undefined,
+          assignedToId: normalizedAssignedToId,
           listId,
         })
         resetForm()
