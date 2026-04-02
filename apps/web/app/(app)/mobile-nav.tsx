@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutDashboard, ShoppingCart, Settings } from "lucide-react"
+import { LayoutDashboard, ShoppingCart, Settings, Wrench } from "lucide-react"
 import { cn } from "@workspace/ui/lib/utils"
 
 interface MobileNavProps {
@@ -19,6 +19,7 @@ export function MobileNav({ lists }: MobileNavProps) {
       label: "Lister",
       icon: ShoppingCart,
     },
+    { href: "/vedlikehold", label: "Vedlikehold", icon: Wrench },
     { href: "/settings", label: "Innstillinger", icon: Settings },
   ]
 

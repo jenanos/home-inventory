@@ -10,6 +10,7 @@ import {
   LogOut,
   Plus,
   Home,
+  Wrench,
 } from "lucide-react"
 import {
   Sidebar,
@@ -44,6 +45,7 @@ export function AppSidebar({ user, householdName, lists }: AppSidebarProps) {
 
   const navItems = [
     { href: "/", label: "Oversikt", icon: LayoutDashboard },
+    { href: "/vedlikehold", label: "Vedlikehold", icon: Wrench },
     { href: "/settings", label: "Innstillinger", icon: Settings },
   ]
 
@@ -66,7 +68,11 @@ export function AppSidebar({ user, householdName, lists }: AppSidebarProps) {
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton
                     asChild
-                    isActive={pathname === item.href}
+                    isActive={
+                      item.href === "/"
+                        ? pathname === "/"
+                        : pathname.startsWith(item.href)
+                    }
                   >
                     <Link href={item.href}>
                       <item.icon className="h-4 w-4" />
