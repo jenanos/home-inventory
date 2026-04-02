@@ -87,14 +87,22 @@ enum ItemStatus {
   SKIPPED
 }
 
+enum TaskStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  ON_HOLD
+}
+
 model Household {
   id        String   @id @default(uuid()) @db.Uuid
   name      String
   createdAt DateTime @default(now())
 
-  members    HouseholdMember[]
-  lists      ShoppingList[]
-  categories Category[]
+  members          HouseholdMember[]
+  lists            ShoppingList[]
+  categories       Category[]
+  maintenanceTasks MaintenanceTask[]
 }
 
 model HouseholdMember {
@@ -188,4 +196,58 @@ model ShareLink {
 
   list    ShoppingList @relation(fields: [listId], references: [id], onDelete: Cascade)
   creator User         @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+}
+
+// ─── Maintenance models ─────────────────────────────────────────
+
+model MaintenanceTask {
+  id                String     @id @default(uuid()) @db.Uuid
+  title             String
+  description       String?    @db.Text
+  priority          Priority   @default(MEDIUM)
+  status            TaskStatus @default(NOT_STARTED)
+  estimatedDuration String?
+  estimatedPrice    Decimal?   @db.Decimal(10, 2)
+  dueDate           DateTime?
+  householdId       String     @db.Uuid
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  household       Household           @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  vendors         TaskVendor[]
+  progressEntries TaskProgressEntry[]
+}
+
+model TaskVendor {
+  id             String   @id @default(uuid()) @db.Uuid
+  name           String
+  description    String?  @db.Text
+  phone          String?
+  email          String?
+  website        String?
+  estimatedPrice Decimal? @db.Decimal(10, 2)
+  notes          String?  @db.Text
+  isSelected     Boolean  @default(false)
+  taskId         String   @db.Uuid
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  task MaintenanceTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+}
+
+model TaskProgressEntry {
+  id          String    @id @default(uuid()) @db.Uuid
+  title       String
+  description String?   @db.Text
+  dueDate     DateTime?
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+  sortOrder   Int       @default(0)
+  taskId      String    @db.Uuid
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  task MaintenanceTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, sortOrder])
 }
