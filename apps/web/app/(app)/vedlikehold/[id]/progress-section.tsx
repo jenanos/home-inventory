@@ -81,12 +81,15 @@ export function ProgressSection({ taskId, entries }: ProgressSectionProps) {
   function handleAdd() {
     if (!title.trim()) return
     startTransition(async () => {
+      const nextSortOrder =
+        Math.max(...entries.map((entry) => entry.sortOrder), -1) + 1
+
       await createProgressEntry({
         taskId,
         title: title.trim(),
         description: description.trim() || undefined,
         dueDate: dueDate || undefined,
-        sortOrder: entries.length,
+        sortOrder: nextSortOrder,
       })
       resetAddForm()
       setAddOpen(false)
@@ -260,6 +263,7 @@ export function ProgressSection({ taskId, entries }: ProgressSectionProps) {
                   className="h-7 w-7"
                   onClick={() => openEditForm(entry)}
                   disabled={isPending}
+                  aria-label="Rediger steg"
                 >
                   <Pencil className="h-3.5 w-3.5" />
                 </Button>
@@ -269,6 +273,7 @@ export function ProgressSection({ taskId, entries }: ProgressSectionProps) {
                   className="h-7 w-7 text-red-600 hover:text-red-700 dark:text-red-400"
                   onClick={() => handleDelete(entry.id)}
                   disabled={isPending}
+                  aria-label="Slett steg"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>

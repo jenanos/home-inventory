@@ -150,7 +150,7 @@ export default async function TaskPage({ params }: TaskPageProps) {
           </Card>
         )}
 
-        {task.estimatedPrice && (
+        {task.estimatedPrice != null && (
           <Card>
             <CardContent className="flex items-center gap-3 pt-6">
               <div className="bg-primary/10 rounded-lg p-2">

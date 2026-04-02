@@ -4,6 +4,19 @@ import { db, type Priority, type TaskStatus } from "@workspace/db"
 import { requireHousehold } from "@/lib/session"
 import { revalidatePath } from "next/cache"
 
+function sanitizeUrl(url: string | undefined | null): string | undefined | null {
+  if (!url) return url
+  try {
+    const parsed = new URL(url)
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+      return url
+    }
+  } catch {
+    // invalid URL
+  }
+  return undefined
+}
+
 // --- MaintenanceTask actions ---
 
 interface CreateMaintenanceTaskInput {
@@ -62,6 +75,7 @@ export async function updateMaintenanceTask(input: UpdateMaintenanceTaskInput) {
   })
 
   revalidatePath("/vedlikehold")
+  revalidatePath(`/vedlikehold/${id}`)
   return { ...updated, estimatedPrice: updated.estimatedPrice ? Number(updated.estimatedPrice) : null }
 }
 
@@ -109,7 +123,7 @@ export async function createTaskVendor(input: CreateTaskVendorInput) {
       description: input.description,
       phone: input.phone,
       email: input.email,
-      website: input.website,
+      website: sanitizeUrl(input.website),
       estimatedPrice: input.estimatedPrice,
       notes: input.notes,
       taskId: input.taskId,
@@ -143,10 +157,13 @@ export async function updateTaskVendor(input: UpdateTaskVendorInput) {
     throw new Error("Vendor not found")
   }
 
-  const { id, ...data } = input
+  const { id, website, ...rest } = input
   const updated = await db.taskVendor.update({
     where: { id },
-    data,
+    data: {
+      ...rest,
+      ...(website !== undefined && { website: sanitizeUrl(website) }),
+    },
   })
 
   revalidatePath(`/vedlikehold/${vendor.taskId}`)

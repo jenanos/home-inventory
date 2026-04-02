@@ -304,6 +304,7 @@ export function VendorSection({ taskId, vendors }: VendorSectionProps) {
                       className="h-7 w-7"
                       onClick={() => openEditForm(vendor)}
                       disabled={isPending}
+                      aria-label="Rediger aktør"
                     >
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>
@@ -314,7 +315,7 @@ export function VendorSection({ taskId, vendors }: VendorSectionProps) {
                         className="h-7 w-7"
                         onClick={() => handleSelect(vendor.id)}
                         disabled={isPending}
-                        title="Velg som endelig aktør"
+                        aria-label="Velg som endelig aktør"
                       >
                         <Star className="h-3.5 w-3.5" />
                       </Button>
@@ -325,6 +326,7 @@ export function VendorSection({ taskId, vendors }: VendorSectionProps) {
                       className="h-7 w-7 text-red-600 hover:text-red-700 dark:text-red-400"
                       onClick={() => handleDelete(vendor.id)}
                       disabled={isPending}
+                      aria-label="Slett aktør"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
@@ -359,17 +361,27 @@ export function VendorSection({ taskId, vendors }: VendorSectionProps) {
                       {vendor.email}
                     </a>
                   )}
-                  {vendor.website && (
-                    <a
-                      href={vendor.website}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
-                    >
-                      <Globe className="h-3 w-3" />
-                      Nettside
-                    </a>
-                  )}
+                  {vendor.website && (() => {
+                    try {
+                      const url = new URL(vendor.website)
+                      if (url.protocol === "http:" || url.protocol === "https:") {
+                        return (
+                          <a
+                            href={vendor.website}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+                          >
+                            <Globe className="h-3 w-3" />
+                            Nettside
+                          </a>
+                        )
+                      }
+                    } catch {
+                      // invalid URL, don't render link
+                    }
+                    return null
+                  })()}
                 </div>
 
                 {vendor.notes && (

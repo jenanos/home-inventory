@@ -85,6 +85,7 @@ export function TaskActions({ taskId, currentStatus, task }: TaskActionsProps) {
   )
 
   function handleUpdate() {
+    if (!title.trim()) return
     startTransition(async () => {
       await updateMaintenanceTask({
         id: taskId,
@@ -147,7 +148,7 @@ export function TaskActions({ taskId, currentStatus, task }: TaskActionsProps) {
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="icon" disabled={isPending}>
+          <Button variant="outline" size="icon" disabled={isPending} aria-label="Oppgavehandlinger">
             {isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (

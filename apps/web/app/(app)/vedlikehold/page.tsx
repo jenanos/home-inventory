@@ -180,7 +180,7 @@ export default async function VedlikeholdPage() {
                       )}
                     </div>
 
-                    {task.estimatedPrice && (
+                    {task.estimatedPrice != null && (
                       <p className="text-sm font-medium tabular-nums">
                         {formatCurrency(Number(task.estimatedPrice))}
                       </p>
