@@ -11,7 +11,6 @@ import {
   CalendarIcon,
   Wrench,
   CheckCircle2,
-  Users,
 } from "lucide-react"
 import Link from "next/link"
 import { TaskActions } from "./task-actions"
@@ -55,8 +54,6 @@ export default async function TaskPage({ params }: TaskPageProps) {
   const completedEntries = task.progressEntries.filter((e) => e.completed).length
   const progressPercent =
     totalEntries > 0 ? Math.round((completedEntries / totalEntries) * 100) : 0
-
-  const selectedVendor = task.vendors.find((v) => v.isSelected)
 
   const vendors = task.vendors.map((v) => ({
     id: v.id,
