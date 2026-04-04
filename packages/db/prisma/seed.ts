@@ -1,5 +1,7 @@
 import {
   PrismaClient,
+  type BudgetCategory,
+  type BudgetEntryType,
   type ItemStatus,
   type Phase,
   type Priority,
@@ -929,6 +931,142 @@ async function createDemoHousehold(userIdByEmail: Map<string, string>) {
       })
     }
   }
+
+  // ─── Budget seed data ────────────────────────────────────────
+  await prisma.budget.create({
+    data: {
+      householdId: household.id,
+      taxDeductionPercent: 22,
+      members: {
+        create: [
+          {
+            name: "Ida Solberg",
+            grossMonthlyIncome: 52000,
+            taxPercent: 34,
+            sortOrder: 0,
+          },
+          {
+            name: "Marcus Solberg",
+            grossMonthlyIncome: 48000,
+            taxPercent: 32,
+            sortOrder: 1,
+          },
+        ],
+      },
+      loans: {
+        create: [
+          {
+            bankName: "Nordea",
+            loanName: "Boliglån",
+            monthlyInterest: 6200,
+            monthlyPrincipal: 3800,
+            monthlyFees: 50,
+            sortOrder: 0,
+          },
+          {
+            bankName: "DNB",
+            loanName: "Billån",
+            monthlyInterest: 850,
+            monthlyPrincipal: 2600,
+            monthlyFees: 0,
+            sortOrder: 1,
+          },
+        ],
+      },
+      entries: {
+        create: [
+          // Housing costs
+          {
+            name: "Strøm",
+            category: "ELECTRICITY" as BudgetCategory,
+            type: "EXPENSE" as BudgetEntryType,
+            monthlyAmount: 2500,
+            sortOrder: 0,
+          },
+          {
+            name: "Kommunale avgifter",
+            category: "MUNICIPAL_FEES" as BudgetCategory,
+            type: "EXPENSE" as BudgetEntryType,
+            monthlyAmount: 3200,
+            sortOrder: 1,
+          },
+          {
+            name: "Forsikring bolig og innbo",
+            category: "INSURANCE" as BudgetCategory,
+            type: "EXPENSE" as BudgetEntryType,
+            monthlyAmount: 1200,
+            sortOrder: 2,
+          },
+          {
+            name: "Vedlikehold",
+            category: "HOME_MAINTENANCE" as BudgetCategory,
+            type: "EXPENSE" as BudgetEntryType,
+            monthlyAmount: 1500,
+            sortOrder: 3,
+          },
+          // Fixed costs
+          {
+            name: "Bil og kollektiv",
+            category: "TRANSPORT" as BudgetCategory,
+            type: "EXPENSE" as BudgetEntryType,
+            monthlyAmount: 4500,
+            sortOrder: 4,
+          },
+          {
+            name: "Streaming og mobil",
+            category: "SUBSCRIPTIONS" as BudgetCategory,
+            type: "EXPENSE" as BudgetEntryType,
+            monthlyAmount: 1800,
+            sortOrder: 5,
+          },
+          {
+            name: "Dagligvarer",
+            category: "FOOD" as BudgetCategory,
+            type: "EXPENSE" as BudgetEntryType,
+            monthlyAmount: 8000,
+            sortOrder: 6,
+          },
+          {
+            name: "Personlig forbruk",
+            category: "PERSONAL" as BudgetCategory,
+            type: "EXPENSE" as BudgetEntryType,
+            monthlyAmount: 3000,
+            sortOrder: 7,
+          },
+          {
+            name: "Sparing",
+            category: "SAVINGS" as BudgetCategory,
+            type: "EXPENSE" as BudgetEntryType,
+            monthlyAmount: 5000,
+            sortOrder: 8,
+          },
+          {
+            name: "Buffer",
+            category: "BUFFER" as BudgetCategory,
+            type: "EXPENSE" as BudgetEntryType,
+            monthlyAmount: 2000,
+            sortOrder: 9,
+          },
+          // Manual entries
+          {
+            name: "Utleie av hybel",
+            category: null,
+            type: "INCOME" as BudgetEntryType,
+            monthlyAmount: 6000,
+            sortOrder: 10,
+          },
+          {
+            name: "Treningsabonnement",
+            category: null,
+            type: "EXPENSE" as BudgetEntryType,
+            monthlyAmount: 800,
+            sortOrder: 11,
+          },
+        ],
+      },
+    },
+  })
+  console.log("  Opprettet demo-budsjett")
 
   return household
 }

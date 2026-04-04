@@ -1,0 +1,183 @@
+"use client"
+
+import { useState, useTransition, useEffect } from "react"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@workspace/ui/components/dialog"
+import { Button } from "@workspace/ui/components/button"
+import { Input } from "@workspace/ui/components/input"
+import { Label } from "@workspace/ui/components/label"
+import { upsertBudgetLoan } from "@/lib/actions/budget"
+import { toast } from "sonner"
+import type { BudgetLoanData } from "./budget-view"
+
+interface LoanDialogProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  loan: BudgetLoanData | null
+}
+
+export function LoanDialog({ open, onOpenChange, loan }: LoanDialogProps) {
+  const [bankName, setBankName] = useState("")
+  const [loanName, setLoanName] = useState("")
+  const [monthlyInterest, setMonthlyInterest] = useState("")
+  const [monthlyPrincipal, setMonthlyPrincipal] = useState("")
+  const [monthlyFees, setMonthlyFees] = useState("")
+  const [isPending, startTransition] = useTransition()
+
+  useEffect(() => {
+    if (open) {
+      if (loan) {
+        setBankName(loan.bankName)
+        setLoanName(loan.loanName)
+        setMonthlyInterest(String(loan.monthlyInterest))
+        setMonthlyPrincipal(String(loan.monthlyPrincipal))
+        setMonthlyFees(String(loan.monthlyFees))
+      } else {
+        setBankName("")
+        setLoanName("")
+        setMonthlyInterest("")
+        setMonthlyPrincipal("")
+        setMonthlyFees("0")
+      }
+    }
+  }, [open, loan])
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    const interest = parseFloat(monthlyInterest)
+    const principal = parseFloat(monthlyPrincipal)
+    const fees = parseFloat(monthlyFees) || 0
+
+    if (
+      !bankName.trim() ||
+      !loanName.trim() ||
+      isNaN(interest) ||
+      isNaN(principal)
+    ) {
+      toast.error("Fyll inn alle obligatoriske feltene")
+      return
+    }
+
+    startTransition(async () => {
+      try {
+        await upsertBudgetLoan({
+          id: loan?.id,
+          bankName: bankName.trim(),
+          loanName: loanName.trim(),
+          monthlyInterest: interest,
+          monthlyPrincipal: principal,
+          monthlyFees: fees,
+        })
+        toast.success(loan ? "Lån oppdatert" : "Lån lagt til")
+        onOpenChange(false)
+      } catch {
+        toast.error("Noe gikk galt")
+      }
+    })
+  }
+
+  const total =
+    (parseFloat(monthlyInterest) || 0) +
+    (parseFloat(monthlyPrincipal) || 0) +
+    (parseFloat(monthlyFees) || 0)
+
+  const formatPreview = (amount: number) =>
+    new Intl.NumberFormat("nb-NO", {
+      style: "currency",
+      currency: "NOK",
+      maximumFractionDigits: 0,
+    }).format(amount)
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{loan ? "Rediger lån" : "Legg til lån"}</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="loan-bank">Bank</Label>
+              <Input
+                id="loan-bank"
+                value={bankName}
+                onChange={(e) => setBankName(e.target.value)}
+                placeholder="F.eks. DNB"
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="loan-name">Lånenavn</Label>
+              <Input
+                id="loan-name"
+                value={loanName}
+                onChange={(e) => setLoanName(e.target.value)}
+                placeholder="F.eks. Boliglån"
+              />
+            </div>
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="loan-interest">Renter per måned (kr)</Label>
+            <Input
+              id="loan-interest"
+              type="number"
+              step="1"
+              min="0"
+              value={monthlyInterest}
+              onChange={(e) => setMonthlyInterest(e.target.value)}
+              placeholder="F.eks. 5000"
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="loan-principal">Avdrag per måned (kr)</Label>
+            <Input
+              id="loan-principal"
+              type="number"
+              step="1"
+              min="0"
+              value={monthlyPrincipal}
+              onChange={(e) => setMonthlyPrincipal(e.target.value)}
+              placeholder="F.eks. 3000"
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="loan-fees">Gebyrer per måned (kr)</Label>
+            <Input
+              id="loan-fees"
+              type="number"
+              step="1"
+              min="0"
+              value={monthlyFees}
+              onChange={(e) => setMonthlyFees(e.target.value)}
+              placeholder="F.eks. 50"
+            />
+          </div>
+          {total > 0 && (
+            <div className="bg-muted rounded-md p-3">
+              <p className="text-sm">
+                Total månedskostnad:{" "}
+                <span className="font-bold">{formatPreview(total)}</span>
+              </p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              Avbryt
+            </Button>
+            <Button type="submit" disabled={isPending}>
+              {loan ? "Lagre" : "Legg til"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
