@@ -485,14 +485,14 @@ export function BudgetView({ budget }: BudgetViewProps) {
                         {loan.bankName}
                       </span>
                     </p>
-                    <p className="text-muted-foreground text-xs sm:text-sm truncate">
-                      Renter: {formatCurrency(loan.monthlyInterest * multiplier)}
-                      {" · "}
-                      Avdrag: {formatCurrency(loan.monthlyPrincipal * multiplier)}
+                    <p className="text-muted-foreground text-xs sm:text-sm flex flex-wrap gap-x-1">
+                      <span>Renter: {formatCurrency(loan.monthlyInterest * multiplier)}</span>
+                      <span className="hidden sm:inline">·</span>
+                      <span>Avdrag: {formatCurrency(loan.monthlyPrincipal * multiplier)}</span>
                       {loan.monthlyFees > 0 && (
                         <>
-                          {" · "}
-                          Gebyrer: {formatCurrency(loan.monthlyFees * multiplier)}
+                          <span className="hidden sm:inline">·</span>
+                          <span>Gebyrer: {formatCurrency(loan.monthlyFees * multiplier)}</span>
                         </>
                       )}
                     </p>
