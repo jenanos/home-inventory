@@ -3,12 +3,13 @@
 import NextAuth from "next-auth"
 import type { NextAuthConfig } from "next-auth"
 import { PrismaAdapter } from "@auth/prisma-adapter"
-import { db } from "@workspace/db"
+import { Prisma, db } from "@workspace/db"
 import Resend from "next-auth/providers/resend"
 
 const prismaAdapter = PrismaAdapter(db)
 const isDevelopment = process.env.NODE_ENV === "development"
 const baseUseVerificationToken = prismaAdapter.useVerificationToken?.bind(prismaAdapter)
+const baseDeleteSession = prismaAdapter.deleteSession?.bind(prismaAdapter)
 
 type DevCallbackState = {
   url: string
@@ -71,8 +72,30 @@ function cacheVerificationToken(token: {
   })
 }
 
+function isPrismaErrorWithCode(error: unknown, code: string) {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError && error.code === code
+  )
+}
+
 const adapter: typeof prismaAdapter = {
   ...prismaAdapter,
+  async deleteSession(sessionToken) {
+    if (!baseDeleteSession) return null
+
+    try {
+      const deletedSession = await baseDeleteSession(sessionToken)
+      return deletedSession ?? null
+    } catch (error) {
+      // Auth.js may try to clear a stale session cookie during email sign-in.
+      // Missing session rows should be treated as already signed out.
+      if (isPrismaErrorWithCode(error, "P2025")) {
+        return null
+      }
+
+      throw error
+    }
+  },
   async useVerificationToken(params) {
     const cached = readRecentVerificationToken(params)
     if (cached) {
