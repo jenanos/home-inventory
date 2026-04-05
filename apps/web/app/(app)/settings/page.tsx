@@ -29,8 +29,8 @@ export default async function SettingsPage() {
   const isOwner = membership.role === "OWNER"
 
   return (
-    <div className="space-y-8">
-      <h1 className="font-heading text-3xl">Innstillinger</h1>
+    <div className="space-y-6 sm:space-y-8">
+      <h1 className="font-heading text-2xl sm:text-3xl">Innstillinger</h1>
 
       <Card>
         <CardHeader>

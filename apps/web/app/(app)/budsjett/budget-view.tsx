@@ -312,7 +312,7 @@ export function BudgetView({ budget }: BudgetViewProps) {
             <TrendingUp className="text-muted-foreground h-4 w-4" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold tabular-nums text-green-600 dark:text-green-400">
+            <div className="text-xl sm:text-2xl font-bold tabular-nums text-green-600 dark:text-green-400">
               {formatCurrency(calculations.totalIncome * multiplier)}
             </div>
             <p className="text-muted-foreground text-xs">
@@ -329,7 +329,7 @@ export function BudgetView({ budget }: BudgetViewProps) {
             <TrendingDown className="text-muted-foreground h-4 w-4" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold tabular-nums text-red-600 dark:text-red-400">
+            <div className="text-xl sm:text-2xl font-bold tabular-nums text-red-600 dark:text-red-400">
               {formatCurrency(calculations.totalExpenses * multiplier)}
             </div>
             <p className="text-muted-foreground text-xs">
@@ -344,7 +344,7 @@ export function BudgetView({ budget }: BudgetViewProps) {
             <Receipt className="text-muted-foreground h-4 w-4" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold tabular-nums text-blue-600 dark:text-blue-400">
+            <div className="text-xl sm:text-2xl font-bold tabular-nums text-blue-600 dark:text-blue-400">
               {formatCurrency(
                 calculations.monthlyTaxDeduction * multiplier
               )}
@@ -362,7 +362,7 @@ export function BudgetView({ budget }: BudgetViewProps) {
           </CardHeader>
           <CardContent>
             <div
-              className={`text-2xl font-bold tabular-nums ${
+              className={`text-xl sm:text-2xl font-bold tabular-nums ${
                 calculations.disposable >= 0
                   ? "text-green-600 dark:text-green-400"
                   : "text-red-600 dark:text-red-400"
@@ -485,14 +485,14 @@ export function BudgetView({ budget }: BudgetViewProps) {
                         {loan.bankName}
                       </span>
                     </p>
-                    <p className="text-muted-foreground text-sm">
-                      Renter: {formatCurrency(loan.monthlyInterest * multiplier)}
-                      {" · "}
-                      Avdrag: {formatCurrency(loan.monthlyPrincipal * multiplier)}
+                    <p className="text-muted-foreground text-xs sm:text-sm flex flex-wrap gap-x-1">
+                      <span>Renter: {formatCurrency(loan.monthlyInterest * multiplier)}</span>
+                      <span className="hidden sm:inline">·</span>
+                      <span>Avdrag: {formatCurrency(loan.monthlyPrincipal * multiplier)}</span>
                       {loan.monthlyFees > 0 && (
                         <>
-                          {" · "}
-                          Gebyrer: {formatCurrency(loan.monthlyFees * multiplier)}
+                          <span className="hidden sm:inline">·</span>
+                          <span>Gebyrer: {formatCurrency(loan.monthlyFees * multiplier)}</span>
                         </>
                       )}
                     </p>
@@ -693,15 +693,15 @@ function BudgetSection({
   return (
     <Card>
       <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
             {icon}
-            <CardTitle className="text-base">{title}</CardTitle>
+            <CardTitle className="text-base truncate">{title}</CardTitle>
             {badge}
           </div>
-          <Button variant="outline" size="sm" onClick={onAdd}>
-            <PlusCircle className="mr-1.5 h-3.5 w-3.5" />
-            {addLabel}
+          <Button variant="outline" size="sm" onClick={onAdd} className="shrink-0">
+            <PlusCircle className="h-3.5 w-3.5 sm:mr-1.5" />
+            <span className="hidden sm:inline">{addLabel}</span>
           </Button>
         </div>
       </CardHeader>

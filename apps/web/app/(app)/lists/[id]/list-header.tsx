@@ -105,7 +105,7 @@ export function ListHeader({
               Del
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-80" align="end">
+          <PopoverContent className="w-[calc(100vw-2rem)] sm:w-80" align="end">
             <div className="grid gap-4">
               <div className="grid gap-1">
                 <h4 className="font-heading font-medium">Del listen</h4>
@@ -187,7 +187,7 @@ export function ListHeader({
         </Popover>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
         <div className="flex items-center gap-2 rounded-lg bg-muted/60 px-3 py-1.5">
           <ShoppingCart className="h-4 w-4 text-muted-foreground" />
           <span className="text-sm">

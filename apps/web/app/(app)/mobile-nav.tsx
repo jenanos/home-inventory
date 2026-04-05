@@ -37,7 +37,7 @@ export function MobileNav({ lists }: MobileNavProps) {
               key={item.label}
               href={item.href}
               className={cn(
-                "flex min-h-[56px] min-w-[64px] flex-col items-center justify-center gap-1 px-3 py-2 text-xs transition-colors",
+                "flex min-h-[56px] flex-1 flex-col items-center justify-center gap-1 px-1 py-2 text-xs transition-colors",
                 isActive
                   ? "text-primary"
                   : "text-muted-foreground hover:text-foreground"

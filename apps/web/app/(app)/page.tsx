@@ -44,10 +44,10 @@ export default async function DashboardPage() {
       : 0
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-4 sm:gap-8">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="font-heading text-3xl tracking-tight">Oversikt</h1>
+        <h1 className="font-heading text-2xl sm:text-3xl tracking-tight">Oversikt</h1>
         <CreateListDialog />
       </div>
 
@@ -202,7 +202,7 @@ export default async function DashboardPage() {
                         <CardTitle className="font-heading text-lg">
                           {list.name}
                         </CardTitle>
-                        <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                        <ArrowRight className="h-4 w-4 text-muted-foreground sm:opacity-0 transition-opacity sm:group-hover:opacity-100" />
                       </div>
                     </CardHeader>
                     <CardContent>

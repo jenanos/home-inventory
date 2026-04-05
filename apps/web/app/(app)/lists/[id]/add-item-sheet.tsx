@@ -158,7 +158,7 @@ export function AddItemSheet({ listId, categories, members }: AddItemSheetProps)
 
       <Separator />
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="grid gap-1.5">
           <Label>Kategori</Label>
           <Select value={categoryId} onValueChange={setCategoryId}>
@@ -194,7 +194,7 @@ export function AddItemSheet({ listId, categories, members }: AddItemSheetProps)
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="grid gap-1.5">
           <Label>Fase</Label>
           <Select value={phase} onValueChange={setPhase}>
