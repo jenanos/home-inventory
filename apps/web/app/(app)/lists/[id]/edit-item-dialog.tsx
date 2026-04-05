@@ -506,8 +506,10 @@ function AlternativesSection({
           </p>
         )}
 
-        {alternatives.map((alt, index) =>
-          editingId === alt.id ? (
+        {alternatives.map((alt, index) => {
+          const isPreferred = index === 0
+
+          return editingId === alt.id ? (
             <AlternativeEditForm
               key={alt.id}
               alternative={alt}
@@ -518,13 +520,13 @@ function AlternativesSection({
               key={alt.id}
               className={cn(
                 "group rounded-lg border p-3 transition-colors",
-                index === 0
+                isPreferred
                   ? "border-primary/30 bg-primary/5 ring-1 ring-primary/20"
                   : "bg-muted/30 hover:bg-muted/50"
               )}
             >
               {/* Preferred badge for top alternative */}
-              {index === 0 && (
+              {isPreferred && (
                 <div className="flex items-center gap-1.5 mb-2">
                   <Star className="h-3.5 w-3.5 fill-primary text-primary" />
                   <span className="text-xs font-semibold text-primary">
@@ -539,7 +541,7 @@ function AlternativesSection({
                   <button
                     type="button"
                     onClick={() => handleMoveUp(index)}
-                    disabled={index === 0 || isReordering || disabled}
+                    disabled={isPreferred || isReordering || disabled}
                     className="text-muted-foreground hover:text-foreground disabled:opacity-30"
                     aria-label="Flytt opp"
                   >
@@ -575,7 +577,7 @@ function AlternativesSection({
                     <div className="flex flex-col min-w-0">
                       <span className={cn(
                         "text-sm font-medium truncate",
-                        index === 0 && "text-primary"
+                        isPreferred && "text-primary"
                       )}>
                         {alt.name}
                       </span>
@@ -588,7 +590,7 @@ function AlternativesSection({
                     {alt.price != null && alt.price > 0 && (
                       <span className={cn(
                         "text-sm font-semibold tabular-nums shrink-0",
-                        index === 0 && "text-primary"
+                        isPreferred && "text-primary"
                       )}>
                         {formatCurrency(alt.price)}
                       </span>
@@ -603,7 +605,7 @@ function AlternativesSection({
 
                   {/* Action buttons row */}
                   <div className="flex items-center gap-2 mt-2">
-                    {index !== 0 && (
+                    {!isPreferred && (
                       <button
                         type="button"
                         onClick={() => handleSetPreferred(alt.id)}
@@ -638,7 +640,7 @@ function AlternativesSection({
               </div>
             </div>
           )
-        )}
+        })}
 
         {showAddForm ? (
           <AlternativeAddForm
