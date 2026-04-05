@@ -9,6 +9,7 @@ interface CreateAlternativeInput {
   name: string
   price?: number
   url?: string
+  imageUrl?: string
   storeName?: string
   notes?: string
 }
@@ -40,6 +41,7 @@ export async function createAlternative(input: CreateAlternativeInput) {
       name: input.name,
       price: input.price,
       url: input.url,
+      imageUrl: input.imageUrl,
       storeName: input.storeName,
       notes: input.notes,
       rank: nextRank,
@@ -56,6 +58,7 @@ interface UpdateAlternativeInput {
   name?: string
   price?: number | null
   url?: string | null
+  imageUrl?: string | null
   storeName?: string | null
   notes?: string | null
 }

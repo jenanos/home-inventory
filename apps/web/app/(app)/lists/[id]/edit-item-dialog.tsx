@@ -359,16 +359,13 @@ export function EditItemDialog({
             </div>
           )}
 
-          {item.status === "PENDING" && (
-            <>
-              <Separator />
-              <AlternativesSection
-                itemId={item.id}
-                alternatives={item.alternatives}
-                disabled={isPending}
-              />
-            </>
-          )}
+          <Separator />
+
+          <AlternativesSection
+            itemId={item.id}
+            alternatives={item.alternatives}
+            disabled={isPending}
+          />
 
           {error && (
             <p className="text-sm text-destructive" role="alert">
@@ -446,7 +443,7 @@ function AlternativesSection({
   alternatives: AlternativeData[]
   disabled: boolean
 }) {
-  const [isOpen, setIsOpen] = useState(alternatives.length > 0)
+  const [isOpen, setIsOpen] = useState(true)
   const [showAddForm, setShowAddForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [isReordering, startReorder] = useTransition()
@@ -484,9 +481,9 @@ function AlternativesSection({
           className="w-full justify-between px-0 font-medium"
         >
           <span className="flex items-center gap-2">
-            Alternativer
+            Produktalternativer
             {alternatives.length > 0 && (
-              <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+              <span className="rounded-full bg-primary/10 text-primary px-2 py-0.5 text-xs font-medium">
                 {alternatives.length}
               </span>
             )}
@@ -502,7 +499,7 @@ function AlternativesSection({
       <CollapsibleContent className="space-y-3">
         {alternatives.length === 0 && !showAddForm && (
           <p className="text-xs text-muted-foreground py-1">
-            Ingen alternativer enda. Legg til ulike produkter du vurderer.
+            Ingen produktalternativer enda. Legg til ulike produkter du vurderer, f.eks. ulike modeller av en vaskemaskin.
           </p>
         )}
 
@@ -525,12 +522,12 @@ function AlternativesSection({
                   : "bg-muted/30 hover:bg-muted/50"
               )}
             >
-              {/* Preferred badge for top alternative */}
+              {/* Selected badge for top alternative */}
               {isPreferred && (
                 <div className="flex items-center gap-1.5 mb-2">
                   <Star className="h-3.5 w-3.5 fill-primary text-primary" />
                   <span className="text-xs font-semibold text-primary">
-                    Foretrukket
+                    Valgt
                   </span>
                 </div>
               )}
@@ -613,7 +610,7 @@ function AlternativesSection({
                         className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary transition-colors disabled:opacity-30"
                       >
                         <Star className="h-3 w-3" />
-                        Sett som foretrukket
+                        Velg denne
                       </button>
                     )}
                     <button
@@ -657,7 +654,7 @@ function AlternativesSection({
             disabled={disabled}
           >
             <Plus className="h-3.5 w-3.5" data-icon="inline-start" />
-            Legg til alternativ
+            Legg til produktalternativ
           </Button>
         )}
       </CollapsibleContent>
@@ -676,6 +673,7 @@ function AlternativeAddForm({
   const [name, setName] = useState("")
   const [price, setPrice] = useState("")
   const [url, setUrl] = useState("")
+  const [imageUrl, setImageUrl] = useState("")
   const [storeName, setStoreName] = useState("")
   const [notes, setNotes] = useState("")
 
@@ -688,6 +686,7 @@ function AlternativeAddForm({
         name: name.trim(),
         price: price ? Number(price) : undefined,
         url: url.trim() || undefined,
+        imageUrl: imageUrl.trim() || undefined,
         storeName: storeName.trim() || undefined,
         notes: notes.trim() || undefined,
       })
@@ -698,7 +697,7 @@ function AlternativeAddForm({
   return (
     <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium">Nytt alternativ</span>
+        <span className="text-xs font-medium">Nytt produktalternativ</span>
         <button
           type="button"
           onClick={onDone}
@@ -740,6 +739,14 @@ function AlternativeAddForm({
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           placeholder="Lenke (https://...)"
+          className="h-8 text-sm"
+          disabled={isPending}
+        />
+        <Input
+          type="url"
+          value={imageUrl}
+          onChange={(e) => setImageUrl(e.target.value)}
+          placeholder="Bilde-URL (https://...)"
           className="h-8 text-sm"
           disabled={isPending}
         />
@@ -783,6 +790,7 @@ function AlternativeEditForm({
     alternative.price != null ? String(alternative.price) : ""
   )
   const [url, setUrl] = useState(alternative.url ?? "")
+  const [imageUrl, setImageUrl] = useState(alternative.imageUrl ?? "")
   const [storeName, setStoreName] = useState(alternative.storeName ?? "")
   const [notes, setNotes] = useState(alternative.notes ?? "")
 
@@ -795,6 +803,7 @@ function AlternativeEditForm({
         name: name.trim(),
         price: price ? Number(price) : null,
         url: url.trim() || null,
+        imageUrl: imageUrl.trim() || null,
         storeName: storeName.trim() || null,
         notes: notes.trim() || null,
       })
@@ -812,7 +821,7 @@ function AlternativeEditForm({
   return (
     <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium">Rediger alternativ</span>
+        <span className="text-xs font-medium">Rediger produktalternativ</span>
         <button
           type="button"
           onClick={onDone}
@@ -854,6 +863,14 @@ function AlternativeEditForm({
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           placeholder="Lenke (https://...)"
+          className="h-8 text-sm"
+          disabled={isPending}
+        />
+        <Input
+          type="url"
+          value={imageUrl}
+          onChange={(e) => setImageUrl(e.target.value)}
+          placeholder="Bilde-URL (https://...)"
           className="h-8 text-sm"
           disabled={isPending}
         />
