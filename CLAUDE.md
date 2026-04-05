@@ -21,7 +21,8 @@ All commands are orchestrated by Turbo. No test framework is configured yet.
 - Start database: `docker compose up -d`
 - Stop database: `docker compose down`
 - Reset database: `docker compose down -v` (sletter all data)
-- Run migrations: `pnpm --filter @workspace/db db:migrate`
+- Run migrations: `pnpm db:migrate`
+- Setup database + seed: `pnpm db:setup`
 
 ## Architecture
 
@@ -39,7 +40,7 @@ Cross-package imports use the `@workspace/` alias (e.g., `@workspace/ui`).
 - PostgreSQL with Prisma ORM
 - Prisma schema and client in `packages/db` (create this package when setting up)
 - Use `@workspace/db` for imports across the monorepo
-- Run migrations: `pnpm --filter @workspace/db db:migrate`
+- Run migrations: `pnpm db:migrate`
 - Always create migrations for schema changes, don't use db push in development
 
 ## UI & Styling

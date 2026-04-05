@@ -4,7 +4,10 @@
   "private": true,
   "scripts": {
     "build": "turbo build",
+    "db:generate": "pnpm --filter @workspace/db db:generate",
+    "db:migrate": "pnpm --filter @workspace/db db:migrate",
     "dev": "turbo dev",
+    "db:setup": "pnpm db:migrate && pnpm db:seed",
     "db:seed": "pnpm --filter @workspace/db db:seed",
     "lint": "turbo lint",
     "format": "turbo format",

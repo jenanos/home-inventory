@@ -57,8 +57,8 @@ packages/typescript-config  → Shared TypeScript configs
 3. Run database migrations and seed:
 
    ```bash
-   pnpm --filter @workspace/db prisma migrate dev
-   pnpm --filter @workspace/db db:seed
+   docker compose up -d
+   pnpm db:setup
    ```
 
 4. Start the dev server:
@@ -72,6 +72,10 @@ packages/typescript-config  → Shared TypeScript configs
 ```bash
 pnpm dev          # Start dev server with Turbopack
 pnpm build        # Production build
+pnpm db:generate  # Generate Prisma client
+pnpm db:migrate   # Run Prisma migrations locally
+pnpm db:setup     # Start from a fresh local DB schema + seed
+pnpm db:seed      # Seed demo data into an existing schema
 pnpm lint         # ESLint across all workspaces
 pnpm format       # Prettier across all workspaces
 pnpm typecheck    # TypeScript type checking

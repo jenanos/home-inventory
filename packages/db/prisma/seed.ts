@@ -1,5 +1,6 @@
 import {
   PrismaClient,
+  Prisma,
   type BudgetCategory,
   type BudgetEntryType,
   type ItemStatus,
@@ -1146,7 +1147,21 @@ main()
     await prisma.$disconnect()
   })
   .catch(async (error) => {
-    console.error(error)
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === "P2021") {
+        console.error(
+          "Seed stoppet fordi databasetabellene mangler. Kjor `pnpm db:migrate` eller `pnpm db:setup` forst."
+        )
+      } else {
+        console.error(error)
+      }
+    } else if (error instanceof Prisma.PrismaClientInitializationError) {
+      console.error(
+        "Seed fikk ikke kontakt med databasen. Start Postgres med `docker compose up -d` og prover igjen."
+      )
+    } else {
+      console.error(error)
+    }
     await prisma.$disconnect()
     runtime.process?.exit?.(1)
   })

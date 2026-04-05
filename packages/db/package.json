@@ -9,6 +9,7 @@
     "db:migrate": "dotenv -e ../../.env -- prisma migrate dev",
     "db:seed": "dotenv -e ../../.env -- tsx prisma/seed.ts",
     "db:studio": "dotenv -e ../../.env -- prisma studio",
+    "prisma": "dotenv -e ../../.env -- prisma",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
