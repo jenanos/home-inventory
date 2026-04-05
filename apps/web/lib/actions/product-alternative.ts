@@ -115,3 +115,34 @@ export async function reorderAlternatives(
 
   revalidatePath(`/lists/${item.listId}`)
 }
+
+export async function setPreferredAlternative(
+  itemId: string,
+  alternativeId: string
+) {
+  const { membership } = await requireHousehold()
+  const item = await verifyItemOwnership(itemId, membership.householdId)
+
+  // Get all alternatives ordered by rank
+  const alternatives = await db.productAlternative.findMany({
+    where: { itemId },
+    orderBy: { rank: "asc" },
+  })
+
+  // Build new order: the chosen alternative first, then the rest in their current order
+  const orderedIds = [
+    alternativeId,
+    ...alternatives.filter((a) => a.id !== alternativeId).map((a) => a.id),
+  ]
+
+  await db.$transaction(
+    orderedIds.map((id, index) =>
+      db.productAlternative.update({
+        where: { id },
+        data: { rank: index },
+      })
+    )
+  )
+
+  revalidatePath(`/lists/${item.listId}`)
+}

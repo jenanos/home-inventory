@@ -38,11 +38,11 @@ import {
   Save,
   Plus,
   ChevronDown,
-  GripVertical,
   ArrowUp,
   ArrowDown,
   ExternalLink,
   X,
+  Star,
 } from "lucide-react"
 import { CategoryIcon } from "@/components/category-icon"
 import {
@@ -54,6 +54,7 @@ import {
   updateAlternative,
   deleteAlternative,
   reorderAlternatives,
+  setPreferredAlternative,
 } from "@/lib/actions/product-alternative"
 import type { ShoppingItemData, AlternativeData } from "./item-list"
 import type { Priority, Phase, ItemStatus } from "@workspace/db"
@@ -468,6 +469,12 @@ function AlternativesSection({
     })
   }
 
+  function handleSetPreferred(alternativeId: string) {
+    startReorder(async () => {
+      await setPreferredAlternative(itemId, alternativeId)
+    })
+  }
+
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
       <CollapsibleTrigger asChild>
@@ -492,7 +499,7 @@ function AlternativesSection({
           />
         </Button>
       </CollapsibleTrigger>
-      <CollapsibleContent className="space-y-2">
+      <CollapsibleContent className="space-y-3">
         {alternatives.length === 0 && !showAddForm && (
           <p className="text-xs text-muted-foreground py-1">
             Ingen alternativer enda. Legg til ulike produkter du vurderer.
@@ -510,86 +517,122 @@ function AlternativesSection({
             <div
               key={alt.id}
               className={cn(
-                "group flex items-start gap-2 rounded-lg border bg-muted/30 p-2.5",
-                index === 0 && "ring-1 ring-primary/20 bg-primary/5"
+                "group rounded-lg border p-3 transition-colors",
+                index === 0
+                  ? "border-primary/30 bg-primary/5 ring-1 ring-primary/20"
+                  : "bg-muted/30 hover:bg-muted/50"
               )}
             >
-              <div className="flex flex-col items-center gap-0.5 pt-0.5">
-                <button
-                  type="button"
-                  onClick={() => handleMoveUp(index)}
-                  disabled={index === 0 || isReordering || disabled}
-                  className="text-muted-foreground hover:text-foreground disabled:opacity-30"
-                  aria-label="Flytt opp"
-                >
-                  <ArrowUp className="h-3 w-3" />
-                </button>
-                <span className="text-[10px] font-medium text-muted-foreground">
-                  {index + 1}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => handleMoveDown(index)}
-                  disabled={index === alternatives.length - 1 || isReordering || disabled}
-                  className="text-muted-foreground hover:text-foreground disabled:opacity-30"
-                  aria-label="Flytt ned"
-                >
-                  <ArrowDown className="h-3 w-3" />
-                </button>
-              </div>
+              {/* Preferred badge for top alternative */}
+              {index === 0 && (
+                <div className="flex items-center gap-1.5 mb-2">
+                  <Star className="h-3.5 w-3.5 fill-primary text-primary" />
+                  <span className="text-xs font-semibold text-primary">
+                    Foretrukket
+                  </span>
+                </div>
+              )}
 
-              <div
-                className="flex-1 min-w-0 cursor-pointer"
-                onClick={() => setEditingId(alt.id)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") setEditingId(alt.id)
-                }}
-              >
-                <div className="flex items-start gap-2">
-                  {alt.imageUrl && (
-                    <img
-                      src={alt.imageUrl}
-                      alt={alt.name}
-                      className="h-9 w-9 rounded object-cover shrink-0"
-                      onError={(e) => { e.currentTarget.style.display = "none" }}
-                    />
-                  )}
-                  <div className="flex items-start justify-between gap-2 flex-1 min-w-0">
+              <div className="flex items-start gap-2.5">
+                {/* Reorder controls */}
+                <div className="flex flex-col items-center gap-0.5 pt-0.5">
+                  <button
+                    type="button"
+                    onClick={() => handleMoveUp(index)}
+                    disabled={index === 0 || isReordering || disabled}
+                    className="text-muted-foreground hover:text-foreground disabled:opacity-30"
+                    aria-label="Flytt opp"
+                  >
+                    <ArrowUp className="h-3.5 w-3.5" />
+                  </button>
+                  <span className="text-[10px] font-medium text-muted-foreground">
+                    {index + 1}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleMoveDown(index)}
+                    disabled={index === alternatives.length - 1 || isReordering || disabled}
+                    className="text-muted-foreground hover:text-foreground disabled:opacity-30"
+                    aria-label="Flytt ned"
+                  >
+                    <ArrowDown className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+
+                {/* Image */}
+                {alt.imageUrl && (
+                  <img
+                    src={alt.imageUrl}
+                    alt={alt.name}
+                    className="h-12 w-12 rounded-md object-cover shrink-0"
+                    onError={(e) => { e.currentTarget.style.display = "none" }}
+                  />
+                )}
+
+                {/* Alternative details */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2">
                     <div className="flex flex-col min-w-0">
-                      <span className="text-sm font-medium truncate">
+                      <span className={cn(
+                        "text-sm font-medium truncate",
+                        index === 0 && "text-primary"
+                      )}>
                         {alt.name}
                       </span>
                       {alt.storeName && (
-                        <span className="text-[10px] text-muted-foreground">
+                        <span className="text-xs text-muted-foreground">
                           {alt.storeName}
                         </span>
                       )}
-                      {alt.notes && (
-                        <span className="text-[10px] text-muted-foreground line-clamp-1 mt-0.5">
-                          {alt.notes}
-                        </span>
-                      )}
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {alt.price != null && alt.price > 0 && (
-                        <span className="text-sm font-medium tabular-nums">
-                          {formatCurrency(alt.price)}
-                        </span>
-                      )}
-                      {alt.url && (
-                        <a
-                          href={alt.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="text-primary hover:text-primary/80"
-                        >
-                          <ExternalLink className="h-3 w-3" />
-                        </a>
-                      )}
-                    </div>
+                    {alt.price != null && alt.price > 0 && (
+                      <span className={cn(
+                        "text-sm font-semibold tabular-nums shrink-0",
+                        index === 0 && "text-primary"
+                      )}>
+                        {formatCurrency(alt.price)}
+                      </span>
+                    )}
+                  </div>
+
+                  {alt.notes && (
+                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                      {alt.notes}
+                    </p>
+                  )}
+
+                  {/* Action buttons row */}
+                  <div className="flex items-center gap-2 mt-2">
+                    {index !== 0 && (
+                      <button
+                        type="button"
+                        onClick={() => handleSetPreferred(alt.id)}
+                        disabled={isReordering || disabled}
+                        className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary transition-colors disabled:opacity-30"
+                      >
+                        <Star className="h-3 w-3" />
+                        Sett som foretrukket
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setEditingId(alt.id)}
+                      className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      Rediger
+                    </button>
+                    {alt.url && (
+                      <a
+                        href={alt.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex items-center gap-1 text-[11px] text-primary hover:text-primary/80 transition-colors"
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        Lenke
+                      </a>
+                    )}
                   </div>
                 </div>
               </div>

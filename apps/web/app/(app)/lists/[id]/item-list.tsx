@@ -21,7 +21,7 @@ import {
   Calendar,
   Pencil,
   Package,
-  Layers,
+  Star,
 } from "lucide-react"
 import { CategoryIcon } from "@/components/category-icon"
 import { toggleItemPurchased } from "@/lib/actions/shopping-item"
@@ -384,8 +384,13 @@ function MobileItemCard({
 
           {item.alternatives.length > 0 && (
             <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
-              <Layers className="h-2.5 w-2.5" />
-              {item.alternatives.length} alt.
+              <Star className="h-2.5 w-2.5" />
+              {item.alternatives[0]!.name}
+              {item.alternatives.length > 1 && (
+                <span className="ml-0.5 text-muted-foreground/70">
+                  +{item.alternatives.length - 1}
+                </span>
+              )}
             </span>
           )}
         </div>
@@ -507,10 +512,28 @@ function DesktopItemRow({
             </span>
             {item.alternatives.length > 0 && (
               <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
-                <Layers className="h-2.5 w-2.5" />
-                {item.alternatives.length} alt.
+                <Star className="h-2.5 w-2.5" />
+                <span className="truncate max-w-[100px]">{item.alternatives[0]!.name}</span>
+                {item.alternatives.length > 1 && (
+                  <span className="text-muted-foreground/70 shrink-0">
+                    +{item.alternatives.length - 1}
+                  </span>
+                )}
               </span>
             )}
+          </div>
+        ) : item.alternatives.length > 0 ? (
+          <div className="flex flex-col">
+            <span className="text-muted-foreground">—</span>
+            <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
+              <Star className="h-2.5 w-2.5" />
+              <span className="truncate max-w-[100px]">{item.alternatives[0]!.name}</span>
+              {item.alternatives.length > 1 && (
+                <span className="text-muted-foreground/70 shrink-0">
+                  +{item.alternatives.length - 1}
+                </span>
+              )}
+            </span>
           </div>
         ) : (
           <span className="text-muted-foreground">—</span>
