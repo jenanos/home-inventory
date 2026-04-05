@@ -9,17 +9,12 @@ import { revalidatePath } from "next/cache"
 export async function ensureBudget() {
   const { membership } = await requireHousehold()
 
-  const existing = await db.budget.findUnique({
+  const budget = await db.budget.upsert({
     where: { householdId: membership.householdId },
+    update: {},
+    create: { householdId: membership.householdId },
   })
 
-  if (existing) return existing
-
-  const budget = await db.budget.create({
-    data: { householdId: membership.householdId },
-  })
-
-  revalidatePath("/budsjett")
   return budget
 }
 

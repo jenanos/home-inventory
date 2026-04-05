@@ -179,13 +179,29 @@ export function BudgetView({ budget }: BudgetViewProps) {
     const manualEntries = budget.entries.filter((e) => !e.category)
 
     const totalHousing = housingEntries.reduce(
-      (sum, e) => sum + e.monthlyAmount,
+      (sum, e) => {
+        if (e.type === "DEDUCTION") return sum - e.monthlyAmount
+        if (e.type === "INCOME") return sum
+        return sum + e.monthlyAmount
+      },
       0
     )
     const totalFixed = fixedEntries.reduce(
-      (sum, e) => sum + e.monthlyAmount,
+      (sum, e) => {
+        if (e.type === "DEDUCTION") return sum - e.monthlyAmount
+        if (e.type === "INCOME") return sum
+        return sum + e.monthlyAmount
+      },
       0
     )
+
+    // Gather income and deductions from categorized entries
+    const categorizedIncome = [...housingEntries, ...fixedEntries]
+      .filter((e) => e.type === "INCOME")
+      .reduce((sum, e) => sum + e.monthlyAmount, 0)
+    const categorizedDeductions = [...housingEntries, ...fixedEntries]
+      .filter((e) => e.type === "DEDUCTION")
+      .reduce((sum, e) => sum + e.monthlyAmount, 0)
 
     const manualIncome = manualEntries
       .filter((e) => e.type === "INCOME")
@@ -197,10 +213,11 @@ export function BudgetView({ budget }: BudgetViewProps) {
       .filter((e) => e.type === "DEDUCTION")
       .reduce((sum, e) => sum + e.monthlyAmount, 0)
 
-    const totalIncome = totalNetIncome + manualIncome
+    const totalIncome = totalNetIncome + manualIncome + categorizedIncome
     const totalExpenses =
       totalLoanCost + totalHousing + totalFixed + manualExpenses
-    const totalDeductions = monthlyTaxDeduction + manualDeductions
+    const totalDeductions =
+      monthlyTaxDeduction + manualDeductions + categorizedDeductions
     const disposable = totalIncome - totalExpenses + totalDeductions
 
     return {
@@ -516,7 +533,7 @@ export function BudgetView({ budget }: BudgetViewProps) {
                     </p>
                     <p className="text-muted-foreground text-sm">
                       {budget.taxDeductionPercent}% av totale rentekostnader (
-                      {formatCurrency(calculations.totalLoanInterest * multiplier * 12)}/år)
+                      {formatCurrency(calculations.totalLoanInterest * 12)}/år)
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
