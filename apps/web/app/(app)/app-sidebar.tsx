@@ -11,6 +11,7 @@ import {
   Plus,
   Home,
   Wrench,
+  Wallet,
 } from "lucide-react"
 import {
   Sidebar,
@@ -46,6 +47,7 @@ export function AppSidebar({ user, householdName, lists }: AppSidebarProps) {
   const navItems = [
     { href: "/", label: "Oversikt", icon: LayoutDashboard },
     { href: "/vedlikehold", label: "Vedlikehold", icon: Wrench },
+    { href: "/budsjett", label: "Budsjett", icon: Wallet },
     { href: "/settings", label: "Innstillinger", icon: Settings },
   ]
 

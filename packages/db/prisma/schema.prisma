@@ -103,6 +103,7 @@ model Household {
   lists            ShoppingList[]
   categories       Category[]
   maintenanceTasks MaintenanceTask[]
+  budget           Budget?
 }
 
 model HouseholdMember {
@@ -250,4 +251,90 @@ model TaskProgressEntry {
   task MaintenanceTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
   @@index([taskId, sortOrder])
+}
+
+// ─── Budget models ──────────────────────────────────────────────
+
+enum BudgetEntryType {
+  INCOME
+  EXPENSE
+  DEDUCTION
+}
+
+enum BudgetCategory {
+  // Housing costs (Boligkostnader)
+  ELECTRICITY
+  MUNICIPAL_FEES
+  INSURANCE
+  HOME_MAINTENANCE
+
+  // Fixed costs (Faste kostnader)
+  TRANSPORT
+  SUBSCRIPTIONS
+  FOOD
+  CHILDREN
+  PERSONAL
+  SAVINGS
+  BUFFER
+}
+
+model Budget {
+  id                  String   @id @default(uuid()) @db.Uuid
+  householdId         String   @unique @db.Uuid
+  taxDeductionPercent Decimal  @default(22) @db.Decimal(5, 2)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  household Household      @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  members   BudgetMember[]
+  loans     BudgetLoan[]
+  entries   BudgetEntry[]
+}
+
+model BudgetMember {
+  id                 String  @id @default(uuid()) @db.Uuid
+  budgetId           String  @db.Uuid
+  name               String
+  grossMonthlyIncome Decimal @db.Decimal(10, 2)
+  taxPercent         Decimal @db.Decimal(5, 2)
+  sortOrder          Int     @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  budget Budget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+
+  @@index([budgetId, sortOrder])
+}
+
+model BudgetLoan {
+  id               String  @id @default(uuid()) @db.Uuid
+  budgetId         String  @db.Uuid
+  bankName         String
+  loanName         String
+  monthlyInterest  Decimal @db.Decimal(10, 2)
+  monthlyPrincipal Decimal @db.Decimal(10, 2)
+  monthlyFees      Decimal @default(0) @db.Decimal(10, 2)
+  sortOrder        Int     @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  budget Budget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+
+  @@index([budgetId, sortOrder])
+}
+
+model BudgetEntry {
+  id            String          @id @default(uuid()) @db.Uuid
+  budgetId      String          @db.Uuid
+  name          String
+  category      BudgetCategory?
+  type          BudgetEntryType
+  monthlyAmount Decimal         @db.Decimal(10, 2)
+  sortOrder     Int             @default(0)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  budget Budget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+
+  @@index([budgetId, sortOrder])
 }
