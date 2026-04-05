@@ -62,7 +62,7 @@ export default async function VedlikeholdPage() {
               <Wrench className="text-muted-foreground h-4 w-4" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold tabular-nums">
+              <div className="text-xl sm:text-2xl font-bold tabular-nums">
                 {totalEstimate > 0 ? formatCurrency(totalEstimate) : "—"}
               </div>
               <p className="text-muted-foreground text-xs">
@@ -77,7 +77,7 @@ export default async function VedlikeholdPage() {
               <AlertTriangle className="text-muted-foreground h-4 w-4" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{notStartedCount}</div>
+              <div className="text-xl sm:text-2xl font-bold">{notStartedCount}</div>
               <p className="text-muted-foreground text-xs">
                 Oppgaver som venter
               </p>
@@ -90,7 +90,7 @@ export default async function VedlikeholdPage() {
               <Clock className="text-muted-foreground h-4 w-4" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{inProgressCount}</div>
+              <div className="text-xl sm:text-2xl font-bold">{inProgressCount}</div>
               <p className="text-muted-foreground text-xs">
                 Under arbeid
               </p>
@@ -103,7 +103,7 @@ export default async function VedlikeholdPage() {
               <CheckCircle2 className="text-muted-foreground h-4 w-4" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{completedCount}</div>
+              <div className="text-xl sm:text-2xl font-bold">{completedCount}</div>
               {tasks.length > 0 && (
                 <Progress
                   value={(completedCount / tasks.length) * 100}

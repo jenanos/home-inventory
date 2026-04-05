@@ -354,7 +354,7 @@ export function LlmImportDialog({ listId, listName, categories }: LlmImportDialo
           LLM-import
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+      <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>
             {step === "prompt" && "Kopier prompt til LLM"}

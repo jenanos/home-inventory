@@ -200,7 +200,7 @@ export function EditItemDialog({
 
           <Separator />
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="grid gap-1.5">
               <Label>Kategori</Label>
               <Select value={categoryId} onValueChange={setCategoryId}>
@@ -236,7 +236,7 @@ export function EditItemDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="grid gap-1.5">
               <Label>Fase</Label>
               <Select value={phase} onValueChange={setPhase}>
@@ -268,7 +268,7 @@ export function EditItemDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="grid gap-1.5">
               <Label htmlFor="edit-price">Estimert pris</Label>
               <Input

@@ -81,16 +81,16 @@ export default async function TaskPage({ params }: TaskPageProps) {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center gap-4">
+      <div className="flex items-start gap-3 sm:items-center sm:gap-4">
         <Link
           href="/vedlikehold"
-          className="text-muted-foreground hover:text-foreground transition-colors"
+          className="text-muted-foreground hover:text-foreground mt-1 sm:mt-0 transition-colors shrink-0"
         >
           <ArrowLeft className="h-5 w-5" />
         </Link>
-        <div className="flex-1">
-          <div className="flex items-center gap-3">
-            <h1 className="font-heading text-2xl font-bold tracking-tight">
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <h1 className="font-heading text-xl sm:text-2xl font-bold tracking-tight">
               {task.title}
             </h1>
             <Badge
