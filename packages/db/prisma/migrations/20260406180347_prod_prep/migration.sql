@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "BudgetTrip" ALTER COLUMN "id" DROP DEFAULT;
