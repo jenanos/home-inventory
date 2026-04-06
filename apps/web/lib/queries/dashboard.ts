@@ -1,7 +1,7 @@
 import { db } from "@workspace/db"
 
 export async function getDashboardData(householdId: string) {
-  const [lists, categories] = await Promise.all([
+  const [lists, categories, budget, maintenanceTasks] = await Promise.all([
     db.shoppingList.findMany({
       where: { householdId },
       include: {
@@ -21,8 +21,29 @@ export async function getDashboardData(householdId: string) {
       where: { householdId },
       orderBy: { name: "asc" },
     }),
+    db.budget.findUnique({
+      where: { householdId },
+      include: {
+        members: { orderBy: { sortOrder: "asc" } },
+        loans: { orderBy: { sortOrder: "asc" } },
+        entries: { orderBy: { sortOrder: "asc" } },
+      },
+    }),
+    db.maintenanceTask.findMany({
+      where: { householdId },
+      include: {
+        vendors: {
+          orderBy: [{ isSelected: "desc" }, { name: "asc" }],
+        },
+        progressEntries: {
+          orderBy: { sortOrder: "asc" },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
   ])
 
+  // Shopping stats
   const allItems = lists.flatMap((l) => l.items)
   const budgetItems = allItems.filter((item) => item.status !== "SKIPPED")
   const pendingItems = allItems.filter((i) => i.status === "PENDING")
@@ -39,10 +60,7 @@ export async function getDashboardData(householdId: string) {
   )
   const purchasedTotal = budgetItems
     .filter((i) => i.status === "PURCHASED")
-    .reduce(
-      (sum, i) => sum + getEffectivePrice(i),
-      0
-    )
+    .reduce((sum, i) => sum + getEffectivePrice(i), 0)
 
   const itemsByPhase = {
     BEFORE_MOVE: pendingItems.filter((i) => i.phase === "BEFORE_MOVE").length,
@@ -61,6 +79,67 @@ export async function getDashboardData(householdId: string) {
     {} as Record<string, number>
   )
 
+  // Budget stats
+  const toNum = (d: unknown): number => (d != null ? Number(d) : 0)
+
+  const budgetStats = budget
+    ? {
+        hasBudget: true as const,
+        totalGrossIncome: budget.members.reduce(
+          (sum, m) => sum + toNum(m.grossMonthlyIncome),
+          0
+        ),
+        totalNetIncome: budget.members.reduce(
+          (sum, m) =>
+            sum +
+            toNum(m.grossMonthlyIncome) * (1 - toNum(m.taxPercent) / 100),
+          0
+        ),
+        totalLoanPayments: budget.loans.reduce(
+          (sum, l) =>
+            sum +
+            toNum(l.monthlyInterest) +
+            toNum(l.monthlyPrincipal) +
+            toNum(l.monthlyFees),
+          0
+        ),
+        totalExpenses: budget.entries
+          .filter((e) => e.type === "EXPENSE")
+          .reduce((sum, e) => sum + toNum(e.monthlyAmount), 0),
+        totalDeductions: budget.entries
+          .filter((e) => e.type === "DEDUCTION")
+          .reduce((sum, e) => sum + toNum(e.monthlyAmount), 0),
+        memberCount: budget.members.length,
+        loanCount: budget.loans.length,
+        entryCount: budget.entries.length,
+      }
+    : { hasBudget: false as const }
+
+  // Maintenance stats
+  const maintenanceStats = {
+    totalTasks: maintenanceTasks.length,
+    notStartedCount: maintenanceTasks.filter((t) => t.status === "NOT_STARTED")
+      .length,
+    inProgressCount: maintenanceTasks.filter((t) => t.status === "IN_PROGRESS")
+      .length,
+    completedCount: maintenanceTasks.filter((t) => t.status === "COMPLETED")
+      .length,
+    onHoldCount: maintenanceTasks.filter((t) => t.status === "ON_HOLD").length,
+    totalEstimatedCost: maintenanceTasks.reduce(
+      (sum, t) => sum + (t.estimatedPrice ? Number(t.estimatedPrice) : 0),
+      0
+    ),
+    highPriorityTasks: maintenanceTasks.filter(
+      (t) => t.priority === "HIGH" && t.status !== "COMPLETED"
+    ),
+    overdueTasks: maintenanceTasks.filter(
+      (t) =>
+        t.dueDate &&
+        new Date(t.dueDate) < new Date() &&
+        t.status !== "COMPLETED"
+    ),
+  }
+
   return {
     lists,
     categories,
@@ -73,5 +152,8 @@ export async function getDashboardData(householdId: string) {
       itemsByPhase,
       itemsByPerson,
     },
+    budgetStats,
+    maintenanceStats,
+    maintenanceTasks,
   }
 }
