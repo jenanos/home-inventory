@@ -16,7 +16,7 @@ export function MobileNav({ lists }: MobileNavProps) {
     { href: "/", label: "Oversikt", icon: LayoutDashboard },
     {
       href: lists[0] ? `/lists/${lists[0].id}` : "/",
-      label: "Lister",
+      label: "Innkjøp",
       icon: ShoppingCart,
     },
     { href: "/vedlikehold", label: "Vedlikehold", icon: Wrench },

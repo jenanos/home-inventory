@@ -90,7 +90,7 @@ export function AppSidebar({ user, householdName, lists }: AppSidebarProps) {
         <SidebarSeparator />
 
         <SidebarGroup>
-          <SidebarGroupLabel>Handlelister</SidebarGroupLabel>
+          <SidebarGroupLabel>Innkjøp</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {lists.map((list) => (

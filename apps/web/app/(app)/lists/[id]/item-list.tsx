@@ -21,11 +21,12 @@ import {
   Calendar,
   Pencil,
   Package,
-  Star,
+  Layers,
 } from "lucide-react"
 import { CategoryIcon } from "@/components/category-icon"
 import { toggleItemPurchased } from "@/lib/actions/shopping-item"
 import { EditItemDialog } from "./edit-item-dialog"
+import { ProductVariantsCarousel } from "./product-variants-carousel"
 
 const formatCurrency = (amount: number) =>
   new Intl.NumberFormat("nb-NO", {
@@ -259,6 +260,10 @@ function MobileItemCard({
   const isSkipped = item.status === "SKIPPED"
   const isMuted = isPurchased || isSkipped
 
+  // Show selected (rank 0) alternative's image if available
+  const selectedAlt = item.alternatives[0] ?? null
+  const selectedAltImage = selectedAlt?.imageUrl ?? null
+
   function handleToggle() {
     startTransition(async () => {
       await toggleItemPurchased(item.id)
@@ -281,9 +286,10 @@ function MobileItemCard({
         />
       </div>
 
-      {item.imageUrl && (
+      {/* Show selected alternative's image, or item's own image */}
+      {(selectedAltImage || item.imageUrl) && (
         <img
-          src={item.imageUrl}
+          src={selectedAltImage ?? item.imageUrl!}
           alt={item.name}
           className="h-10 w-10 rounded-md object-cover shrink-0"
           onError={(e) => { e.currentTarget.style.display = "none" }}
@@ -383,15 +389,20 @@ function MobileItemCard({
           )}
 
           {item.alternatives.length > 0 && (
-            <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
-              <Star className="h-2.5 w-2.5" />
-              {item.alternatives[0]?.name}
-              {item.alternatives.length > 1 && (
-                <span className="ml-0.5 text-muted-foreground/70">
-                  +{item.alternatives.length - 1}
-                </span>
-              )}
-            </span>
+            <ProductVariantsCarousel
+              itemId={item.id}
+              itemName={item.name}
+              alternatives={item.alternatives}
+            >
+              <button
+                type="button"
+                onClick={(e) => e.stopPropagation()}
+                className="flex items-center gap-1 text-[10px] font-medium text-primary hover:text-primary/80 transition-colors"
+              >
+                <Layers className="h-2.5 w-2.5" />
+                Produktvalg ({item.alternatives.length})
+              </button>
+            </ProductVariantsCarousel>
           )}
         </div>
       </div>
@@ -411,6 +422,10 @@ function DesktopItemRow({
   const isSkipped = item.status === "SKIPPED"
   const isMuted = isPurchased || isSkipped
 
+  // Show selected (rank 0) alternative's image if available
+  const selectedAlt = item.alternatives[0] ?? null
+  const selectedAltImage = selectedAlt?.imageUrl ?? null
+
   function handleToggle() {
     startTransition(async () => {
       await toggleItemPurchased(item.id)
@@ -429,9 +444,9 @@ function DesktopItemRow({
       </TableCell>
       <TableCell>
         <div className="flex items-start gap-2.5">
-          {item.imageUrl && (
+          {(selectedAltImage || item.imageUrl) && (
             <img
-              src={item.imageUrl}
+              src={selectedAltImage ?? item.imageUrl!}
               alt={item.name}
               className="h-9 w-9 rounded-md object-cover shrink-0 mt-0.5"
               onError={(e) => { e.currentTarget.style.display = "none" }}
@@ -499,8 +514,8 @@ function DesktopItemRow({
         </Badge>
       </TableCell>
       <TableCell>
-        {item.effectivePrice != null && item.effectivePrice > 0 ? (
-          <div className="flex flex-col">
+        <div className="flex flex-col">
+          {item.effectivePrice != null && item.effectivePrice > 0 ? (
             <span
               className={cn(
                 "tabular-nums",
@@ -510,34 +525,25 @@ function DesktopItemRow({
             >
               {formatCurrency(item.effectivePrice)}
             </span>
-            {item.alternatives.length > 0 && (
-              <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
-                <Star className="h-2.5 w-2.5" />
-                <span className="truncate max-w-[100px]">{item.alternatives[0]?.name}</span>
-                {item.alternatives.length > 1 && (
-                  <span className="text-muted-foreground/70 shrink-0">
-                    +{item.alternatives.length - 1}
-                  </span>
-                )}
-              </span>
-            )}
-          </div>
-        ) : item.alternatives.length > 0 ? (
-          <div className="flex flex-col">
+          ) : (
             <span className="text-muted-foreground">—</span>
-            <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
-              <Star className="h-2.5 w-2.5" />
-              <span className="truncate max-w-[100px]">{item.alternatives[0]?.name}</span>
-              {item.alternatives.length > 1 && (
-                <span className="text-muted-foreground/70 shrink-0">
-                  +{item.alternatives.length - 1}
-                </span>
-              )}
-            </span>
-          </div>
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        )}
+          )}
+          {item.alternatives.length > 0 && (
+            <ProductVariantsCarousel
+              itemId={item.id}
+              itemName={item.name}
+              alternatives={item.alternatives}
+            >
+              <button
+                type="button"
+                className="flex items-center gap-1 text-[10px] font-medium text-primary hover:text-primary/80 transition-colors mt-0.5 w-fit"
+              >
+                <Layers className="h-2.5 w-2.5" />
+                Produktvalg ({item.alternatives.length})
+              </button>
+            </ProductVariantsCarousel>
+          )}
+        </div>
       </TableCell>
       <TableCell>
         {item.storeName ? (
