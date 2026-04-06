@@ -6,6 +6,7 @@ import { Badge } from "@workspace/ui/components/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@workspace/ui/components/card"
 import { Progress } from "@workspace/ui/components/progress"
 import { CreateTaskDialog } from "./create-task-dialog"
+import { MaintenanceLlmImportDialog } from "./llm-import-dialog"
 
 const priorityConfig = {
   HIGH: { label: "Høy", className: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400" },
@@ -51,7 +52,10 @@ export default async function VedlikeholdPage() {
             Oversikt over vedlikeholdsoppgaver for boligen
           </p>
         </div>
-        <CreateTaskDialog />
+        <div className="flex items-center gap-2">
+          <MaintenanceLlmImportDialog />
+          <CreateTaskDialog />
+        </div>
       </div>
 
       {tasks.length > 0 && (

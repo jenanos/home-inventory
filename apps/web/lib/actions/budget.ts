@@ -239,3 +239,120 @@ export async function deleteBudgetEntry(entryId: string) {
 
   revalidatePath("/budsjett")
 }
+
+// ─── Bulk Import ────────────────────────────────────────────────
+
+interface BulkBudgetMemberInput {
+  name: string
+  grossMonthlyIncome: number
+  taxPercent: number
+}
+
+interface BulkBudgetLoanInput {
+  bankName: string
+  loanName: string
+  monthlyInterest: number
+  monthlyPrincipal: number
+  monthlyFees?: number
+}
+
+interface BulkBudgetEntryInput {
+  name: string
+  category?: string
+  type: string
+  monthlyAmount: number
+}
+
+interface BulkBudgetImportInput {
+  members?: BulkBudgetMemberInput[]
+  loans?: BulkBudgetLoanInput[]
+  entries?: BulkBudgetEntryInput[]
+}
+
+export async function bulkImportBudget(input: BulkBudgetImportInput) {
+  const { membership } = await requireHousehold()
+
+  const budget = await db.budget.findUnique({
+    where: { householdId: membership.householdId },
+  })
+  if (!budget) throw new Error("Budget not found")
+
+  const validEntryTypes = new Set(["INCOME", "EXPENSE", "DEDUCTION"])
+  const validCategories = new Set([
+    "ELECTRICITY", "MUNICIPAL_FEES", "INSURANCE", "HOME_MAINTENANCE",
+    "TRANSPORT", "SUBSCRIPTIONS", "FOOD", "CHILDREN", "PERSONAL", "SAVINGS", "BUFFER",
+  ])
+
+  let count = 0
+
+  if (input.members && input.members.length > 0) {
+    const memberCount = await db.budgetMember.count({
+      where: { budgetId: budget.id },
+    })
+    await db.$transaction(
+      input.members.map((m, i) =>
+        db.budgetMember.create({
+          data: {
+            budgetId: budget.id,
+            name: m.name,
+            grossMonthlyIncome: m.grossMonthlyIncome,
+            taxPercent: m.taxPercent,
+            sortOrder: memberCount + i,
+          },
+        })
+      )
+    )
+    count += input.members.length
+  }
+
+  if (input.loans && input.loans.length > 0) {
+    const loanCount = await db.budgetLoan.count({
+      where: { budgetId: budget.id },
+    })
+    await db.$transaction(
+      input.loans.map((l, i) =>
+        db.budgetLoan.create({
+          data: {
+            budgetId: budget.id,
+            bankName: l.bankName,
+            loanName: l.loanName,
+            monthlyInterest: l.monthlyInterest,
+            monthlyPrincipal: l.monthlyPrincipal,
+            monthlyFees: l.monthlyFees ?? 0,
+            sortOrder: loanCount + i,
+          },
+        })
+      )
+    )
+    count += input.loans.length
+  }
+
+  if (input.entries && input.entries.length > 0) {
+    const entryCount = await db.budgetEntry.count({
+      where: { budgetId: budget.id },
+    })
+    await db.$transaction(
+      input.entries
+        .filter((e) => validEntryTypes.has(e.type.toUpperCase()))
+        .map((e, i) =>
+          db.budgetEntry.create({
+            data: {
+              budgetId: budget.id,
+              name: e.name,
+              category:
+                e.category && validCategories.has(e.category.toUpperCase())
+                  ? (e.category.toUpperCase() as BudgetCategory)
+                  : null,
+              type: e.type.toUpperCase() as BudgetEntryType,
+              monthlyAmount: e.monthlyAmount,
+              sortOrder: entryCount + i,
+            },
+          })
+        )
+    )
+    count += input.entries.length
+  }
+
+  revalidatePath("/budsjett")
+  return { count }
+}
