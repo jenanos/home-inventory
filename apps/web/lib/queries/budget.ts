@@ -6,6 +6,7 @@ export async function getBudget(householdId: string) {
     include: {
       members: { orderBy: { sortOrder: "asc" } },
       loans: { orderBy: { sortOrder: "asc" } },
+      trips: { orderBy: { sortOrder: "asc" } },
       entries: { orderBy: { sortOrder: "asc" } },
     },
   })

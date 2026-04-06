@@ -279,6 +279,16 @@ enum BudgetCategory {
   BUFFER
 }
 
+enum BudgetLoanType {
+  MORTGAGE
+  OTHER
+}
+
+enum TripTransportType {
+  AIR_OR_PUBLIC
+  CAR
+}
+
 model Budget {
   id                  String   @id @default(uuid()) @db.Uuid
   householdId         String   @unique @db.Uuid
@@ -289,6 +299,7 @@ model Budget {
   household Household      @relation(fields: [householdId], references: [id], onDelete: Cascade)
   members   BudgetMember[]
   loans     BudgetLoan[]
+  trips     BudgetTrip[]
   entries   BudgetEntry[]
 }
 
@@ -308,16 +319,36 @@ model BudgetMember {
 }
 
 model BudgetLoan {
-  id               String  @id @default(uuid()) @db.Uuid
-  budgetId         String  @db.Uuid
+  id               String         @id @default(uuid()) @db.Uuid
+  budgetId         String         @db.Uuid
   bankName         String
   loanName         String
-  monthlyInterest  Decimal @db.Decimal(10, 2)
-  monthlyPrincipal Decimal @db.Decimal(10, 2)
-  monthlyFees      Decimal @default(0) @db.Decimal(10, 2)
-  sortOrder        Int     @default(0)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  loanType         BudgetLoanType @default(MORTGAGE)
+  monthlyInterest  Decimal        @db.Decimal(10, 2)
+  monthlyPrincipal Decimal        @db.Decimal(10, 2)
+  monthlyFees      Decimal        @default(0) @db.Decimal(10, 2)
+  sortOrder        Int            @default(0)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  budget Budget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+
+  @@index([budgetId, sortOrder])
+}
+
+model BudgetTrip {
+  id               String            @id @default(uuid()) @db.Uuid
+  budgetId         String            @db.Uuid
+  name             String
+  transportType    TripTransportType
+  annualTrips      Int               @default(1)
+  ticketPerTrip    Decimal?          @db.Decimal(10, 2)
+  tollPerTrip      Decimal?          @db.Decimal(10, 2)
+  ferryPerTrip     Decimal?          @db.Decimal(10, 2)
+  fuelPerTrip      Decimal?          @db.Decimal(10, 2)
+  sortOrder        Int               @default(0)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 
   budget Budget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
 
