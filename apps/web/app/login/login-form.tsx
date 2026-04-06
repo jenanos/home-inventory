@@ -39,7 +39,11 @@ export function LoginForm({
       })
 
       if (result?.error) {
-        setError("Noe gikk galt. Pr\u00f8v igjen.")
+        if (result.code === "AccessDenied" || result.error === "AccessDenied") {
+          setError("Denne e-postadressen har ikke tilgang. Kontakt administrator for \u00e5 f\u00e5 en invitasjon.")
+        } else {
+          setError("Noe gikk galt. Pr\u00f8v igjen.")
+        }
         setIsLoading(false)
         return
       }

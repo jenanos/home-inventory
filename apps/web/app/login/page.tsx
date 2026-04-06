@@ -38,8 +38,8 @@ export default function LoginPage({
         </Card>
 
         <p className="mt-6 text-center text-xs text-muted-foreground">
-          Ingen passord n&oslash;dvendig &mdash; vi sender en sikker lenke til
-          e-posten din.
+          Kun for inviterte brukere. Ingen passord n&oslash;dvendig &mdash; vi
+          sender en sikker lenke til e-posten din.
         </p>
       </div>
     </div>

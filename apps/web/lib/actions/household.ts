@@ -50,9 +50,21 @@ export async function inviteToHousehold(householdId: string, email: string) {
     throw new Error("Only owners can invite members")
   }
 
-  const invitedUser = await db.user.findUnique({ where: { email } })
+  let invitedUser = await db.user.findUnique({ where: { email } })
   if (!invitedUser) {
-    throw new Error("User not found. They must sign up first.")
+    invitedUser = await db.user.create({ data: { email } })
+  }
+
+  const existingMembership = await db.householdMember.findUnique({
+    where: {
+      userId_householdId: {
+        userId: invitedUser.id,
+        householdId,
+      },
+    },
+  })
+  if (existingMembership) {
+    throw new Error("Brukeren er allerede medlem av denne husstanden.")
   }
 
   await db.householdMember.create({

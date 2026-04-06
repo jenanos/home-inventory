@@ -116,7 +116,7 @@ export function MembersSection({
               </Button>
             </div>
             <p className="text-muted-foreground text-xs">
-              Brukeren må ha opprettet en konto først
+              Brukeren får tilgang til appen og kan logge inn med magisk lenke.
             </p>
           </form>
         </>

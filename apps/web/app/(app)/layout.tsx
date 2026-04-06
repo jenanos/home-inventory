@@ -12,11 +12,17 @@ export default async function AppLayout({
 }) {
   const { session, membership } = await requireHousehold()
 
-  const lists = await db.shoppingList.findMany({
-    where: { householdId: membership.householdId },
-    orderBy: { updatedAt: "desc" },
-    select: { id: true, name: true },
-  })
+  const [lists, currentUser] = await Promise.all([
+    db.shoppingList.findMany({
+      where: { householdId: membership.householdId },
+      orderBy: { updatedAt: "desc" },
+      select: { id: true, name: true },
+    }),
+    db.user.findUnique({
+      where: { id: session.user.id },
+      select: { isAdmin: true },
+    }),
+  ])
 
   const user = {
     id: session.user.id,
@@ -26,6 +32,7 @@ export default async function AppLayout({
   }
 
   const householdName = membership.household.name
+  const isAdmin = currentUser?.isAdmin === true
 
   return (
     <SidebarProvider>
@@ -34,11 +41,12 @@ export default async function AppLayout({
           user={user}
           householdName={householdName}
           lists={lists}
+          isAdmin={isAdmin}
         />
         <main className="flex-1 pb-20 md:pb-0">
           <div className="mx-auto max-w-5xl p-4 md:p-8">{children}</div>
         </main>
-        <MobileNav lists={lists} />
+        <MobileNav lists={lists} isAdmin={isAdmin} />
       </div>
       <Toaster />
     </SidebarProvider>

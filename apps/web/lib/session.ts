@@ -36,3 +36,21 @@ export async function requireHousehold() {
 
   return { session, membership }
 }
+
+export async function isCurrentUserAdmin() {
+  const session = await auth()
+  if (!session?.user?.id) return false
+  const user = await db.user.findUnique({ where: { id: session.user.id } })
+  return user?.isAdmin === true
+}
+
+export async function requireAdmin() {
+  const session = await requireAuth()
+  const user = await db.user.findUnique({ where: { id: session.user.id } })
+
+  if (!user?.isAdmin) {
+    redirect("/")
+  }
+
+  return { session, user }
+}
