@@ -2,6 +2,7 @@ import { requireHousehold } from "@/lib/session"
 import { getBudget } from "@/lib/queries/budget"
 import { ensureBudget } from "@/lib/actions/budget"
 import { BudgetView } from "./budget-view"
+import { BudgetLlmImportDialog } from "./llm-import-dialog"
 
 function toNumber(d: unknown): number {
   return d != null ? Number(d) : 0
@@ -43,13 +44,16 @@ export default async function BudsjettPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="font-heading text-2xl font-bold tracking-tight">
-          Budsjett
-        </h1>
-        <p className="text-muted-foreground text-sm">
-          Oversikt over husstandens inntekter og kostnader
-        </p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="font-heading text-2xl font-bold tracking-tight">
+            Budsjett
+          </h1>
+          <p className="text-muted-foreground text-sm">
+            Oversikt over husstandens inntekter og kostnader
+          </p>
+        </div>
+        <BudgetLlmImportDialog />
       </div>
       <BudgetView budget={serialized} />
     </div>

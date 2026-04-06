@@ -23,8 +23,10 @@ import {
   ArrowRight,
   ArrowLeft,
   AlertCircle,
+  X,
 } from "lucide-react"
 import { bulkCreateShoppingItems } from "@/lib/actions/shopping-item"
+import { toast } from "sonner"
 import type { Priority, Phase } from "@workspace/db"
 
 interface LlmImportDialogProps {
@@ -317,19 +319,25 @@ export function LlmImportDialog({ listId, listName, categories }: LlmImportDialo
           categoryMap[cat.name] = cat.id
         }
 
-        await bulkCreateShoppingItems({
+        const result = await bulkCreateShoppingItems({
           items: parsedItems,
           listId,
           categoryMap,
         })
 
+        const importedCount = result.count
         handleReset()
+        toast.success(`${importedCount} ${importedCount === 1 ? "produkt" : "produkter"} importert`)
         setOpen(false)
       } catch (err) {
         console.error("LLM import failed:", err)
         setImportError("Noe gikk galt under importen. Prøv igjen.")
       }
     })
+  }
+
+  function handleRemoveItem(index: number) {
+    setParsedItems((prev) => prev.filter((_, i) => i !== index))
   }
 
   function handleReset() {
@@ -473,11 +481,22 @@ export function LlmImportDialog({ listId, listName, categories }: LlmImportDialo
                     <div className="flex flex-col gap-1 min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-medium text-sm">{item.name}</span>
-                        {item.estimatedPrice != null && (
-                          <span className="text-sm tabular-nums text-muted-foreground">
-                            {formatPrice(item.estimatedPrice)}
-                          </span>
-                        )}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {item.estimatedPrice != null && (
+                            <span className="text-sm tabular-nums text-muted-foreground">
+                              {formatPrice(item.estimatedPrice)}
+                            </span>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={() => handleRemoveItem(i)}
+                          >
+                            <X className="h-3.5 w-3.5" />
+                            <span className="sr-only">Fjern {item.name}</span>
+                          </Button>
+                        </div>
                       </div>
                       {item.description && (
                         <p className="text-xs text-muted-foreground">{item.description}</p>

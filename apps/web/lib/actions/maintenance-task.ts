@@ -296,3 +296,82 @@ export async function deleteProgressEntry(entryId: string) {
 
   revalidatePath(`/vedlikehold/${entry.taskId}`)
 }
+
+// ─── Bulk Import ────────────────────────────────────────────────
+
+interface BulkMaintenanceTaskInput {
+  title: string
+  description?: string
+  priority?: string
+  estimatedDuration?: string
+  estimatedPrice?: number
+  dueDate?: string
+  vendors?: {
+    name: string
+    description?: string
+    phone?: string
+    email?: string
+    website?: string
+    estimatedPrice?: number
+    notes?: string
+  }[]
+  progressEntries?: {
+    title: string
+    description?: string
+  }[]
+}
+
+interface BulkMaintenanceImportInput {
+  tasks: BulkMaintenanceTaskInput[]
+}
+
+export async function bulkImportMaintenanceTasks(input: BulkMaintenanceImportInput) {
+  const { membership } = await requireHousehold()
+
+  const validPriorities = new Set(["HIGH", "MEDIUM", "LOW"])
+
+  const results = await db.$transaction(
+    input.tasks.map((task) =>
+      db.maintenanceTask.create({
+        data: {
+          title: task.title,
+          description: task.description || undefined,
+          priority: (task.priority && validPriorities.has(task.priority.toUpperCase())
+            ? task.priority.toUpperCase()
+            : "MEDIUM") as Priority,
+          estimatedDuration: task.estimatedDuration || undefined,
+          estimatedPrice: task.estimatedPrice ?? undefined,
+          dueDate: task.dueDate ? new Date(task.dueDate) : undefined,
+          householdId: membership.householdId,
+          vendors:
+            task.vendors && task.vendors.length > 0
+              ? {
+                  create: task.vendors.map((v) => ({
+                    name: v.name,
+                    description: v.description || undefined,
+                    phone: v.phone || undefined,
+                    email: v.email || undefined,
+                    website: sanitizeUrl(v.website),
+                    estimatedPrice: v.estimatedPrice ?? undefined,
+                    notes: v.notes || undefined,
+                  })),
+                }
+              : undefined,
+          progressEntries:
+            task.progressEntries && task.progressEntries.length > 0
+              ? {
+                  create: task.progressEntries.map((pe, i) => ({
+                    title: pe.title,
+                    description: pe.description || undefined,
+                    sortOrder: i,
+                  })),
+                }
+              : undefined,
+        },
+      })
+    )
+  )
+
+  revalidatePath("/vedlikehold")
+  return { count: results.length }
+}
