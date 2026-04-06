@@ -319,13 +319,13 @@ export function LlmImportDialog({ listId, listName, categories }: LlmImportDialo
           categoryMap[cat.name] = cat.id
         }
 
-        await bulkCreateShoppingItems({
+        const result = await bulkCreateShoppingItems({
           items: parsedItems,
           listId,
           categoryMap,
         })
 
-        const importedCount = parsedItems.length
+        const importedCount = result.count
         handleReset()
         toast.success(`${importedCount} ${importedCount === 1 ? "produkt" : "produkter"} importert`)
         setOpen(false)
