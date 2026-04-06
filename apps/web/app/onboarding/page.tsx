@@ -1,5 +1,6 @@
-import { requireAuth, getUserHousehold } from "@/lib/session"
+import { requireAuth, getUserHousehold, isCurrentUserAdmin } from "@/lib/session"
 import { redirect } from "next/navigation"
+import Link from "next/link"
 import {
   Card,
   CardContent,
@@ -16,6 +17,8 @@ export default async function OnboardingPage() {
   if (membership) {
     redirect("/")
   }
+
+  const isAdmin = await isCurrentUserAdmin()
 
   return (
     <div className="flex min-h-svh items-center justify-center bg-background p-4">
@@ -40,6 +43,14 @@ export default async function OnboardingPage() {
             <OnboardingForm />
           </CardContent>
         </Card>
+
+        {isAdmin && (
+          <p className="mt-6 text-center text-sm text-muted-foreground">
+            <Link href="/admin" className="text-primary hover:underline">
+              G&aring; til administrasjonspanelet
+            </Link>
+          </p>
+        )}
       </div>
     </div>
   )

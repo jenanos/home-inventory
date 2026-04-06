@@ -22,9 +22,10 @@ export function MobileNav({ lists, isAdmin }: MobileNavProps) {
     },
     { href: "/vedlikehold", label: "Vedlikehold", icon: Wrench },
     { href: "/budsjett", label: "Budsjett", icon: Wallet },
+    { href: "/settings", label: "Innstillinger", icon: Settings },
     ...(isAdmin
       ? [{ href: "/admin", label: "Admin", icon: Shield }]
-      : [{ href: "/settings", label: "Innstillinger", icon: Settings }]),
+      : []),
   ]
 
   return (

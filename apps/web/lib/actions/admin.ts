@@ -48,6 +48,11 @@ export async function deleteUser(userId: string) {
     throw new Error("Du kan ikke slette din egen bruker.")
   }
 
+  const target = await db.user.findUnique({ where: { id: userId } })
+  if (target?.isAdmin) {
+    throw new Error("Admin-brukere kan ikke slettes.")
+  }
+
   await db.user.delete({ where: { id: userId } })
   revalidatePath("/admin")
 }

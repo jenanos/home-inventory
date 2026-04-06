@@ -1,4 +1,4 @@
-import { requireAdmin } from "@/lib/session"
+import { requireAuth } from "@/lib/session"
 import { db } from "@workspace/db"
 import {
   Card,
@@ -10,7 +10,7 @@ import { UsersSection } from "./users-section"
 import { HouseholdsSection } from "./households-section"
 
 export default async function AdminPage() {
-  const { session } = await requireAdmin()
+  const session = await requireAuth()
 
   const [users, households] = await Promise.all([
     db.user.findMany({
