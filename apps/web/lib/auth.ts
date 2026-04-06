@@ -181,6 +181,16 @@ export function getDevCallbackUrl() {
   return state.url
 }
 
+async function isEmailAllowed(email: string): Promise<boolean> {
+  const adminEmail = process.env.ADMIN_EMAIL
+  if (adminEmail && email.toLowerCase() === adminEmail.toLowerCase()) {
+    return true
+  }
+
+  const existingUser = await db.user.findUnique({ where: { email } })
+  return existingUser !== null
+}
+
 const config = {
   adapter,
   providers: [
@@ -202,6 +212,10 @@ const config = {
     verifyRequest: "/login/verify",
   },
   callbacks: {
+    async signIn({ user }) {
+      if (!user.email) return false
+      return isEmailAllowed(user.email)
+    },
     session({ session, user }) {
       session.user.id = user.id
       return session

@@ -12,6 +12,7 @@ import {
   Home,
   Wrench,
   Wallet,
+  Shield,
 } from "lucide-react"
 import {
   Sidebar,
@@ -39,9 +40,10 @@ interface AppSidebarProps {
   }
   householdName: string
   lists: { id: string; name: string }[]
+  isAdmin?: boolean
 }
 
-export function AppSidebar({ user, householdName, lists }: AppSidebarProps) {
+export function AppSidebar({ user, householdName, lists, isAdmin }: AppSidebarProps) {
   const pathname = usePathname()
 
   const navItems = [
@@ -49,6 +51,9 @@ export function AppSidebar({ user, householdName, lists }: AppSidebarProps) {
     { href: "/vedlikehold", label: "Vedlikehold", icon: Wrench },
     { href: "/budsjett", label: "Budsjett", icon: Wallet },
     { href: "/settings", label: "Innstillinger", icon: Settings },
+    ...(isAdmin
+      ? [{ href: "/admin", label: "Administrasjon", icon: Shield }]
+      : []),
   ]
 
   return (
