@@ -8,7 +8,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository_owner }}/home-inventory
+  IMAGE_NAME: ${{ github.repository_owner }}/home-overview
 
 jobs:
   build-and-push:

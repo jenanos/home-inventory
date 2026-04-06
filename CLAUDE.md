@@ -2,7 +2,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Context
 
-Home Inventory — a personal app for managing household purchases and inventory.
+Home Overview — a personal app for managing home projects and finances.
 
 ## Build & Development Commands
 
@@ -72,7 +72,7 @@ Reference: https://ui.shadcn.com/docs/monorepo
 ## Production Deployment
 
 - Image bygges automatisk av GitHub Actions ved push til main
-- Image: ghcr.io/jenanos/home-inventory:main
+- Image: ghcr.io/jenanos/home-overview:main
 - Serveren kjører Docker Compose med Postgres som separat container
 - Caddy håndterer TLS og reverse proxy
 - Watchtower auto-puller nye images hvert 5. minutt

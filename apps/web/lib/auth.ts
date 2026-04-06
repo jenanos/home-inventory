@@ -196,7 +196,7 @@ const config = {
   providers: [
     Resend({
       apiKey: process.env.RESEND_API_KEY,
-      from: process.env.EMAIL_FROM ?? "Home Inventory <noreply@resend.dev>",
+      from: process.env.EMAIL_FROM ?? "Home Overview <noreply@resend.dev>",
       ...(process.env.NODE_ENV === "development" && {
         sendVerificationRequest({ url }: { url: string }) {
           setDevCallbackUrl(url)
