@@ -331,26 +331,27 @@ export async function bulkImportBudget(input: BulkBudgetImportInput) {
     const entryCount = await db.budgetEntry.count({
       where: { budgetId: budget.id },
     })
-    await db.$transaction(
-      input.entries
-        .filter((e) => validEntryTypes.has(e.type.toUpperCase()))
-        .map((e, i) =>
-          db.budgetEntry.create({
-            data: {
-              budgetId: budget.id,
-              name: e.name,
-              category:
-                e.category && validCategories.has(e.category.toUpperCase())
-                  ? (e.category.toUpperCase() as BudgetCategory)
-                  : null,
-              type: e.type.toUpperCase() as BudgetEntryType,
-              monthlyAmount: e.monthlyAmount,
-              sortOrder: entryCount + i,
-            },
-          })
-        )
+    const validEntries = input.entries.filter((e) =>
+      validEntryTypes.has(e.type.toUpperCase())
     )
-    count += input.entries.length
+    await db.$transaction(
+      validEntries.map((e, i) =>
+        db.budgetEntry.create({
+          data: {
+            budgetId: budget.id,
+            name: e.name,
+            category:
+              e.category && validCategories.has(e.category.toUpperCase())
+                ? (e.category.toUpperCase() as BudgetCategory)
+                : null,
+            type: e.type.toUpperCase() as BudgetEntryType,
+            monthlyAmount: e.monthlyAmount,
+            sortOrder: entryCount + i,
+          },
+        })
+      )
+    )
+    count += validEntries.length
   }
 
   revalidatePath("/budsjett")
