@@ -24,6 +24,9 @@ COPY . .
 RUN mkdir -p apps/web/public
 
 RUN pnpm --filter @workspace/db prisma generate
+RUN mkdir -p /app/.prisma-runtime/node_modules && \
+    cp -R /app/node_modules/.pnpm/@prisma+client@*/node_modules/@prisma /app/.prisma-runtime/node_modules/@prisma && \
+    cp -R /app/node_modules/.pnpm/@prisma+client@*/node_modules/.prisma /app/.prisma-runtime/node_modules/.prisma
 RUN pnpm build --filter web
 
 # ── Stage 3: Runner ──────────────────────────────────────────────
@@ -45,6 +48,10 @@ COPY --from=builder /app/apps/web/public ./apps/web/public
 
 # Copy Prisma schema and migrations for migrate deploy
 COPY --from=builder /app/packages/db/prisma ./packages/db/prisma
+
+# bootstrap-admin.mjs runs outside the Next.js standalone bundle, so
+# it still needs the generated Prisma client available via Node resolution.
+COPY --from=builder /app/.prisma-runtime/node_modules ./node_modules
 
 # Install prisma CLI for runtime migrations
 RUN npm install -g prisma@6
