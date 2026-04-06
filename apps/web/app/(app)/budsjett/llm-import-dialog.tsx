@@ -37,9 +37,20 @@ interface ParsedMember {
 interface ParsedLoan {
   bankName: string
   loanName: string
+  loanType: string
   monthlyInterest: number
   monthlyPrincipal: number
   monthlyFees: number
+}
+
+interface ParsedTrip {
+  name: string
+  transportType: string
+  annualTrips: number
+  ticketPerTrip?: number
+  tollPerTrip?: number
+  ferryPerTrip?: number
+  fuelPerTrip?: number
 }
 
 interface ParsedEntry {
@@ -52,13 +63,14 @@ interface ParsedEntry {
 interface ParsedBudgetData {
   members: ParsedMember[]
   loans: ParsedLoan[]
+  trips: ParsedTrip[]
   entries: ParsedEntry[]
 }
 
 // ─── Prompt ────────────────────────────────────────────────────
 
 function buildPrompt() {
-  return `Hjelp meg med å sette opp et budsjett for husstanden min. Ta informasjonen jeg gir deg om inntekter, lån og kostnader og formater det som JSON.
+  return `Hjelp meg med å sette opp et budsjett for husstanden min. Ta informasjonen jeg gir deg om inntekter, lån, reiser og kostnader og formater det som JSON.
 
 Svar KUN med et gyldig JSON-objekt, uten noe annet tekst rundt. Objektet skal ha følgende struktur:
 
@@ -74,9 +86,20 @@ Svar KUN med et gyldig JSON-objekt, uten noe annet tekst rundt. Objektet skal ha
     {
       "bankName": "Banknavn (obligatorisk)",
       "loanName": "Navn på lån (obligatorisk)",
+      "loanType": "MORTGAGE",
       "monthlyInterest": 5000,
       "monthlyPrincipal": 3000,
       "monthlyFees": 50
+    }
+  ],
+  "trips": [
+    {
+      "name": "Påsketur til familie",
+      "transportType": "CAR",
+      "annualTrips": 4,
+      "tollPerTrip": 350,
+      "ferryPerTrip": 200,
+      "fuelPerTrip": 600
     }
   ],
   "entries": [
@@ -90,8 +113,9 @@ Svar KUN med et gyldig JSON-objekt, uten noe annet tekst rundt. Objektet skal ha
 }
 
 Regler:
-- Alle tre lister (members, loans, entries) er valgfrie – inkluder bare de som er relevante
-- Alle beløp skal være tall i NOK per måned, uten valutategn
+- Alle listene (members, loans, trips, entries) er valgfrie – inkluder bare de som er relevante
+- Alle beløp skal være tall i NOK
+- For trips skal kostnader være per reise, mens appen regner om til månedskostnad ved å dele årssum på 12
 
 For "members":
 - "name" er obligatorisk
@@ -100,9 +124,18 @@ For "members":
 
 For "loans":
 - "bankName" og "loanName" er obligatoriske
+- "loanType" kan være "MORTGAGE" (default) eller "OTHER"
+- Bruk flere låneposter for å splitte boliglån på flere banker (f.eks. SPK + annen bank)
 - "monthlyInterest" er månedlige rentekostnader
 - "monthlyPrincipal" er månedlig avdrag
 - "monthlyFees" er månedlige gebyrer (valgfritt, standard 0)
+
+For "trips":
+- "name" er obligatorisk
+- "transportType" er obligatorisk: "AIR_OR_PUBLIC" eller "CAR"
+- "annualTrips" er obligatorisk (antall reiser per år)
+- Hvis transportType="AIR_OR_PUBLIC": bruk "ticketPerTrip"
+- Hvis transportType="CAR": bruk "tollPerTrip", "ferryPerTrip" og eventuelt "fuelPerTrip"
 
 For "entries":
 - "name" er obligatorisk
@@ -119,15 +152,16 @@ Eksempel:
     { "name": "Kari", "grossMonthlyIncome": 48000, "taxPercent": 30 }
   ],
   "loans": [
-    { "bankName": "DNB", "loanName": "Boliglån", "monthlyInterest": 8500, "monthlyPrincipal": 4500, "monthlyFees": 50 }
+    { "bankName": "SPK", "loanName": "Boliglån del 1", "loanType": "MORTGAGE", "monthlyInterest": 4200, "monthlyPrincipal": 3500, "monthlyFees": 0 },
+    { "bankName": "DNB", "loanName": "Boliglån del 2", "loanType": "MORTGAGE", "monthlyInterest": 4300, "monthlyPrincipal": 4200, "monthlyFees": 50 }
+  ],
+  "trips": [
+    { "name": "Sommerferie", "transportType": "AIR_OR_PUBLIC", "annualTrips": 1, "ticketPerTrip": 12000 },
+    { "name": "Hytteturer", "transportType": "CAR", "annualTrips": 10, "tollPerTrip": 160, "ferryPerTrip": 120, "fuelPerTrip": 500 }
   ],
   "entries": [
     { "name": "Strøm", "category": "ELECTRICITY", "type": "EXPENSE", "monthlyAmount": 2500 },
-    { "name": "Forsikring", "category": "INSURANCE", "type": "EXPENSE", "monthlyAmount": 1200 },
-    { "name": "Dagligvarer", "category": "FOOD", "type": "EXPENSE", "monthlyAmount": 8000 },
-    { "name": "Transport", "category": "TRANSPORT", "type": "EXPENSE", "monthlyAmount": 3000 },
-    { "name": "Barnehage", "category": "CHILDREN", "type": "EXPENSE", "monthlyAmount": 3230 },
-    { "name": "Sparing", "category": "SAVINGS", "type": "EXPENSE", "monthlyAmount": 5000 }
+    { "name": "Dagligvarer", "category": "FOOD", "type": "EXPENSE", "monthlyAmount": 8000 }
   ]
 }`
 }
@@ -135,6 +169,8 @@ Eksempel:
 // ─── Parsing ───────────────────────────────────────────────────
 
 const VALID_ENTRY_TYPES = new Set(["INCOME", "EXPENSE", "DEDUCTION"])
+const VALID_LOAN_TYPES = new Set(["MORTGAGE", "OTHER"])
+const VALID_TRIP_TYPES = new Set(["AIR_OR_PUBLIC", "CAR"])
 const VALID_CATEGORIES = new Set([
   "ELECTRICITY", "MUNICIPAL_FEES", "INSURANCE", "HOME_MAINTENANCE",
   "TRANSPORT", "SUBSCRIPTIONS", "FOOD", "CHILDREN", "PERSONAL", "SAVINGS", "BUFFER",
@@ -173,10 +209,10 @@ function parseJsonInput(raw: string): { data: ParsedBudgetData; error: string | 
     const parsed = JSON.parse(jsonStr)
 
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return { data: { members: [], loans: [], entries: [] }, error: "Forventet et JSON-objekt med members, loans og/eller entries." }
+      return { data: { members: [], loans: [], trips: [], entries: [] }, error: "Forventet et JSON-objekt med members, loans, trips og/eller entries." }
     }
 
-    const result: ParsedBudgetData = { members: [], loans: [], entries: [] }
+    const result: ParsedBudgetData = { members: [], loans: [], trips: [], entries: [] }
     const errors: string[] = []
 
     // Parse members
@@ -222,12 +258,44 @@ function parseJsonInput(raw: string): { data: ParsedBudgetData; error: string | 
           errors.push(`Lån ${i + 1}: Ugyldig rente eller avdrag.`)
           continue
         }
+        const loanType = String(l.loanType ?? "MORTGAGE").toUpperCase()
         result.loans.push({
           bankName: String(l.bankName).trim(),
           loanName: String(l.loanName).trim(),
+          loanType: VALID_LOAN_TYPES.has(loanType) ? loanType : "MORTGAGE",
           monthlyInterest: interest,
           monthlyPrincipal: principal,
           monthlyFees: isNaN(Number(l.monthlyFees)) ? 0 : Number(l.monthlyFees),
+        })
+      }
+    }
+
+    // Parse trips
+    if (Array.isArray(parsed.trips)) {
+      for (let i = 0; i < parsed.trips.length; i++) {
+        const t = parsed.trips[i]
+        if (!t?.name || typeof t.name !== "string" || !t.name.trim()) {
+          errors.push(`Reise ${i + 1}: Mangler "name".`)
+          continue
+        }
+        const transportType = String(t.transportType ?? "").toUpperCase()
+        if (!VALID_TRIP_TYPES.has(transportType)) {
+          errors.push(`Reise ${i + 1}: Ugyldig "transportType".`)
+          continue
+        }
+        const annualTrips = Math.round(Number(t.annualTrips))
+        if (isNaN(annualTrips) || annualTrips <= 0) {
+          errors.push(`Reise ${i + 1}: Ugyldig "annualTrips".`)
+          continue
+        }
+        result.trips.push({
+          name: t.name.trim(),
+          transportType,
+          annualTrips,
+          ticketPerTrip: Number(t.ticketPerTrip) || 0,
+          tollPerTrip: Number(t.tollPerTrip) || 0,
+          ferryPerTrip: Number(t.ferryPerTrip) || 0,
+          fuelPerTrip: Number(t.fuelPerTrip) || 0,
         })
       }
     }
@@ -260,7 +328,7 @@ function parseJsonInput(raw: string): { data: ParsedBudgetData; error: string | 
       }
     }
 
-    const totalItems = result.members.length + result.loans.length + result.entries.length
+    const totalItems = result.members.length + result.loans.length + result.trips.length + result.entries.length
     if (totalItems === 0 && errors.length > 0) {
       return { data: result, error: errors.join("\n") }
     }
@@ -273,7 +341,7 @@ function parseJsonInput(raw: string): { data: ParsedBudgetData; error: string | 
       error: errors.length > 0 ? `${totalItems} poster tolket. ${errors.length} ble hoppet over.` : null,
     }
   } catch {
-    return { data: { members: [], loans: [], entries: [] }, error: "Ugyldig JSON. Sjekk at du har limt inn et gyldig JSON-format." }
+    return { data: { members: [], loans: [], trips: [], entries: [] }, error: "Ugyldig JSON. Sjekk at du har limt inn et gyldig JSON-format." }
   }
 }
 
@@ -291,7 +359,7 @@ export function BudgetLlmImportDialog() {
   const [step, setStep] = useState<"prompt" | "paste" | "preview">("prompt")
   const [copied, setCopied] = useState(false)
   const [jsonInput, setJsonInput] = useState("")
-  const [parsedData, setParsedData] = useState<ParsedBudgetData>({ members: [], loans: [], entries: [] })
+  const [parsedData, setParsedData] = useState<ParsedBudgetData>({ members: [], loans: [], trips: [], entries: [] })
   const [parseError, setParseError] = useState<string | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
@@ -308,7 +376,7 @@ export function BudgetLlmImportDialog() {
     const { data, error } = parseJsonInput(jsonInput)
     setParsedData(data)
     setParseError(error)
-    const totalItems = data.members.length + data.loans.length + data.entries.length
+    const totalItems = data.members.length + data.loans.length + data.trips.length + data.entries.length
     if (totalItems > 0) {
       setStep("preview")
     }
@@ -321,6 +389,7 @@ export function BudgetLlmImportDialog() {
         await bulkImportBudget({
           members: parsedData.members,
           loans: parsedData.loans,
+          trips: parsedData.trips,
           entries: parsedData.entries,
         })
         handleReset()
@@ -336,7 +405,7 @@ export function BudgetLlmImportDialog() {
     setStep("prompt")
     setCopied(false)
     setJsonInput("")
-    setParsedData({ members: [], loans: [], entries: [] })
+    setParsedData({ members: [], loans: [], trips: [], entries: [] })
     setParseError(null)
     setImportError(null)
   }
@@ -346,7 +415,7 @@ export function BudgetLlmImportDialog() {
     if (!v) handleReset()
   }
 
-  const totalItems = parsedData.members.length + parsedData.loans.length + parsedData.entries.length
+  const totalItems = parsedData.members.length + parsedData.loans.length + parsedData.trips.length + parsedData.entries.length
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -499,10 +568,40 @@ export function BudgetLlmImportDialog() {
                           <div key={i} className="flex items-center justify-between gap-2">
                             <div className="min-w-0">
                               <span className="text-sm font-medium">{l.loanName}</span>
-                              <span className="text-xs text-muted-foreground ml-2">{l.bankName}</span>
+                              <span className="text-xs text-muted-foreground ml-2">{l.bankName} · {l.loanType === "MORTGAGE" ? "Boliglån" : "Annet"}</span>
                             </div>
                             <span className="text-sm tabular-nums text-muted-foreground shrink-0">
                               {formatPrice(total)}/mnd
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Trips */}
+                {parsedData.trips.length > 0 && (
+                  <div className="p-3">
+                    <p className="text-xs font-medium text-muted-foreground mb-2">
+                      Reiser ({parsedData.trips.length})
+                    </p>
+                    <div className="space-y-2">
+                      {parsedData.trips.map((t, i) => {
+                        const perTrip = t.transportType === "AIR_OR_PUBLIC"
+                          ? (t.ticketPerTrip || 0)
+                          : (t.tollPerTrip || 0) + (t.ferryPerTrip || 0) + (t.fuelPerTrip || 0)
+                        const monthly = (t.annualTrips * perTrip) / 12
+                        return (
+                          <div key={i} className="flex items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              <span className="text-sm font-medium">{t.name}</span>
+                              <span className="text-xs text-muted-foreground ml-2">
+                                {t.transportType === "AIR_OR_PUBLIC" ? "Fly/offentlig" : "Bil"} · {t.annualTrips} reiser/år
+                              </span>
+                            </div>
+                            <span className="text-sm tabular-nums text-muted-foreground shrink-0">
+                              {formatPrice(monthly)}/mnd
                             </span>
                           </div>
                         )

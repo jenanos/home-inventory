@@ -11,8 +11,16 @@ import {
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@workspace/ui/components/select"
 import { upsertBudgetLoan } from "@/lib/actions/budget"
 import { toast } from "sonner"
+import type { BudgetLoanType } from "@workspace/db"
 import type { BudgetLoanData } from "./budget-view"
 
 interface LoanDialogProps {
@@ -24,6 +32,7 @@ interface LoanDialogProps {
 export function LoanDialog({ open, onOpenChange, loan }: LoanDialogProps) {
   const [bankName, setBankName] = useState("")
   const [loanName, setLoanName] = useState("")
+  const [loanType, setLoanType] = useState<BudgetLoanType>("MORTGAGE")
   const [monthlyInterest, setMonthlyInterest] = useState("")
   const [monthlyPrincipal, setMonthlyPrincipal] = useState("")
   const [monthlyFees, setMonthlyFees] = useState("")
@@ -34,12 +43,14 @@ export function LoanDialog({ open, onOpenChange, loan }: LoanDialogProps) {
       if (loan) {
         setBankName(loan.bankName)
         setLoanName(loan.loanName)
+        setLoanType(loan.loanType)
         setMonthlyInterest(String(loan.monthlyInterest))
         setMonthlyPrincipal(String(loan.monthlyPrincipal))
         setMonthlyFees(String(loan.monthlyFees))
       } else {
         setBankName("")
         setLoanName("")
+        setLoanType("MORTGAGE")
         setMonthlyInterest("")
         setMonthlyPrincipal("")
         setMonthlyFees("0")
@@ -69,6 +80,7 @@ export function LoanDialog({ open, onOpenChange, loan }: LoanDialogProps) {
           id: loan?.id,
           bankName: bankName.trim(),
           loanName: loanName.trim(),
+          loanType,
           monthlyInterest: interest,
           monthlyPrincipal: principal,
           monthlyFees: fees,
@@ -116,9 +128,27 @@ export function LoanDialog({ open, onOpenChange, loan }: LoanDialogProps) {
                 id="loan-name"
                 value={loanName}
                 onChange={(e) => setLoanName(e.target.value)}
-                placeholder="F.eks. Boliglån"
+                placeholder="F.eks. Boliglån del 2"
               />
             </div>
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="loan-type">Lånetype</Label>
+            <Select
+              value={loanType}
+              onValueChange={(v) => setLoanType(v as BudgetLoanType)}
+            >
+              <SelectTrigger id="loan-type">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="MORTGAGE">Boliglån</SelectItem>
+                <SelectItem value="OTHER">Annet lån</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Tips: legg inn én lånepost per bank dersom boliglånet er delt opp.
+            </p>
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="loan-interest">Renter per måned (kr)</Label>

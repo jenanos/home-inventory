@@ -13,6 +13,7 @@ import {
   TrendingUp,
   TrendingDown,
   PiggyBank,
+  Plane,
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@workspace/ui/components/card"
 import { Button } from "@workspace/ui/components/button"
@@ -24,15 +25,17 @@ import {
   deleteBudgetMember,
   upsertBudgetLoan,
   deleteBudgetLoan,
+  deleteBudgetTrip,
   upsertBudgetEntry,
   deleteBudgetEntry,
   updateTaxDeductionPercent,
 } from "@/lib/actions/budget"
 import { toast } from "sonner"
-import type { BudgetCategory, BudgetEntryType } from "@workspace/db"
+import type { BudgetCategory, BudgetEntryType, BudgetLoanType, TripTransportType } from "@workspace/db"
 import { MemberDialog } from "./member-dialog"
 import { LoanDialog } from "./loan-dialog"
 import { EntryDialog } from "./entry-dialog"
+import { TripDialog } from "./trip-dialog"
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -41,6 +44,7 @@ export interface BudgetData {
   taxDeductionPercent: number
   members: BudgetMemberData[]
   loans: BudgetLoanData[]
+  trips: BudgetTripData[]
   entries: BudgetEntryData[]
 }
 
@@ -55,9 +59,22 @@ export interface BudgetLoanData {
   id: string
   bankName: string
   loanName: string
+  loanType: BudgetLoanType
   monthlyInterest: number
   monthlyPrincipal: number
   monthlyFees: number
+}
+
+
+export interface BudgetTripData {
+  id: string
+  name: string
+  transportType: TripTransportType
+  annualTrips: number
+  ticketPerTrip: number
+  tollPerTrip: number
+  ferryPerTrip: number
+  fuelPerTrip: number
 }
 
 export interface BudgetEntryData {
@@ -131,6 +148,9 @@ export function BudgetView({ budget }: BudgetViewProps) {
   const [loanDialogOpen, setLoanDialogOpen] = useState(false)
   const [editingLoan, setEditingLoan] = useState<BudgetLoanData | null>(null)
 
+  const [tripDialogOpen, setTripDialogOpen] = useState(false)
+  const [editingTrip, setEditingTrip] = useState<BudgetTripData | null>(null)
+
   const [entryDialogOpen, setEntryDialogOpen] = useState(false)
   const [editingEntry, setEditingEntry] = useState<BudgetEntryData | null>(null)
   const [entryDefaults, setEntryDefaults] = useState<{
@@ -165,6 +185,15 @@ export function BudgetView({ budget }: BudgetViewProps) {
       0
     )
     const totalLoanCost = totalLoanInterest + totalLoanPrincipal + totalLoanFees
+
+    const totalTripCost = budget.trips.reduce((sum, trip) => {
+      const perTrip =
+        trip.transportType === "AIR_OR_PUBLIC"
+          ? trip.ticketPerTrip
+          : trip.tollPerTrip + trip.ferryPerTrip + trip.fuelPerTrip
+
+      return sum + (trip.annualTrips * perTrip) / 12
+    }, 0)
 
     // Rentefradrag: annual interest * deduction rate / 12
     const monthlyTaxDeduction =
@@ -215,7 +244,7 @@ export function BudgetView({ budget }: BudgetViewProps) {
 
     const totalIncome = totalNetIncome + manualIncome + categorizedIncome
     const totalExpenses =
-      totalLoanCost + totalHousing + totalFixed + manualExpenses
+      totalLoanCost + totalTripCost + totalHousing + totalFixed + manualExpenses
     const totalDeductions =
       monthlyTaxDeduction + manualDeductions + categorizedDeductions
     const disposable = totalIncome - totalExpenses + totalDeductions
@@ -227,6 +256,7 @@ export function BudgetView({ budget }: BudgetViewProps) {
       totalLoanPrincipal,
       totalLoanFees,
       totalLoanCost,
+      totalTripCost,
       monthlyTaxDeduction,
       housingEntries,
       fixedEntries,
@@ -263,6 +293,17 @@ export function BudgetView({ budget }: BudgetViewProps) {
         toast.success("Lån slettet")
       } catch {
         toast.error("Kunne ikke slette lån")
+      }
+    })
+  }
+
+  function handleDeleteTrip(id: string) {
+    startTransition(async () => {
+      try {
+        await deleteBudgetTrip(id)
+        toast.success("Reise slettet")
+      } catch {
+        toast.error("Kunne ikke slette reise")
       }
     })
   }
@@ -484,6 +525,9 @@ export function BudgetView({ budget }: BudgetViewProps) {
                       <span className="text-muted-foreground ml-2 text-sm font-normal">
                         {loan.bankName}
                       </span>
+                      <Badge variant="secondary" className="ml-2 text-xs">
+                        {loan.loanType === "MORTGAGE" ? "Boliglån" : "Annet"}
+                      </Badge>
                     </p>
                     <p className="text-muted-foreground text-xs sm:text-sm flex flex-wrap gap-x-1">
                       <span>Renter: {formatCurrency(loan.monthlyInterest * multiplier)}</span>
@@ -549,6 +593,73 @@ export function BudgetView({ budget }: BudgetViewProps) {
                 </div>
               </>
             )}
+          </div>
+        )}
+      </BudgetSection>
+
+
+      {/* Trips section */}
+      <BudgetSection
+        title="Reiser"
+        icon={<Plane className="h-4 w-4" />}
+        badge={
+          <Badge variant="outline" className="text-red-700 dark:text-red-400">
+            {formatCurrency(calculations.totalTripCost * multiplier)}
+          </Badge>
+        }
+        onAdd={() => {
+          setEditingTrip(null)
+          setTripDialogOpen(true)
+        }}
+        addLabel="Legg til reise"
+      >
+        {budget.trips.length === 0 ? (
+          <p className="text-muted-foreground py-4 text-center text-sm">
+            Ingen reiser lagt til ennå
+          </p>
+        ) : (
+          <div className="divide-border divide-y">
+            {budget.trips.map((trip) => {
+              const perTrip =
+                trip.transportType === "AIR_OR_PUBLIC"
+                  ? trip.ticketPerTrip
+                  : trip.tollPerTrip + trip.ferryPerTrip + trip.fuelPerTrip
+              const monthly = (trip.annualTrips * perTrip) / 12
+
+              return (
+                <div key={trip.id} className="flex items-center justify-between gap-4 py-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">{trip.name}</p>
+                    <p className="text-muted-foreground text-xs sm:text-sm">
+                      {trip.transportType === "AIR_OR_PUBLIC"
+                        ? `Fly/offentlig · ${trip.annualTrips} reiser/år · Billett ${formatCurrency(perTrip)}/reise`
+                        : `Bil · ${trip.annualTrips} reiser/år · Bom/ferge/drivstoff ${formatCurrency(perTrip)}/reise`}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium tabular-nums">{formatCurrency(monthly * multiplier)}</p>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => {
+                        setEditingTrip(trip)
+                        setTripDialogOpen(true)
+                      }}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => handleDeleteTrip(trip.id)}
+                      disabled={isPending}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         )}
       </BudgetSection>
@@ -662,6 +773,11 @@ export function BudgetView({ budget }: BudgetViewProps) {
         open={loanDialogOpen}
         onOpenChange={setLoanDialogOpen}
         loan={editingLoan}
+      />
+      <TripDialog
+        open={tripDialogOpen}
+        onOpenChange={setTripDialogOpen}
+        trip={editingTrip}
       />
       <EntryDialog
         open={entryDialogOpen}
