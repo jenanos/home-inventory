@@ -1,6 +1,6 @@
-# Home Inventory
+# Home Overview
 
-A personal app for managing household purchases and shopping lists, built with Next.js 16 and PostgreSQL.
+A personal app for managing home projects and finances, built with Next.js 16 and PostgreSQL.
 
 ## Features
 

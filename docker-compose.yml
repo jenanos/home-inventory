@@ -5,13 +5,13 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: home_inventory
+      POSTGRES_DB: home_overview
     ports:
       - "5435:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d home_inventory"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d home_overview"]
       interval: 5s
       timeout: 3s
       retries: 5
