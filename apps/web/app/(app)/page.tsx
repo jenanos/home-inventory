@@ -117,7 +117,8 @@ export default async function DashboardPage() {
     budgetStats.hasBudget
       ? budgetStats.totalNetIncome -
         budgetStats.totalLoanPayments -
-        budgetStats.totalExpenses
+        budgetStats.totalExpenses +
+        budgetStats.totalDeductions
       : 0
 
   return (
@@ -143,7 +144,9 @@ export default async function DashboardPage() {
         </div>
 
         {budgetStats.hasBudget &&
-        (budgetStats.memberCount > 0 || budgetStats.entryCount > 0) ? (
+        (budgetStats.memberCount > 0 ||
+          budgetStats.loanCount > 0 ||
+          budgetStats.entryCount > 0) ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Card className="shadow-sm">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
