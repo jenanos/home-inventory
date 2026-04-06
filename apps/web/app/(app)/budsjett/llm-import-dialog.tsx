@@ -205,7 +205,14 @@ function parseJsonInput(raw: string): { data: ParsedBudgetData; error: string | 
     if (Array.isArray(parsed.loans)) {
       for (let i = 0; i < parsed.loans.length; i++) {
         const l = parsed.loans[i]
-        if (!l?.bankName || !l?.loanName) {
+        if (
+          !l?.bankName ||
+          typeof l.bankName !== "string" ||
+          !l.bankName.trim() ||
+          !l?.loanName ||
+          typeof l.loanName !== "string" ||
+          !l.loanName.trim()
+        ) {
           errors.push(`Lån ${i + 1}: Mangler "bankName" eller "loanName".`)
           continue
         }

@@ -139,6 +139,22 @@ function cleanMarkdownUrl(value: string): string {
   return match?.[1]?.trim() || value.trim()
 }
 
+function isValidCalendarDate(value: string): boolean {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!match) return false
+
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  const date = new Date(Date.UTC(year, month - 1, day))
+
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  )
+}
+
 function parseJsonInput(raw: string): { tasks: ParsedTask[]; error: string | null } {
   const trimmed = raw.trim()
 
@@ -200,10 +216,9 @@ function parseJsonInput(raw: string): { tasks: ParsedTask[]; error: string | nul
         }
       }
       if (entry.dueDate && typeof entry.dueDate === "string") {
-        // Validate date format
-        const dateVal = new Date(entry.dueDate)
-        if (!isNaN(dateVal.getTime())) {
-          task.dueDate = entry.dueDate.trim()
+        const dueDate = entry.dueDate.trim()
+        if (isValidCalendarDate(dueDate)) {
+          task.dueDate = dueDate
         }
       }
 
