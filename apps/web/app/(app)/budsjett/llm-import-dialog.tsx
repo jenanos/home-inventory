@@ -529,7 +529,7 @@ export function BudgetLlmImportDialog() {
               )}
             </div>
 
-            <ScrollArea className="max-h-72 rounded-lg border">
+            <ScrollArea className="flex-1 min-h-0 rounded-lg border">
               <div className="divide-y">
                 {/* Members */}
                 {parsedData.members.length > 0 && (
@@ -643,7 +643,7 @@ export function BudgetLlmImportDialog() {
               </div>
             </ScrollArea>
 
-            <Separator />
+            <Separator className="shrink-0" />
 
             {importError && (
               <div className="flex items-start gap-2 rounded-lg border border-destructive/50 bg-destructive/5 p-3">
@@ -652,7 +652,7 @@ export function BudgetLlmImportDialog() {
               </div>
             )}
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0">
               <Button variant="outline" onClick={() => setStep("paste")}>
                 <ArrowLeft className="h-4 w-4 mr-1" />
                 Tilbake
