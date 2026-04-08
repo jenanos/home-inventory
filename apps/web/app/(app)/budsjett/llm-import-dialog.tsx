@@ -808,7 +808,7 @@ export function BudgetLlmImportDialog() {
             </div>
 
             <ScrollArea className="flex-1 min-h-0 rounded-lg border">
-              <div className="divide-y">
+              <div className="divide-y pb-3">
                 {/* Members */}
                 {(memberDuplicates.length > 0 || newMembers.length > 0) && (
                   <div className="p-3">
@@ -932,10 +932,10 @@ export function BudgetLlmImportDialog() {
                         />
                       ))}
                       {newEntries.map((e, i) => (
-                        <div key={`new-entry-${i}`} className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            <span className="text-sm font-medium">{e.name}</span>
-                            <div className="flex gap-1">
+                        <div key={`new-entry-${i}`} className="flex items-start justify-between gap-2">
+                          <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                            <span className="text-sm font-medium break-words">{e.name}</span>
+                            <div className="flex flex-wrap gap-1">
                               {e.category && (
                                 <Badge variant="outline" className="text-xs">
                                   {CATEGORY_LABELS[e.category] ?? e.category}
@@ -957,41 +957,43 @@ export function BudgetLlmImportDialog() {
               </div>
             </ScrollArea>
 
-            <Separator className="shrink-0" />
+            <div className="shrink-0 space-y-4 bg-background relative z-10">
+              <Separator />
 
-            {importError && (
-              <div className="flex items-start gap-2 rounded-lg border border-destructive/50 bg-destructive/5 p-3">
-                <AlertCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
-                <p className="text-sm text-destructive">{importError}</p>
+              {importError && (
+                <div className="flex items-start gap-2 rounded-lg border border-destructive/50 bg-destructive/5 p-3">
+                  <AlertCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+                  <p className="text-sm text-destructive">{importError}</p>
+                </div>
+              )}
+
+              <div className="flex items-center gap-2">
+                <Button variant="outline" onClick={() => setStep("paste")}>
+                  <ArrowLeft className="h-4 w-4 mr-1" />
+                  Tilbake
+                </Button>
+                <Button
+                  onClick={handleImport}
+                  disabled={isPending || (totalNewItems === 0 && updateCount === 0)}
+                  className="flex-1"
+                >
+                  {isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" data-icon="inline-start" />
+                      Importerer...
+                    </>
+                  ) : (
+                    <>
+                      {totalNewItems > 0 && updateCount > 0
+                        ? `Importer ${totalNewItems} nye + oppdater ${updateCount}`
+                        : totalNewItems > 0
+                          ? `Importer ${totalNewItems} ${totalNewItems === 1 ? "post" : "poster"}`
+                          : `Oppdater ${updateCount} ${updateCount === 1 ? "post" : "poster"}`
+                      }
+                    </>
+                  )}
+                </Button>
               </div>
-            )}
-
-            <div className="flex items-center gap-2 shrink-0">
-              <Button variant="outline" onClick={() => setStep("paste")}>
-                <ArrowLeft className="h-4 w-4 mr-1" />
-                Tilbake
-              </Button>
-              <Button
-                onClick={handleImport}
-                disabled={isPending || (totalNewItems === 0 && updateCount === 0)}
-                className="flex-1"
-              >
-                {isPending ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" data-icon="inline-start" />
-                    Importerer...
-                  </>
-                ) : (
-                  <>
-                    {totalNewItems > 0 && updateCount > 0
-                      ? `Importer ${totalNewItems} nye + oppdater ${updateCount}`
-                      : totalNewItems > 0
-                        ? `Importer ${totalNewItems} ${totalNewItems === 1 ? "post" : "poster"}`
-                        : `Oppdater ${updateCount} ${updateCount === 1 ? "post" : "poster"}`
-                    }
-                  </>
-                )}
-              </Button>
             </div>
           </div>
         )}
