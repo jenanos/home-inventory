@@ -24,7 +24,19 @@ import {
   ArrowLeft,
   AlertCircle,
 } from "lucide-react"
-import { bulkImportMaintenanceTasks } from "@/lib/actions/maintenance-task"
+import {
+  bulkImportMaintenanceTasks,
+  findExistingMaintenanceTasks,
+  bulkImportMaintenanceTasksWithDuplicates,
+  type ExistingMaintenanceTask,
+} from "@/lib/actions/maintenance-task"
+import {
+  DuplicateFieldDiffCard,
+  DuplicateSummary,
+  computeFieldDiffs,
+  type DuplicateItem,
+  type FieldDiff,
+} from "@/components/duplicate-field-diff"
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -285,6 +297,20 @@ const formatPrice = (price: number) =>
     maximumFractionDigits: 0,
   }).format(price)
 
+// ─── Duplicate helpers ─────────────────────────────────────────
+
+type TaskDuplicate = DuplicateItem<ParsedTask>
+
+function buildTaskDiffs(imported: ParsedTask, existing: ExistingMaintenanceTask): FieldDiff[] {
+  return computeFieldDiffs([
+    { key: "description", label: "Beskrivelse", existingValue: existing.description, newValue: imported.description },
+    { key: "priority", label: "Prioritet", existingValue: existing.priority, newValue: imported.priority, format: (v) => priorityLabel[String(v)] ?? String(v) },
+    { key: "estimatedDuration", label: "Varighet", existingValue: existing.estimatedDuration, newValue: imported.estimatedDuration },
+    { key: "estimatedPrice", label: "Pris", existingValue: existing.estimatedPrice, newValue: imported.estimatedPrice, format: (v) => formatPrice(Number(v)) },
+    { key: "dueDate", label: "Frist", existingValue: existing.dueDate, newValue: imported.dueDate, format: (v) => new Date(String(v)).toLocaleDateString("nb-NO") },
+  ])
+}
+
 // ─── Component ─────────────────────────────────────────────────
 
 export function MaintenanceLlmImportDialog() {
@@ -297,6 +323,12 @@ export function MaintenanceLlmImportDialog() {
   const [importError, setImportError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
+  // Duplicate state
+  const [newTasks, setNewTasks] = useState<ParsedTask[]>([])
+  const [duplicates, setDuplicates] = useState<TaskDuplicate[]>([])
+  const [selectedFields, setSelectedFields] = useState<Map<string, Set<string>>>(new Map())
+  const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false)
+
   const prompt = buildPrompt()
 
   function handleCopyPrompt() {
@@ -305,20 +337,113 @@ export function MaintenanceLlmImportDialog() {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  function handleParse() {
+  async function handleParse() {
     const { tasks, error } = parseJsonInput(jsonInput)
     setParsedTasks(tasks)
     setParseError(error)
     if (tasks.length > 0) {
+      // Check for duplicates
+      setIsCheckingDuplicates(true)
+      try {
+        const titles = tasks.map((t) => t.title)
+        const existing = await findExistingMaintenanceTasks(titles)
+
+        const existingByTitle = new Map<string, ExistingMaintenanceTask>()
+        for (const e of existing) {
+          existingByTitle.set(e.title.toLowerCase(), e)
+        }
+
+        const newItems: ParsedTask[] = []
+        const dupes: TaskDuplicate[] = []
+        const fieldSelections = new Map<string, Set<string>>()
+
+        for (const task of tasks) {
+          const match = existingByTitle.get(task.title.toLowerCase())
+          if (match) {
+            const diffs = buildTaskDiffs(task, match)
+            dupes.push({
+              importedItem: task,
+              existingId: match.id,
+              existingLabel: match.title,
+              diffs,
+            })
+            // Pre-select all diff fields
+            fieldSelections.set(match.id, new Set(diffs.map((d) => d.key)))
+          } else {
+            newItems.push(task)
+          }
+        }
+
+        setNewTasks(newItems)
+        setDuplicates(dupes)
+        setSelectedFields(fieldSelections)
+      } catch {
+        // If duplicate check fails, treat all as new
+        setNewTasks(tasks)
+        setDuplicates([])
+        setSelectedFields(new Map())
+      } finally {
+        setIsCheckingDuplicates(false)
+      }
       setStep("preview")
     }
+  }
+
+  function handleToggleField(existingId: string, field: string) {
+    setSelectedFields((prev) => {
+      const next = new Map(prev)
+      const fields = new Set(next.get(existingId) ?? [])
+      if (fields.has(field)) {
+        fields.delete(field)
+      } else {
+        fields.add(field)
+      }
+      next.set(existingId, fields)
+      return next
+    })
   }
 
   function handleImport() {
     setImportError(null)
     startTransition(async () => {
       try {
-        await bulkImportMaintenanceTasks({ tasks: parsedTasks })
+        const hasDuplicateUpdates = duplicates.some(
+          (d) => (selectedFields.get(d.existingId)?.size ?? 0) > 0
+        )
+
+        if (duplicates.length === 0 || !hasDuplicateUpdates) {
+          // No duplicates or no updates selected - use the simple import
+          if (newTasks.length > 0) {
+            await bulkImportMaintenanceTasks({ tasks: newTasks })
+          }
+        } else {
+          // Build updates from selected fields
+          const updates = duplicates
+            .filter((d) => (selectedFields.get(d.existingId)?.size ?? 0) > 0)
+            .map((d) => {
+              const selected = selectedFields.get(d.existingId) ?? new Set()
+              const item = d.importedItem
+              const fields: {
+                description?: string
+                priority?: string
+                estimatedDuration?: string
+                estimatedPrice?: number
+                dueDate?: string
+              } = {}
+              if (selected.has("description")) fields.description = item.description
+              if (selected.has("priority")) fields.priority = item.priority
+              if (selected.has("estimatedDuration")) fields.estimatedDuration = item.estimatedDuration
+              if (selected.has("estimatedPrice")) fields.estimatedPrice = item.estimatedPrice
+              if (selected.has("dueDate")) fields.dueDate = item.dueDate
+              return { id: d.existingId, fields }
+            })
+
+          await bulkImportMaintenanceTasksWithDuplicates({
+            newTasks,
+            updates,
+          })
+        }
+
         handleReset()
         setOpen(false)
       } catch (err) {
@@ -328,6 +453,10 @@ export function MaintenanceLlmImportDialog() {
     })
   }
 
+  const updateCount = duplicates.filter(
+    (d) => (selectedFields.get(d.existingId)?.size ?? 0) > 0
+  ).length
+
   function handleReset() {
     setStep("prompt")
     setCopied(false)
@@ -335,6 +464,9 @@ export function MaintenanceLlmImportDialog() {
     setParsedTasks([])
     setParseError(null)
     setImportError(null)
+    setNewTasks([])
+    setDuplicates([])
+    setSelectedFields(new Map())
   }
 
   function handleOpenChange(v: boolean) {
@@ -431,11 +563,20 @@ export function MaintenanceLlmImportDialog() {
               </Button>
               <Button
                 onClick={handleParse}
-                disabled={!jsonInput.trim()}
+                disabled={!jsonInput.trim() || isCheckingDuplicates}
                 className="flex-1"
               >
-                <ClipboardPaste className="h-4 w-4" data-icon="inline-start" />
-                Tolk JSON
+                {isCheckingDuplicates ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" data-icon="inline-start" />
+                    Sjekker duplikater...
+                  </>
+                ) : (
+                  <>
+                    <ClipboardPaste className="h-4 w-4" data-icon="inline-start" />
+                    Tolk JSON
+                  </>
+                )}
               </Button>
             </div>
           </div>
@@ -444,9 +585,17 @@ export function MaintenanceLlmImportDialog() {
         {step === "preview" && (
           <div className="flex flex-col gap-4 flex-1 min-h-0 overflow-hidden">
             <div className="flex items-center gap-2 shrink-0 flex-wrap">
-              <p className="text-sm text-muted-foreground">
-                {parsedTasks.length} {parsedTasks.length === 1 ? "oppgave" : "oppgaver"} klare for import.
-              </p>
+              {duplicates.length > 0 ? (
+                <DuplicateSummary
+                  newCount={newTasks.length}
+                  duplicateCount={duplicates.length}
+                  updateCount={updateCount}
+                />
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  {parsedTasks.length} {parsedTasks.length === 1 ? "oppgave" : "oppgaver"} klare for import.
+                </p>
+              )}
               {parseError && (
                 <Badge variant="secondary" className="text-xs">
                   {parseError}
@@ -456,8 +605,21 @@ export function MaintenanceLlmImportDialog() {
 
             <ScrollArea className="max-h-72 rounded-lg border">
               <div className="divide-y">
-                {parsedTasks.map((task, i) => (
-                  <div key={i} className="flex flex-col gap-1.5 p-3">
+                {/* Duplicates first */}
+                {duplicates.map((dup) => (
+                  <div key={dup.existingId} className="p-3">
+                    <DuplicateFieldDiffCard
+                      label={dup.existingLabel}
+                      diffs={dup.diffs}
+                      selectedFields={selectedFields.get(dup.existingId) ?? new Set()}
+                      onToggleField={(field) => handleToggleField(dup.existingId, field)}
+                    />
+                  </div>
+                ))}
+
+                {/* New tasks */}
+                {newTasks.map((task, i) => (
+                  <div key={`new-${i}`} className="flex flex-col gap-1.5 p-3">
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-medium text-sm">{task.title}</span>
                       {task.estimatedPrice != null && (
@@ -546,7 +708,7 @@ export function MaintenanceLlmImportDialog() {
               </Button>
               <Button
                 onClick={handleImport}
-                disabled={isPending || parsedTasks.length === 0}
+                disabled={isPending || (newTasks.length === 0 && updateCount === 0)}
                 className="flex-1"
               >
                 {isPending ? (
@@ -556,7 +718,12 @@ export function MaintenanceLlmImportDialog() {
                   </>
                 ) : (
                   <>
-                    Importer {parsedTasks.length} {parsedTasks.length === 1 ? "oppgave" : "oppgaver"}
+                    {newTasks.length > 0 && updateCount > 0
+                      ? `Importer ${newTasks.length} nye + oppdater ${updateCount}`
+                      : newTasks.length > 0
+                        ? `Importer ${newTasks.length} ${newTasks.length === 1 ? "oppgave" : "oppgaver"}`
+                        : `Oppdater ${updateCount} ${updateCount === 1 ? "oppgave" : "oppgaver"}`
+                    }
                   </>
                 )}
               </Button>

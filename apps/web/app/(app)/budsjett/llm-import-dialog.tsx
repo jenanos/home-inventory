@@ -24,7 +24,21 @@ import {
   ArrowLeft,
   AlertCircle,
 } from "lucide-react"
-import { bulkImportBudget } from "@/lib/actions/budget"
+import {
+  bulkImportBudget,
+  findExistingBudgetItems,
+  bulkImportBudgetWithDuplicates,
+  type ExistingBudgetMember,
+  type ExistingBudgetLoan,
+  type ExistingBudgetTrip,
+  type ExistingBudgetEntry,
+} from "@/lib/actions/budget"
+import {
+  DuplicateFieldDiffCard,
+  DuplicateSummary,
+  computeFieldDiffs,
+  type FieldDiff,
+} from "@/components/duplicate-field-diff"
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -352,6 +366,51 @@ const formatPrice = (price: number) =>
     maximumFractionDigits: 0,
   }).format(price)
 
+// ─── Duplicate helpers ─────────────────────────────────────────
+
+interface BudgetDuplicate<TImported, TExisting> {
+  importedItem: TImported
+  existingId: string
+  existingLabel: string
+  diffs: FieldDiff[]
+  existing: TExisting
+}
+
+function buildMemberDiffs(imported: ParsedMember, existing: ExistingBudgetMember): FieldDiff[] {
+  return computeFieldDiffs([
+    { key: "grossMonthlyIncome", label: "Brutto månedsinntekt", existingValue: existing.grossMonthlyIncome, newValue: imported.grossMonthlyIncome, format: (v) => formatPrice(Number(v)) },
+    { key: "taxPercent", label: "Skatteprosent", existingValue: existing.taxPercent, newValue: imported.taxPercent, format: (v) => `${v}%` },
+  ])
+}
+
+function buildLoanDiffs(imported: ParsedLoan, existing: ExistingBudgetLoan): FieldDiff[] {
+  return computeFieldDiffs([
+    { key: "bankName", label: "Banknavn", existingValue: existing.bankName, newValue: imported.bankName },
+    { key: "loanType", label: "Lånetype", existingValue: existing.loanType, newValue: imported.loanType, format: (v) => String(v) === "MORTGAGE" ? "Boliglån" : "Annet" },
+    { key: "monthlyInterest", label: "Månedlig rente", existingValue: existing.monthlyInterest, newValue: imported.monthlyInterest, format: (v) => formatPrice(Number(v)) },
+    { key: "monthlyPrincipal", label: "Månedlig avdrag", existingValue: existing.monthlyPrincipal, newValue: imported.monthlyPrincipal, format: (v) => formatPrice(Number(v)) },
+    { key: "monthlyFees", label: "Månedlige gebyrer", existingValue: existing.monthlyFees, newValue: imported.monthlyFees, format: (v) => formatPrice(Number(v)) },
+  ])
+}
+
+function buildTripDiffs(imported: ParsedTrip, existing: ExistingBudgetTrip): FieldDiff[] {
+  return computeFieldDiffs([
+    { key: "transportType", label: "Transporttype", existingValue: existing.transportType, newValue: imported.transportType, format: (v) => String(v) === "AIR_OR_PUBLIC" ? "Fly/offentlig" : "Bil" },
+    { key: "annualTrips", label: "Reiser per år", existingValue: existing.annualTrips, newValue: imported.annualTrips, format: (v) => String(v) },
+    { key: "ticketPerTrip", label: "Billett per reise", existingValue: existing.ticketPerTrip, newValue: imported.ticketPerTrip, format: (v) => formatPrice(Number(v)) },
+    { key: "tollPerTrip", label: "Bom per reise", existingValue: existing.tollPerTrip, newValue: imported.tollPerTrip, format: (v) => formatPrice(Number(v)) },
+    { key: "ferryPerTrip", label: "Ferge per reise", existingValue: existing.ferryPerTrip, newValue: imported.ferryPerTrip, format: (v) => formatPrice(Number(v)) },
+    { key: "fuelPerTrip", label: "Drivstoff per reise", existingValue: existing.fuelPerTrip, newValue: imported.fuelPerTrip, format: (v) => formatPrice(Number(v)) },
+  ])
+}
+
+function buildEntryDiffs(imported: ParsedEntry, existing: ExistingBudgetEntry): FieldDiff[] {
+  return computeFieldDiffs([
+    { key: "category", label: "Kategori", existingValue: existing.category, newValue: imported.category, format: (v) => CATEGORY_LABELS[String(v)] ?? String(v) },
+    { key: "monthlyAmount", label: "Månedlig beløp", existingValue: existing.monthlyAmount, newValue: imported.monthlyAmount, format: (v) => formatPrice(Number(v)) },
+  ])
+}
+
 // ─── Component ─────────────────────────────────────────────────
 
 export function BudgetLlmImportDialog() {
@@ -364,7 +423,28 @@ export function BudgetLlmImportDialog() {
   const [importError, setImportError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
+  // Duplicate state - per section
+  const [newMembers, setNewMembers] = useState<ParsedMember[]>([])
+  const [newLoans, setNewLoans] = useState<ParsedLoan[]>([])
+  const [newTrips, setNewTrips] = useState<ParsedTrip[]>([])
+  const [newEntries, setNewEntries] = useState<ParsedEntry[]>([])
+
+  const [memberDuplicates, setMemberDuplicates] = useState<BudgetDuplicate<ParsedMember, ExistingBudgetMember>[]>([])
+  const [loanDuplicates, setLoanDuplicates] = useState<BudgetDuplicate<ParsedLoan, ExistingBudgetLoan>[]>([])
+  const [tripDuplicates, setTripDuplicates] = useState<BudgetDuplicate<ParsedTrip, ExistingBudgetTrip>[]>([])
+  const [entryDuplicates, setEntryDuplicates] = useState<BudgetDuplicate<ParsedEntry, ExistingBudgetEntry>[]>([])
+
+  const [selectedFields, setSelectedFields] = useState<Map<string, Set<string>>>(new Map())
+  const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false)
+
   const prompt = buildPrompt()
+
+  const allDuplicates = [...memberDuplicates, ...loanDuplicates, ...tripDuplicates, ...entryDuplicates]
+  const totalNewItems = newMembers.length + newLoans.length + newTrips.length + newEntries.length
+  const updateCount = allDuplicates.filter(
+    (d) => (selectedFields.get(d.existingId)?.size ?? 0) > 0
+  ).length
+  const hasDuplicates = allDuplicates.length > 0
 
   function handleCopyPrompt() {
     navigator.clipboard.writeText(prompt)
@@ -372,26 +452,198 @@ export function BudgetLlmImportDialog() {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  function handleParse() {
+  async function handleParse() {
     const { data, error } = parseJsonInput(jsonInput)
     setParsedData(data)
     setParseError(error)
     const totalItems = data.members.length + data.loans.length + data.trips.length + data.entries.length
     if (totalItems > 0) {
+      setIsCheckingDuplicates(true)
+      try {
+        const existing = await findExistingBudgetItems()
+
+        // Match members by name
+        const existingMembersByName = new Map<string, ExistingBudgetMember>()
+        for (const m of existing.members) existingMembersByName.set(m.name.toLowerCase(), m)
+
+        const freshMembers: ParsedMember[] = []
+        const dupMembers: BudgetDuplicate<ParsedMember, ExistingBudgetMember>[] = []
+        for (const m of data.members) {
+          const match = existingMembersByName.get(m.name.toLowerCase())
+          if (match) {
+            dupMembers.push({ importedItem: m, existingId: match.id, existingLabel: match.name, diffs: buildMemberDiffs(m, match), existing: match })
+          } else {
+            freshMembers.push(m)
+          }
+        }
+
+        // Match loans by loanName
+        const existingLoansByName = new Map<string, ExistingBudgetLoan>()
+        for (const l of existing.loans) existingLoansByName.set(l.loanName.toLowerCase(), l)
+
+        const freshLoans: ParsedLoan[] = []
+        const dupLoans: BudgetDuplicate<ParsedLoan, ExistingBudgetLoan>[] = []
+        for (const l of data.loans) {
+          const match = existingLoansByName.get(l.loanName.toLowerCase())
+          if (match) {
+            dupLoans.push({ importedItem: l, existingId: match.id, existingLabel: match.loanName, diffs: buildLoanDiffs(l, match), existing: match })
+          } else {
+            freshLoans.push(l)
+          }
+        }
+
+        // Match trips by name
+        const existingTripsByName = new Map<string, ExistingBudgetTrip>()
+        for (const t of existing.trips) existingTripsByName.set(t.name.toLowerCase(), t)
+
+        const freshTrips: ParsedTrip[] = []
+        const dupTrips: BudgetDuplicate<ParsedTrip, ExistingBudgetTrip>[] = []
+        for (const t of data.trips) {
+          const match = existingTripsByName.get(t.name.toLowerCase())
+          if (match) {
+            dupTrips.push({ importedItem: t, existingId: match.id, existingLabel: match.name, diffs: buildTripDiffs(t, match), existing: match })
+          } else {
+            freshTrips.push(t)
+          }
+        }
+
+        // Match entries by name + type
+        const existingEntriesByKey = new Map<string, ExistingBudgetEntry>()
+        for (const e of existing.entries) existingEntriesByKey.set(`${e.name.toLowerCase()}::${e.type.toLowerCase()}`, e)
+
+        const freshEntries: ParsedEntry[] = []
+        const dupEntries: BudgetDuplicate<ParsedEntry, ExistingBudgetEntry>[] = []
+        for (const e of data.entries) {
+          const match = existingEntriesByKey.get(`${e.name.toLowerCase()}::${e.type.toLowerCase()}`)
+          if (match) {
+            dupEntries.push({ importedItem: e, existingId: match.id, existingLabel: e.name, diffs: buildEntryDiffs(e, match), existing: match })
+          } else {
+            freshEntries.push(e)
+          }
+        }
+
+        setNewMembers(freshMembers)
+        setNewLoans(freshLoans)
+        setNewTrips(freshTrips)
+        setNewEntries(freshEntries)
+        setMemberDuplicates(dupMembers)
+        setLoanDuplicates(dupLoans)
+        setTripDuplicates(dupTrips)
+        setEntryDuplicates(dupEntries)
+
+        // Pre-select all diff fields
+        const fieldSelections = new Map<string, Set<string>>()
+        for (const d of [...dupMembers, ...dupLoans, ...dupTrips, ...dupEntries]) {
+          fieldSelections.set(d.existingId, new Set(d.diffs.map((f) => f.key)))
+        }
+        setSelectedFields(fieldSelections)
+      } catch {
+        setNewMembers(data.members)
+        setNewLoans(data.loans)
+        setNewTrips(data.trips)
+        setNewEntries(data.entries)
+        setMemberDuplicates([])
+        setLoanDuplicates([])
+        setTripDuplicates([])
+        setEntryDuplicates([])
+        setSelectedFields(new Map())
+      } finally {
+        setIsCheckingDuplicates(false)
+      }
       setStep("preview")
     }
+  }
+
+  function handleToggleField(existingId: string, field: string) {
+    setSelectedFields((prev) => {
+      const next = new Map(prev)
+      const fields = new Set(next.get(existingId) ?? [])
+      if (fields.has(field)) {
+        fields.delete(field)
+      } else {
+        fields.add(field)
+      }
+      next.set(existingId, fields)
+      return next
+    })
   }
 
   function handleImport() {
     setImportError(null)
     startTransition(async () => {
       try {
-        await bulkImportBudget({
-          members: parsedData.members,
-          loans: parsedData.loans,
-          trips: parsedData.trips,
-          entries: parsedData.entries,
-        })
+        if (!hasDuplicates || updateCount === 0) {
+          // No duplicates or no updates - use simple import
+          const hasNew = totalNewItems > 0
+          if (hasNew) {
+            await bulkImportBudget({
+              members: newMembers,
+              loans: newLoans,
+              trips: newTrips,
+              entries: newEntries,
+            })
+          }
+        } else {
+          // Build updates from selected fields
+          const memberUpdates = memberDuplicates
+            .filter((d) => (selectedFields.get(d.existingId)?.size ?? 0) > 0)
+            .map((d) => {
+              const fields: { grossMonthlyIncome?: number; taxPercent?: number } = {}
+              const sel = selectedFields.get(d.existingId) ?? new Set()
+              if (sel.has("grossMonthlyIncome")) fields.grossMonthlyIncome = d.importedItem.grossMonthlyIncome
+              if (sel.has("taxPercent")) fields.taxPercent = d.importedItem.taxPercent
+              return { id: d.existingId, fields }
+            })
+
+          const loanUpdates = loanDuplicates
+            .filter((d) => (selectedFields.get(d.existingId)?.size ?? 0) > 0)
+            .map((d) => {
+              const fields: { bankName?: string; loanType?: string; monthlyInterest?: number; monthlyPrincipal?: number; monthlyFees?: number } = {}
+              const sel = selectedFields.get(d.existingId) ?? new Set()
+              if (sel.has("bankName")) fields.bankName = d.importedItem.bankName
+              if (sel.has("loanType")) fields.loanType = d.importedItem.loanType
+              if (sel.has("monthlyInterest")) fields.monthlyInterest = d.importedItem.monthlyInterest
+              if (sel.has("monthlyPrincipal")) fields.monthlyPrincipal = d.importedItem.monthlyPrincipal
+              if (sel.has("monthlyFees")) fields.monthlyFees = d.importedItem.monthlyFees
+              return { id: d.existingId, fields }
+            })
+
+          const tripUpdates = tripDuplicates
+            .filter((d) => (selectedFields.get(d.existingId)?.size ?? 0) > 0)
+            .map((d) => {
+              const fields: { transportType?: string; annualTrips?: number; ticketPerTrip?: number | null; tollPerTrip?: number | null; ferryPerTrip?: number | null; fuelPerTrip?: number | null } = {}
+              const sel = selectedFields.get(d.existingId) ?? new Set()
+              if (sel.has("transportType")) fields.transportType = d.importedItem.transportType
+              if (sel.has("annualTrips")) fields.annualTrips = d.importedItem.annualTrips
+              if (sel.has("ticketPerTrip")) fields.ticketPerTrip = d.importedItem.ticketPerTrip
+              if (sel.has("tollPerTrip")) fields.tollPerTrip = d.importedItem.tollPerTrip
+              if (sel.has("ferryPerTrip")) fields.ferryPerTrip = d.importedItem.ferryPerTrip
+              if (sel.has("fuelPerTrip")) fields.fuelPerTrip = d.importedItem.fuelPerTrip
+              return { id: d.existingId, fields }
+            })
+
+          const entryUpdates = entryDuplicates
+            .filter((d) => (selectedFields.get(d.existingId)?.size ?? 0) > 0)
+            .map((d) => {
+              const fields: { category?: string | null; monthlyAmount?: number } = {}
+              const sel = selectedFields.get(d.existingId) ?? new Set()
+              if (sel.has("category")) fields.category = d.importedItem.category ?? null
+              if (sel.has("monthlyAmount")) fields.monthlyAmount = d.importedItem.monthlyAmount
+              return { id: d.existingId, fields }
+            })
+
+          await bulkImportBudgetWithDuplicates({
+            newMembers,
+            memberUpdates,
+            newLoans,
+            loanUpdates,
+            newTrips,
+            tripUpdates,
+            newEntries,
+            entryUpdates,
+          })
+        }
+
         handleReset()
         setOpen(false)
       } catch (err) {
@@ -408,6 +660,15 @@ export function BudgetLlmImportDialog() {
     setParsedData({ members: [], loans: [], trips: [], entries: [] })
     setParseError(null)
     setImportError(null)
+    setNewMembers([])
+    setNewLoans([])
+    setNewTrips([])
+    setNewEntries([])
+    setMemberDuplicates([])
+    setLoanDuplicates([])
+    setTripDuplicates([])
+    setEntryDuplicates([])
+    setSelectedFields(new Map())
   }
 
   function handleOpenChange(v: boolean) {
@@ -506,11 +767,20 @@ export function BudgetLlmImportDialog() {
               </Button>
               <Button
                 onClick={handleParse}
-                disabled={!jsonInput.trim()}
+                disabled={!jsonInput.trim() || isCheckingDuplicates}
                 className="flex-1"
               >
-                <ClipboardPaste className="h-4 w-4" data-icon="inline-start" />
-                Tolk JSON
+                {isCheckingDuplicates ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" data-icon="inline-start" />
+                    Sjekker duplikater...
+                  </>
+                ) : (
+                  <>
+                    <ClipboardPaste className="h-4 w-4" data-icon="inline-start" />
+                    Tolk JSON
+                  </>
+                )}
               </Button>
             </div>
           </div>
@@ -519,9 +789,17 @@ export function BudgetLlmImportDialog() {
         {step === "preview" && (
           <div className="flex flex-col gap-4 flex-1 min-h-0 overflow-hidden">
             <div className="flex items-center gap-2 shrink-0 flex-wrap">
-              <p className="text-sm text-muted-foreground">
-                {totalItems} {totalItems === 1 ? "post" : "poster"} klare for import.
-              </p>
+              {hasDuplicates ? (
+                <DuplicateSummary
+                  newCount={totalNewItems}
+                  duplicateCount={allDuplicates.length}
+                  updateCount={updateCount}
+                />
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  {totalItems} {totalItems === 1 ? "post" : "poster"} klare for import.
+                </p>
+              )}
               {parseError && (
                 <Badge variant="secondary" className="text-xs">
                   {parseError}
@@ -532,14 +810,23 @@ export function BudgetLlmImportDialog() {
             <ScrollArea className="flex-1 min-h-0 rounded-lg border">
               <div className="divide-y">
                 {/* Members */}
-                {parsedData.members.length > 0 && (
+                {(memberDuplicates.length > 0 || newMembers.length > 0) && (
                   <div className="p-3">
                     <p className="text-xs font-medium text-muted-foreground mb-2">
-                      Medlemmer ({parsedData.members.length})
+                      Medlemmer ({memberDuplicates.length + newMembers.length})
                     </p>
                     <div className="space-y-2">
-                      {parsedData.members.map((m, i) => (
-                        <div key={i} className="flex items-center justify-between gap-2">
+                      {memberDuplicates.map((dup) => (
+                        <DuplicateFieldDiffCard
+                          key={dup.existingId}
+                          label={dup.existingLabel}
+                          diffs={dup.diffs}
+                          selectedFields={selectedFields.get(dup.existingId) ?? new Set()}
+                          onToggleField={(field) => handleToggleField(dup.existingId, field)}
+                        />
+                      ))}
+                      {newMembers.map((m, i) => (
+                        <div key={`new-member-${i}`} className="flex items-center justify-between gap-2">
                           <span className="text-sm font-medium">{m.name}</span>
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground">
@@ -556,16 +843,25 @@ export function BudgetLlmImportDialog() {
                 )}
 
                 {/* Loans */}
-                {parsedData.loans.length > 0 && (
+                {(loanDuplicates.length > 0 || newLoans.length > 0) && (
                   <div className="p-3">
                     <p className="text-xs font-medium text-muted-foreground mb-2">
-                      Lån ({parsedData.loans.length})
+                      Lån ({loanDuplicates.length + newLoans.length})
                     </p>
                     <div className="space-y-2">
-                      {parsedData.loans.map((l, i) => {
+                      {loanDuplicates.map((dup) => (
+                        <DuplicateFieldDiffCard
+                          key={dup.existingId}
+                          label={dup.existingLabel}
+                          diffs={dup.diffs}
+                          selectedFields={selectedFields.get(dup.existingId) ?? new Set()}
+                          onToggleField={(field) => handleToggleField(dup.existingId, field)}
+                        />
+                      ))}
+                      {newLoans.map((l, i) => {
                         const total = l.monthlyInterest + l.monthlyPrincipal + l.monthlyFees
                         return (
-                          <div key={i} className="flex items-center justify-between gap-2">
+                          <div key={`new-loan-${i}`} className="flex items-center justify-between gap-2">
                             <div className="min-w-0">
                               <span className="text-sm font-medium">{l.loanName}</span>
                               <span className="text-xs text-muted-foreground ml-2">{l.bankName} · {l.loanType === "MORTGAGE" ? "Boliglån" : "Annet"}</span>
@@ -581,19 +877,28 @@ export function BudgetLlmImportDialog() {
                 )}
 
                 {/* Trips */}
-                {parsedData.trips.length > 0 && (
+                {(tripDuplicates.length > 0 || newTrips.length > 0) && (
                   <div className="p-3">
                     <p className="text-xs font-medium text-muted-foreground mb-2">
-                      Reiser ({parsedData.trips.length})
+                      Reiser ({tripDuplicates.length + newTrips.length})
                     </p>
                     <div className="space-y-2">
-                      {parsedData.trips.map((t, i) => {
+                      {tripDuplicates.map((dup) => (
+                        <DuplicateFieldDiffCard
+                          key={dup.existingId}
+                          label={dup.existingLabel}
+                          diffs={dup.diffs}
+                          selectedFields={selectedFields.get(dup.existingId) ?? new Set()}
+                          onToggleField={(field) => handleToggleField(dup.existingId, field)}
+                        />
+                      ))}
+                      {newTrips.map((t, i) => {
                         const perTrip = t.transportType === "AIR_OR_PUBLIC"
                           ? (t.ticketPerTrip || 0)
                           : (t.tollPerTrip || 0) + (t.ferryPerTrip || 0) + (t.fuelPerTrip || 0)
                         const monthly = (t.annualTrips * perTrip) / 12
                         return (
-                          <div key={i} className="flex items-center justify-between gap-2">
+                          <div key={`new-trip-${i}`} className="flex items-center justify-between gap-2">
                             <div className="min-w-0">
                               <span className="text-sm font-medium">{t.name}</span>
                               <span className="text-xs text-muted-foreground ml-2">
@@ -611,14 +916,23 @@ export function BudgetLlmImportDialog() {
                 )}
 
                 {/* Entries */}
-                {parsedData.entries.length > 0 && (
+                {(entryDuplicates.length > 0 || newEntries.length > 0) && (
                   <div className="p-3">
                     <p className="text-xs font-medium text-muted-foreground mb-2">
-                      Budsjettposter ({parsedData.entries.length})
+                      Budsjettposter ({entryDuplicates.length + newEntries.length})
                     </p>
                     <div className="space-y-2">
-                      {parsedData.entries.map((e, i) => (
-                        <div key={i} className="flex items-center justify-between gap-2">
+                      {entryDuplicates.map((dup) => (
+                        <DuplicateFieldDiffCard
+                          key={dup.existingId}
+                          label={dup.existingLabel}
+                          diffs={dup.diffs}
+                          selectedFields={selectedFields.get(dup.existingId) ?? new Set()}
+                          onToggleField={(field) => handleToggleField(dup.existingId, field)}
+                        />
+                      ))}
+                      {newEntries.map((e, i) => (
+                        <div key={`new-entry-${i}`} className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-1.5 min-w-0">
                             <span className="text-sm font-medium">{e.name}</span>
                             <div className="flex gap-1">
@@ -659,7 +973,7 @@ export function BudgetLlmImportDialog() {
               </Button>
               <Button
                 onClick={handleImport}
-                disabled={isPending || totalItems === 0}
+                disabled={isPending || (totalNewItems === 0 && updateCount === 0)}
                 className="flex-1"
               >
                 {isPending ? (
@@ -669,7 +983,12 @@ export function BudgetLlmImportDialog() {
                   </>
                 ) : (
                   <>
-                    Importer {totalItems} {totalItems === 1 ? "post" : "poster"}
+                    {totalNewItems > 0 && updateCount > 0
+                      ? `Importer ${totalNewItems} nye + oppdater ${updateCount}`
+                      : totalNewItems > 0
+                        ? `Importer ${totalNewItems} ${totalNewItems === 1 ? "post" : "poster"}`
+                        : `Oppdater ${updateCount} ${updateCount === 1 ? "post" : "poster"}`
+                    }
                   </>
                 )}
               </Button>

@@ -185,6 +185,176 @@ export async function bulkCreateShoppingItems(input: BulkCreateInput) {
   return { count: results.length }
 }
 
+// ─── Duplicate Detection ────────────────────────────────────────
+
+export interface ExistingShoppingItem {
+  id: string
+  name: string
+  description: string | null
+  categoryId: string | null
+  priority: string
+  phase: string | null
+  estimatedPrice: number | null
+  url: string | null
+  imageUrl: string | null
+  storeName: string | null
+  alternativeCount: number
+}
+
+export async function findExistingShoppingItems(
+  listId: string,
+  names: string[]
+): Promise<ExistingShoppingItem[]> {
+  const { membership } = await requireHousehold()
+
+  const list = await db.shoppingList.findUnique({
+    where: { id: listId },
+  })
+  if (!list || list.householdId !== membership.householdId) {
+    throw new Error("List not found")
+  }
+
+  const lowerNames = names.map((n) => n.toLowerCase())
+
+  const existing = await db.shoppingItem.findMany({
+    where: { listId },
+    include: {
+      _count: { select: { alternatives: true } },
+    },
+  })
+
+  return existing
+    .filter((item) => lowerNames.includes(item.name.toLowerCase()))
+    .map((item) => ({
+      id: item.id,
+      name: item.name,
+      description: item.description,
+      categoryId: item.categoryId,
+      priority: item.priority,
+      phase: item.phase,
+      estimatedPrice: item.estimatedPrice ? Number(item.estimatedPrice) : null,
+      url: item.url,
+      imageUrl: item.imageUrl,
+      storeName: item.storeName,
+      alternativeCount: item._count.alternatives,
+    }))
+}
+
+// ─── Bulk Import With Duplicate Handling ────────────────────────
+
+interface ShoppingItemFieldUpdate {
+  id: string
+  fields: {
+    description?: string
+    categoryId?: string | null
+    priority?: Priority
+    phase?: Phase | null
+    estimatedPrice?: number
+    url?: string
+    imageUrl?: string
+    storeName?: string
+  }
+}
+
+interface BulkImportShoppingItemsWithDuplicatesInput {
+  newItems: BulkCreateItemInput[]
+  updates: ShoppingItemFieldUpdate[]
+  listId: string
+  categoryMap: Record<string, string>
+}
+
+export async function bulkImportShoppingItemsWithDuplicates(
+  input: BulkImportShoppingItemsWithDuplicatesInput
+) {
+  const { membership } = await requireHousehold()
+
+  const list = await db.shoppingList.findUnique({
+    where: { id: input.listId },
+  })
+  if (!list || list.householdId !== membership.householdId) {
+    throw new Error("List not found")
+  }
+
+  const validPriorities = new Set(["HIGH", "MEDIUM", "LOW"])
+  const validPhases = new Set(["BEFORE_MOVE", "FIRST_WEEK", "CAN_WAIT", "NO_RUSH"])
+  let count = 0
+
+  // Create new items
+  if (input.newItems.length > 0) {
+    const results = await db.$transaction(
+      input.newItems.map((item) =>
+        db.shoppingItem.create({
+          data: {
+            name: item.name,
+            description: item.description || undefined,
+            categoryId: item.categoryName ? input.categoryMap[item.categoryName] ?? undefined : undefined,
+            priority: (item.priority && validPriorities.has(item.priority) ? item.priority : "MEDIUM") as Priority,
+            phase: (item.phase && validPhases.has(item.phase) ? item.phase : undefined) as Phase | undefined,
+            estimatedPrice: item.estimatedPrice ?? undefined,
+            url: item.url || undefined,
+            imageUrl: item.imageUrl || undefined,
+            storeName: item.storeName || undefined,
+            listId: input.listId,
+            alternatives: item.alternatives && item.alternatives.length > 0
+              ? {
+                  create: item.alternatives.map((alt, index) => ({
+                    name: alt.name,
+                    price: alt.price ?? undefined,
+                    url: alt.url || undefined,
+                    imageUrl: alt.imageUrl || undefined,
+                    storeName: alt.storeName || undefined,
+                    notes: alt.notes || undefined,
+                    rank: index,
+                  })),
+                }
+              : undefined,
+          },
+        })
+      )
+    )
+    count += results.length
+  }
+
+  // Update existing items with selected fields
+  if (input.updates.length > 0) {
+    const updateOps = input.updates.map((update) => {
+      const data: {
+        description?: string
+        categoryId?: string | null
+        priority?: Priority
+        phase?: Phase | null
+        estimatedPrice?: number
+        url?: string
+        imageUrl?: string
+        storeName?: string
+      } = {}
+      if (update.fields.description !== undefined) data.description = update.fields.description ?? undefined
+      if (update.fields.categoryId !== undefined) data.categoryId = update.fields.categoryId
+      if (update.fields.priority !== undefined) {
+        if (validPriorities.has(update.fields.priority)) data.priority = update.fields.priority
+      }
+      if (update.fields.phase !== undefined) {
+        if (update.fields.phase === null || validPhases.has(update.fields.phase)) data.phase = update.fields.phase
+      }
+      if (update.fields.estimatedPrice !== undefined) data.estimatedPrice = update.fields.estimatedPrice
+      if (update.fields.url !== undefined) data.url = update.fields.url || undefined
+      if (update.fields.imageUrl !== undefined) data.imageUrl = update.fields.imageUrl || undefined
+      if (update.fields.storeName !== undefined) data.storeName = update.fields.storeName || undefined
+
+      return db.shoppingItem.update({
+        where: { id: update.id },
+        data,
+      })
+    })
+
+    await db.$transaction(updateOps)
+    count += input.updates.length
+  }
+
+  revalidatePath(`/lists/${input.listId}`)
+  return { count }
+}
+
 export async function toggleItemPurchased(itemId: string) {
   const { membership } = await requireHousehold()
 
