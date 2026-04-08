@@ -441,9 +441,18 @@ export function LlmImportDialog({ listId, listName, categories }: LlmImportDialo
           const updates = duplicates
             .filter((d) => (selectedFields.get(d.existingId)?.size ?? 0) > 0)
             .map((d) => {
-              const fields: Record<string, unknown> = {}
               const selected = selectedFields.get(d.existingId) ?? new Set()
               const item = d.importedItem
+              const fields: {
+                description?: string
+                categoryId?: string | null
+                priority?: Priority
+                phase?: Phase | null
+                estimatedPrice?: number
+                url?: string
+                imageUrl?: string
+                storeName?: string
+              } = {}
 
               if (selected.has("description")) fields.description = item.description
               if (selected.has("categoryName")) {

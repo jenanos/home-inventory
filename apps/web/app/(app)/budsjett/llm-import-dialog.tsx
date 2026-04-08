@@ -588,7 +588,7 @@ export function BudgetLlmImportDialog() {
           const memberUpdates = memberDuplicates
             .filter((d) => (selectedFields.get(d.existingId)?.size ?? 0) > 0)
             .map((d) => {
-              const fields: Record<string, unknown> = {}
+              const fields: { grossMonthlyIncome?: number; taxPercent?: number } = {}
               const sel = selectedFields.get(d.existingId) ?? new Set()
               if (sel.has("grossMonthlyIncome")) fields.grossMonthlyIncome = d.importedItem.grossMonthlyIncome
               if (sel.has("taxPercent")) fields.taxPercent = d.importedItem.taxPercent
@@ -598,7 +598,7 @@ export function BudgetLlmImportDialog() {
           const loanUpdates = loanDuplicates
             .filter((d) => (selectedFields.get(d.existingId)?.size ?? 0) > 0)
             .map((d) => {
-              const fields: Record<string, unknown> = {}
+              const fields: { bankName?: string; loanType?: string; monthlyInterest?: number; monthlyPrincipal?: number; monthlyFees?: number } = {}
               const sel = selectedFields.get(d.existingId) ?? new Set()
               if (sel.has("bankName")) fields.bankName = d.importedItem.bankName
               if (sel.has("loanType")) fields.loanType = d.importedItem.loanType
@@ -611,7 +611,7 @@ export function BudgetLlmImportDialog() {
           const tripUpdates = tripDuplicates
             .filter((d) => (selectedFields.get(d.existingId)?.size ?? 0) > 0)
             .map((d) => {
-              const fields: Record<string, unknown> = {}
+              const fields: { transportType?: string; annualTrips?: number; ticketPerTrip?: number | null; tollPerTrip?: number | null; ferryPerTrip?: number | null; fuelPerTrip?: number | null } = {}
               const sel = selectedFields.get(d.existingId) ?? new Set()
               if (sel.has("transportType")) fields.transportType = d.importedItem.transportType
               if (sel.has("annualTrips")) fields.annualTrips = d.importedItem.annualTrips
@@ -625,7 +625,7 @@ export function BudgetLlmImportDialog() {
           const entryUpdates = entryDuplicates
             .filter((d) => (selectedFields.get(d.existingId)?.size ?? 0) > 0)
             .map((d) => {
-              const fields: Record<string, unknown> = {}
+              const fields: { category?: string | null; monthlyAmount?: number } = {}
               const sel = selectedFields.get(d.existingId) ?? new Set()
               if (sel.has("category")) fields.category = d.importedItem.category ?? null
               if (sel.has("monthlyAmount")) fields.monthlyAmount = d.importedItem.monthlyAmount
