@@ -467,7 +467,7 @@ export function LlmImportDialog({ listId, listName, categories }: LlmImportDialo
           })
         }
 
-        const totalImported = newItems.length + (hasDuplicateUpdates ? duplicates.filter((d) => (selectedFields.get(d.existingId)?.size ?? 0) > 0).length : 0)
+        const totalImported = newItems.length + (hasDuplicateUpdates ? updateCount : 0)
         handleReset()
         toast.success(`${totalImported} ${totalImported === 1 ? "produkt" : "produkter"} importert/oppdatert`)
         setOpen(false)

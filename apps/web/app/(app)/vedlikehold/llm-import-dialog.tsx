@@ -421,12 +421,21 @@ export function MaintenanceLlmImportDialog() {
           const updates = duplicates
             .filter((d) => (selectedFields.get(d.existingId)?.size ?? 0) > 0)
             .map((d) => {
-              const fields: Record<string, unknown> = {}
               const selected = selectedFields.get(d.existingId) ?? new Set()
-              for (const key of selected) {
-                fields[key] = d.importedItem[key as keyof ParsedTask]
-              }
-              return { id: d.existingId, fields: fields as Record<string, string | number | undefined> }
+              const item = d.importedItem
+              const fields: {
+                description?: string
+                priority?: string
+                estimatedDuration?: string
+                estimatedPrice?: number
+                dueDate?: string
+              } = {}
+              if (selected.has("description")) fields.description = item.description
+              if (selected.has("priority")) fields.priority = item.priority
+              if (selected.has("estimatedDuration")) fields.estimatedDuration = item.estimatedDuration
+              if (selected.has("estimatedPrice")) fields.estimatedPrice = item.estimatedPrice
+              if (selected.has("dueDate")) fields.dueDate = item.dueDate
+              return { id: d.existingId, fields }
             })
 
           await bulkImportMaintenanceTasksWithDuplicates({

@@ -413,7 +413,7 @@ export async function findExistingMaintenanceTasks(titles: string[]): Promise<Ex
       priority: task.priority,
       estimatedDuration: task.estimatedDuration,
       estimatedPrice: task.estimatedPrice ? Number(task.estimatedPrice) : null,
-      dueDate: task.dueDate ? task.dueDate.toISOString().split("T")[0]! : null,
+      dueDate: task.dueDate ? task.dueDate.toISOString().split("T")[0] ?? null : null,
       vendorCount: task._count.vendors,
       progressEntryCount: task._count.progressEntries,
     }))
