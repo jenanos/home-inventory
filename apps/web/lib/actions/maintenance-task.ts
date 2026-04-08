@@ -375,3 +375,153 @@ export async function bulkImportMaintenanceTasks(input: BulkMaintenanceImportInp
   revalidatePath("/vedlikehold")
   return { count: results.length }
 }
+
+// ─── Duplicate Detection ────────────────────────────────────────
+
+export interface ExistingMaintenanceTask {
+  id: string
+  title: string
+  description: string | null
+  priority: string
+  estimatedDuration: string | null
+  estimatedPrice: number | null
+  dueDate: string | null
+  vendorCount: number
+  progressEntryCount: number
+}
+
+export async function findExistingMaintenanceTasks(titles: string[]): Promise<ExistingMaintenanceTask[]> {
+  const { membership } = await requireHousehold()
+
+  const lowerTitles = titles.map((t) => t.toLowerCase())
+
+  const existing = await db.maintenanceTask.findMany({
+    where: {
+      householdId: membership.householdId,
+    },
+    include: {
+      _count: { select: { vendors: true, progressEntries: true } },
+    },
+  })
+
+  return existing
+    .filter((task) => lowerTitles.includes(task.title.toLowerCase()))
+    .map((task) => ({
+      id: task.id,
+      title: task.title,
+      description: task.description,
+      priority: task.priority,
+      estimatedDuration: task.estimatedDuration,
+      estimatedPrice: task.estimatedPrice ? Number(task.estimatedPrice) : null,
+      dueDate: task.dueDate ? task.dueDate.toISOString().split("T")[0]! : null,
+      vendorCount: task._count.vendors,
+      progressEntryCount: task._count.progressEntries,
+    }))
+}
+
+// ─── Bulk Import With Duplicate Handling ────────────────────────
+
+interface MaintenanceTaskFieldUpdate {
+  id: string
+  fields: {
+    description?: string
+    priority?: string
+    estimatedDuration?: string
+    estimatedPrice?: number
+    dueDate?: string
+  }
+}
+
+interface BulkMaintenanceImportWithDuplicatesInput {
+  newTasks: BulkMaintenanceTaskInput[]
+  updates: MaintenanceTaskFieldUpdate[]
+}
+
+export async function bulkImportMaintenanceTasksWithDuplicates(
+  input: BulkMaintenanceImportWithDuplicatesInput
+) {
+  const { membership } = await requireHousehold()
+
+  const validPriorities = new Set(["HIGH", "MEDIUM", "LOW"])
+  let count = 0
+
+  // Create new tasks
+  if (input.newTasks.length > 0) {
+    const results = await db.$transaction(
+      input.newTasks.map((task) =>
+        db.maintenanceTask.create({
+          data: {
+            title: task.title,
+            description: task.description || undefined,
+            priority: (task.priority && validPriorities.has(task.priority.toUpperCase())
+              ? task.priority.toUpperCase()
+              : "MEDIUM") as Priority,
+            estimatedDuration: task.estimatedDuration || undefined,
+            estimatedPrice: task.estimatedPrice ?? undefined,
+            dueDate: task.dueDate ? new Date(task.dueDate) : undefined,
+            householdId: membership.householdId,
+            vendors:
+              task.vendors && task.vendors.length > 0
+                ? {
+                    create: task.vendors.map((v) => ({
+                      name: v.name,
+                      description: v.description || undefined,
+                      phone: v.phone || undefined,
+                      email: v.email || undefined,
+                      website: sanitizeUrl(v.website),
+                      estimatedPrice: v.estimatedPrice ?? undefined,
+                      notes: v.notes || undefined,
+                    })),
+                  }
+                : undefined,
+            progressEntries:
+              task.progressEntries && task.progressEntries.length > 0
+                ? {
+                    create: task.progressEntries.map((pe, i) => ({
+                      title: pe.title,
+                      description: pe.description || undefined,
+                      sortOrder: i,
+                    })),
+                  }
+                : undefined,
+          },
+        })
+      )
+    )
+    count += results.length
+  }
+
+  // Update existing tasks with selected fields
+  if (input.updates.length > 0) {
+    const updateOps = input.updates.map((update) => {
+      const data: Record<string, unknown> = {}
+      if (update.fields.description !== undefined) {
+        data.description = update.fields.description || undefined
+      }
+      if (update.fields.priority !== undefined) {
+        const p = update.fields.priority.toUpperCase()
+        if (validPriorities.has(p)) data.priority = p
+      }
+      if (update.fields.estimatedDuration !== undefined) {
+        data.estimatedDuration = update.fields.estimatedDuration || undefined
+      }
+      if (update.fields.estimatedPrice !== undefined) {
+        data.estimatedPrice = update.fields.estimatedPrice
+      }
+      if (update.fields.dueDate !== undefined) {
+        data.dueDate = update.fields.dueDate ? new Date(update.fields.dueDate) : null
+      }
+
+      return db.maintenanceTask.update({
+        where: { id: update.id, householdId: membership.householdId },
+        data,
+      })
+    })
+
+    await db.$transaction(updateOps)
+    count += input.updates.length
+  }
+
+  revalidatePath("/vedlikehold")
+  return { count }
+}
