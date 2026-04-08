@@ -594,7 +594,7 @@ export function LlmImportDialog({ listId, listName, categories }: LlmImportDialo
               </div>
             )}
 
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-2 shrink-0 flex-wrap">
               <Button variant="outline" onClick={() => setStep("prompt")}>
                 <ArrowLeft className="h-4 w-4 mr-1" />
                 Tilbake
@@ -622,7 +622,7 @@ export function LlmImportDialog({ listId, listName, categories }: LlmImportDialo
 
         {step === "preview" && (
           <div className="flex flex-col gap-4 flex-1 min-h-0 overflow-hidden">
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-2 shrink-0 flex-wrap">
               {duplicates.length > 0 ? (
                 <DuplicateSummary
                   newCount={newItems.length}
@@ -641,8 +641,8 @@ export function LlmImportDialog({ listId, listName, categories }: LlmImportDialo
               )}
             </div>
 
-            <ScrollArea className="max-h-72 rounded-lg border">
-              <div className="divide-y">
+            <ScrollArea className="flex-1 min-h-0 rounded-lg border">
+              <div className="divide-y pb-3">
                 {/* Duplicates first */}
                 {duplicates.map((dup) => (
                   <div key={dup.existingId} className="p-3">
@@ -657,7 +657,7 @@ export function LlmImportDialog({ listId, listName, categories }: LlmImportDialo
 
                 {/* New items */}
                 {newItems.map((item, i) => (
-                  <div key={`new-${i}`} className="flex gap-3 p-3">
+                  <div key={`new-${i}`} className="flex items-start gap-3 p-3">
                     {item.imageUrl && (
                       <img
                         src={item.imageUrl}
@@ -667,8 +667,8 @@ export function LlmImportDialog({ listId, listName, categories }: LlmImportDialo
                       />
                     )}
                     <div className="flex flex-col gap-1 min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-medium text-sm">{item.name}</span>
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="min-w-0 flex-1 font-medium text-sm break-words">{item.name}</span>
                         <div className="flex items-center gap-1.5 shrink-0">
                           {item.estimatedPrice != null && (
                             <span className="text-sm tabular-nums text-muted-foreground">
@@ -754,41 +754,43 @@ export function LlmImportDialog({ listId, listName, categories }: LlmImportDialo
               </div>
             </ScrollArea>
 
-            <Separator />
+            <div className="shrink-0 space-y-4 bg-background relative z-10">
+              <Separator />
 
-            {importError && (
-              <div className="flex items-start gap-2 rounded-lg border border-destructive/50 bg-destructive/5 p-3">
-                <AlertCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
-                <p className="text-sm text-destructive">{importError}</p>
+              {importError && (
+                <div className="flex items-start gap-2 rounded-lg border border-destructive/50 bg-destructive/5 p-3">
+                  <AlertCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+                  <p className="text-sm text-destructive">{importError}</p>
+                </div>
+              )}
+
+              <div className="flex items-center gap-2">
+                <Button variant="outline" onClick={() => setStep("paste")}>
+                  <ArrowLeft className="h-4 w-4 mr-1" />
+                  Tilbake
+                </Button>
+                <Button
+                  onClick={handleImport}
+                  disabled={isPending || (newItems.length === 0 && updateCount === 0)}
+                  className="flex-1"
+                >
+                  {isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" data-icon="inline-start" />
+                      Importerer...
+                    </>
+                  ) : (
+                    <>
+                      {newItems.length > 0 && updateCount > 0
+                        ? `Importer ${newItems.length} nye + oppdater ${updateCount}`
+                        : newItems.length > 0
+                          ? `Importer ${newItems.length} ${newItems.length === 1 ? "produkt" : "produkter"}`
+                          : `Oppdater ${updateCount} ${updateCount === 1 ? "produkt" : "produkter"}`
+                      }
+                    </>
+                  )}
+                </Button>
               </div>
-            )}
-
-            <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={() => setStep("paste")}>
-                <ArrowLeft className="h-4 w-4 mr-1" />
-                Tilbake
-              </Button>
-              <Button
-                onClick={handleImport}
-                disabled={isPending || (newItems.length === 0 && updateCount === 0)}
-                className="flex-1"
-              >
-                {isPending ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" data-icon="inline-start" />
-                    Importerer...
-                  </>
-                ) : (
-                  <>
-                    {newItems.length > 0 && updateCount > 0
-                      ? `Importer ${newItems.length} nye + oppdater ${updateCount}`
-                      : newItems.length > 0
-                        ? `Importer ${newItems.length} ${newItems.length === 1 ? "produkt" : "produkter"}`
-                        : `Oppdater ${updateCount} ${updateCount === 1 ? "produkt" : "produkter"}`
-                    }
-                  </>
-                )}
-              </Button>
             </div>
           </div>
         )}

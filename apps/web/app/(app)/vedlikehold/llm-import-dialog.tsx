@@ -603,8 +603,8 @@ export function MaintenanceLlmImportDialog() {
               )}
             </div>
 
-            <ScrollArea className="max-h-72 rounded-lg border">
-              <div className="divide-y">
+            <ScrollArea className="flex-1 min-h-0 rounded-lg border">
+              <div className="divide-y pb-3">
                 {/* Duplicates first */}
                 {duplicates.map((dup) => (
                   <div key={dup.existingId} className="p-3">
@@ -620,10 +620,10 @@ export function MaintenanceLlmImportDialog() {
                 {/* New tasks */}
                 {newTasks.map((task, i) => (
                   <div key={`new-${i}`} className="flex flex-col gap-1.5 p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-medium text-sm">{task.title}</span>
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="min-w-0 flex-1 font-medium text-sm break-words">{task.title}</span>
                       {task.estimatedPrice != null && (
-                        <span className="text-sm tabular-nums text-muted-foreground">
+                        <span className="text-sm tabular-nums text-muted-foreground shrink-0">
                           {formatPrice(task.estimatedPrice)}
                         </span>
                       )}
@@ -661,12 +661,12 @@ export function MaintenanceLlmImportDialog() {
                     {task.vendors.length > 0 && (
                       <div className="mt-1 space-y-1 pl-2 border-l-2 border-muted">
                         {task.vendors.map((v, j) => (
-                          <div key={j} className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-1.5 min-w-0">
+                          <div key={j} className="flex items-start justify-between gap-2">
+                            <div className="flex items-start gap-1.5 min-w-0">
                               <span className="text-xs text-muted-foreground font-medium shrink-0">
                                 {j + 1}.
                               </span>
-                              <span className="text-xs truncate">{v.name}</span>
+                              <span className="text-xs break-words">{v.name}</span>
                             </div>
                             {v.estimatedPrice != null && (
                               <span className="text-xs tabular-nums text-muted-foreground shrink-0">
@@ -680,9 +680,9 @@ export function MaintenanceLlmImportDialog() {
                     {task.progressEntries.length > 0 && (
                       <div className="mt-1 space-y-0.5 pl-2 border-l-2 border-muted">
                         {task.progressEntries.map((pe, j) => (
-                          <div key={j} className="flex items-center gap-1.5">
-                            <span className="text-xs text-muted-foreground">☐</span>
-                            <span className="text-xs">{pe.title}</span>
+                          <div key={j} className="flex items-start gap-1.5">
+                            <span className="text-xs text-muted-foreground shrink-0">☐</span>
+                            <span className="text-xs break-words">{pe.title}</span>
                           </div>
                         ))}
                       </div>
@@ -692,41 +692,43 @@ export function MaintenanceLlmImportDialog() {
               </div>
             </ScrollArea>
 
-            <Separator />
+            <div className="shrink-0 space-y-4 bg-background relative z-10">
+              <Separator />
 
-            {importError && (
-              <div className="flex items-start gap-2 rounded-lg border border-destructive/50 bg-destructive/5 p-3">
-                <AlertCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
-                <p className="text-sm text-destructive">{importError}</p>
+              {importError && (
+                <div className="flex items-start gap-2 rounded-lg border border-destructive/50 bg-destructive/5 p-3">
+                  <AlertCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+                  <p className="text-sm text-destructive">{importError}</p>
+                </div>
+              )}
+
+              <div className="flex items-center gap-2">
+                <Button variant="outline" onClick={() => setStep("paste")}>
+                  <ArrowLeft className="h-4 w-4 mr-1" />
+                  Tilbake
+                </Button>
+                <Button
+                  onClick={handleImport}
+                  disabled={isPending || (newTasks.length === 0 && updateCount === 0)}
+                  className="flex-1"
+                >
+                  {isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" data-icon="inline-start" />
+                      Importerer...
+                    </>
+                  ) : (
+                    <>
+                      {newTasks.length > 0 && updateCount > 0
+                        ? `Importer ${newTasks.length} nye + oppdater ${updateCount}`
+                        : newTasks.length > 0
+                          ? `Importer ${newTasks.length} ${newTasks.length === 1 ? "oppgave" : "oppgaver"}`
+                          : `Oppdater ${updateCount} ${updateCount === 1 ? "oppgave" : "oppgaver"}`
+                      }
+                    </>
+                  )}
+                </Button>
               </div>
-            )}
-
-            <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={() => setStep("paste")}>
-                <ArrowLeft className="h-4 w-4 mr-1" />
-                Tilbake
-              </Button>
-              <Button
-                onClick={handleImport}
-                disabled={isPending || (newTasks.length === 0 && updateCount === 0)}
-                className="flex-1"
-              >
-                {isPending ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" data-icon="inline-start" />
-                    Importerer...
-                  </>
-                ) : (
-                  <>
-                    {newTasks.length > 0 && updateCount > 0
-                      ? `Importer ${newTasks.length} nye + oppdater ${updateCount}`
-                      : newTasks.length > 0
-                        ? `Importer ${newTasks.length} ${newTasks.length === 1 ? "oppgave" : "oppgaver"}`
-                        : `Oppdater ${updateCount} ${updateCount === 1 ? "oppgave" : "oppgaver"}`
-                    }
-                  </>
-                )}
-              </Button>
             </div>
           </div>
         )}
