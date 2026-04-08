@@ -328,7 +328,7 @@ export async function bulkImportShoppingItemsWithDuplicates(
         imageUrl?: string
         storeName?: string
       } = {}
-      if (update.fields.description !== undefined) data.description = update.fields.description || undefined
+      if (update.fields.description !== undefined) data.description = update.fields.description ?? undefined
       if (update.fields.categoryId !== undefined) data.categoryId = update.fields.categoryId
       if (update.fields.priority !== undefined) {
         if (validPriorities.has(update.fields.priority)) data.priority = update.fields.priority

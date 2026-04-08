@@ -506,14 +506,14 @@ export async function bulkImportMaintenanceTasksWithDuplicates(
         dueDate?: Date | null
       } = {}
       if (update.fields.description !== undefined) {
-        data.description = update.fields.description || undefined
+        data.description = update.fields.description ?? undefined
       }
       if (update.fields.priority !== undefined) {
         const p = update.fields.priority.toUpperCase()
         if (validPriorities.has(p)) data.priority = p as Priority
       }
       if (update.fields.estimatedDuration !== undefined) {
-        data.estimatedDuration = update.fields.estimatedDuration || undefined
+        data.estimatedDuration = update.fields.estimatedDuration ?? undefined
       }
       if (update.fields.estimatedPrice !== undefined) {
         data.estimatedPrice = update.fields.estimatedPrice
