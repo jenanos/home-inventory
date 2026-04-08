@@ -318,7 +318,16 @@ export async function bulkImportShoppingItemsWithDuplicates(
   // Update existing items with selected fields
   if (input.updates.length > 0) {
     const updateOps = input.updates.map((update) => {
-      const data: Record<string, unknown> = {}
+      const data: {
+        description?: string
+        categoryId?: string | null
+        priority?: Priority
+        phase?: Phase | null
+        estimatedPrice?: number
+        url?: string
+        imageUrl?: string
+        storeName?: string
+      } = {}
       if (update.fields.description !== undefined) data.description = update.fields.description || undefined
       if (update.fields.categoryId !== undefined) data.categoryId = update.fields.categoryId
       if (update.fields.priority !== undefined) {

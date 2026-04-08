@@ -17,6 +17,10 @@ function sanitizeUrl(url: string | undefined | null): string | undefined | null 
   return undefined
 }
 
+function formatDateToIsoDate(date: Date): string {
+  return date.toISOString().slice(0, 10)
+}
+
 // --- MaintenanceTask actions ---
 
 interface CreateMaintenanceTaskInput {
@@ -413,7 +417,7 @@ export async function findExistingMaintenanceTasks(titles: string[]): Promise<Ex
       priority: task.priority,
       estimatedDuration: task.estimatedDuration,
       estimatedPrice: task.estimatedPrice ? Number(task.estimatedPrice) : null,
-      dueDate: task.dueDate ? task.dueDate.toISOString().split("T")[0] ?? null : null,
+      dueDate: task.dueDate ? formatDateToIsoDate(task.dueDate) : null,
       vendorCount: task._count.vendors,
       progressEntryCount: task._count.progressEntries,
     }))
@@ -494,13 +498,19 @@ export async function bulkImportMaintenanceTasksWithDuplicates(
   // Update existing tasks with selected fields
   if (input.updates.length > 0) {
     const updateOps = input.updates.map((update) => {
-      const data: Record<string, unknown> = {}
+      const data: {
+        description?: string
+        priority?: Priority
+        estimatedDuration?: string
+        estimatedPrice?: number
+        dueDate?: Date | null
+      } = {}
       if (update.fields.description !== undefined) {
         data.description = update.fields.description || undefined
       }
       if (update.fields.priority !== undefined) {
         const p = update.fields.priority.toUpperCase()
-        if (validPriorities.has(p)) data.priority = p
+        if (validPriorities.has(p)) data.priority = p as Priority
       }
       if (update.fields.estimatedDuration !== undefined) {
         data.estimatedDuration = update.fields.estimatedDuration || undefined

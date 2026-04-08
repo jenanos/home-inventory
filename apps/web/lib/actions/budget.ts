@@ -671,7 +671,10 @@ export async function bulkImportBudgetWithDuplicates(input: BulkBudgetImportWith
   if (input.memberUpdates && input.memberUpdates.length > 0) {
     await db.$transaction(
       input.memberUpdates.map((update) => {
-        const data: Record<string, unknown> = {}
+        const data: {
+          grossMonthlyIncome?: number
+          taxPercent?: number
+        } = {}
         if (update.fields.grossMonthlyIncome !== undefined) data.grossMonthlyIncome = update.fields.grossMonthlyIncome
         if (update.fields.taxPercent !== undefined) data.taxPercent = update.fields.taxPercent
         return db.budgetMember.update({ where: { id: update.id }, data })
@@ -707,11 +710,17 @@ export async function bulkImportBudgetWithDuplicates(input: BulkBudgetImportWith
   if (input.loanUpdates && input.loanUpdates.length > 0) {
     await db.$transaction(
       input.loanUpdates.map((update) => {
-        const data: Record<string, unknown> = {}
+        const data: {
+          bankName?: string
+          loanType?: BudgetLoanType
+          monthlyInterest?: number
+          monthlyPrincipal?: number
+          monthlyFees?: number
+        } = {}
         if (update.fields.bankName !== undefined) data.bankName = update.fields.bankName
         if (update.fields.loanType !== undefined) {
           const lt = update.fields.loanType.toUpperCase()
-          if (validLoanTypes.has(lt)) data.loanType = lt
+          if (validLoanTypes.has(lt)) data.loanType = lt as BudgetLoanType
         }
         if (update.fields.monthlyInterest !== undefined) data.monthlyInterest = update.fields.monthlyInterest
         if (update.fields.monthlyPrincipal !== undefined) data.monthlyPrincipal = update.fields.monthlyPrincipal
@@ -753,10 +762,17 @@ export async function bulkImportBudgetWithDuplicates(input: BulkBudgetImportWith
   if (input.tripUpdates && input.tripUpdates.length > 0) {
     await db.$transaction(
       input.tripUpdates.map((update) => {
-        const data: Record<string, unknown> = {}
+        const data: {
+          transportType?: TripTransportType
+          annualTrips?: number
+          ticketPerTrip?: number | null
+          tollPerTrip?: number | null
+          ferryPerTrip?: number | null
+          fuelPerTrip?: number | null
+        } = {}
         if (update.fields.transportType !== undefined) {
           const tt = update.fields.transportType.toUpperCase()
-          if (validTripTypes.has(tt)) data.transportType = tt
+          if (validTripTypes.has(tt)) data.transportType = tt as TripTransportType
         }
         if (update.fields.annualTrips !== undefined) data.annualTrips = Math.max(1, Math.round(update.fields.annualTrips))
         if (update.fields.ticketPerTrip !== undefined) data.ticketPerTrip = update.fields.ticketPerTrip
@@ -799,10 +815,13 @@ export async function bulkImportBudgetWithDuplicates(input: BulkBudgetImportWith
   if (input.entryUpdates && input.entryUpdates.length > 0) {
     await db.$transaction(
       input.entryUpdates.map((update) => {
-        const data: Record<string, unknown> = {}
+        const data: {
+          category?: BudgetCategory | null
+          monthlyAmount?: number
+        } = {}
         if (update.fields.category !== undefined) {
           if (update.fields.category && validCategories.has(update.fields.category.toUpperCase())) {
-            data.category = update.fields.category.toUpperCase()
+            data.category = update.fields.category.toUpperCase() as BudgetCategory
           } else {
             data.category = null
           }
