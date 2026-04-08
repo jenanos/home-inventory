@@ -25,9 +25,21 @@ import {
   AlertCircle,
   X,
 } from "lucide-react"
-import { bulkCreateShoppingItems } from "@/lib/actions/shopping-item"
+import {
+  bulkCreateShoppingItems,
+  findExistingShoppingItems,
+  bulkImportShoppingItemsWithDuplicates,
+  type ExistingShoppingItem,
+} from "@/lib/actions/shopping-item"
 import { toast } from "sonner"
 import type { Priority, Phase } from "@workspace/db"
+import {
+  DuplicateFieldDiffCard,
+  DuplicateSummary,
+  computeFieldDiffs,
+  type DuplicateItem,
+  type FieldDiff,
+} from "@/components/duplicate-field-diff"
 
 interface LlmImportDialogProps {
   listId: string
@@ -283,6 +295,37 @@ const formatPrice = (price: number) =>
     maximumFractionDigits: 0,
   }).format(price)
 
+// ─── Duplicate helpers ─────────────────────────────────────────
+
+type ItemDuplicate = DuplicateItem<ParsedItem>
+
+function buildItemDiffs(
+  imported: ParsedItem,
+  existing: ExistingShoppingItem,
+  categoryIdToName: Record<string, string>,
+): FieldDiff[] {
+  // Resolve category name from existing categoryId
+  const existingCategoryName = existing.categoryId ? categoryIdToName[existing.categoryId] ?? null : null
+
+  return computeFieldDiffs([
+    { key: "description", label: "Beskrivelse", existingValue: existing.description, newValue: imported.description },
+    {
+      key: "categoryName",
+      label: "Kategori",
+      existingValue: existingCategoryName,
+      newValue: imported.categoryName,
+    },
+    { key: "priority", label: "Prioritet", existingValue: existing.priority, newValue: imported.priority, format: (v) => priorityLabel[String(v)] ?? String(v) },
+    { key: "phase", label: "Fase", existingValue: existing.phase, newValue: imported.phase, format: (v) => phaseLabel[String(v)] ?? String(v) },
+    { key: "estimatedPrice", label: "Pris", existingValue: existing.estimatedPrice, newValue: imported.estimatedPrice, format: (v) => formatPrice(Number(v)) },
+    { key: "url", label: "URL", existingValue: existing.url, newValue: imported.url },
+    { key: "imageUrl", label: "Bilde-URL", existingValue: existing.imageUrl, newValue: imported.imageUrl },
+    { key: "storeName", label: "Butikk", existingValue: existing.storeName, newValue: imported.storeName },
+  ])
+}
+
+// ─── Component ─────────────────────────────────────────────────
+
 export function LlmImportDialog({ listId, listName, categories }: LlmImportDialogProps) {
   const [open, setOpen] = useState(false)
   const [step, setStep] = useState<"prompt" | "paste" | "preview">("prompt")
@@ -293,7 +336,20 @@ export function LlmImportDialog({ listId, listName, categories }: LlmImportDialo
   const [importError, setImportError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
+  // Duplicate state
+  const [newItems, setNewItems] = useState<ParsedItem[]>([])
+  const [duplicates, setDuplicates] = useState<ItemDuplicate[]>([])
+  const [selectedFields, setSelectedFields] = useState<Map<string, Set<string>>>(new Map())
+  const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false)
+
   const prompt = buildPrompt(listName, categories)
+
+  const categoryMap: Record<string, string> = {}
+  const categoryIdToName: Record<string, string> = {}
+  for (const cat of categories) {
+    categoryMap[cat.name] = cat.id
+    categoryIdToName[cat.id] = cat.name
+  }
 
   function handleCopyPrompt() {
     navigator.clipboard.writeText(prompt)
@@ -301,33 +357,119 @@ export function LlmImportDialog({ listId, listName, categories }: LlmImportDialo
     setTimeout(() => setCopied(false), 2000)
   }
 
-  function handleParse() {
+  async function handleParse() {
     const { items, error } = parseJsonInput(jsonInput)
     setParsedItems(items)
     setParseError(error)
     if (items.length > 0) {
+      // Check for duplicates
+      setIsCheckingDuplicates(true)
+      try {
+        const names = items.map((it) => it.name)
+        const existing = await findExistingShoppingItems(listId, names)
+
+        const existingByName = new Map<string, ExistingShoppingItem>()
+        for (const e of existing) {
+          existingByName.set(e.name.toLowerCase(), e)
+        }
+
+        const fresh: ParsedItem[] = []
+        const dupes: ItemDuplicate[] = []
+        const fieldSelections = new Map<string, Set<string>>()
+
+        for (const item of items) {
+          const match = existingByName.get(item.name.toLowerCase())
+          if (match) {
+            const diffs = buildItemDiffs(item, match, categoryIdToName)
+            dupes.push({
+              importedItem: item,
+              existingId: match.id,
+              existingLabel: match.name,
+              diffs,
+            })
+            fieldSelections.set(match.id, new Set(diffs.map((d) => d.key)))
+          } else {
+            fresh.push(item)
+          }
+        }
+
+        setNewItems(fresh)
+        setDuplicates(dupes)
+        setSelectedFields(fieldSelections)
+      } catch {
+        setNewItems(items)
+        setDuplicates([])
+        setSelectedFields(new Map())
+      } finally {
+        setIsCheckingDuplicates(false)
+      }
       setStep("preview")
     }
+  }
+
+  function handleToggleField(existingId: string, field: string) {
+    setSelectedFields((prev) => {
+      const next = new Map(prev)
+      const fields = new Set(next.get(existingId) ?? [])
+      if (fields.has(field)) {
+        fields.delete(field)
+      } else {
+        fields.add(field)
+      }
+      next.set(existingId, fields)
+      return next
+    })
   }
 
   function handleImport() {
     setImportError(null)
     startTransition(async () => {
       try {
-        const categoryMap: Record<string, string> = {}
-        for (const cat of categories) {
-          categoryMap[cat.name] = cat.id
+        const hasDuplicateUpdates = duplicates.some(
+          (d) => (selectedFields.get(d.existingId)?.size ?? 0) > 0
+        )
+
+        if (duplicates.length === 0 || !hasDuplicateUpdates) {
+          if (newItems.length > 0) {
+            await bulkCreateShoppingItems({
+              items: newItems,
+              listId,
+              categoryMap,
+            })
+          }
+        } else {
+          const updates = duplicates
+            .filter((d) => (selectedFields.get(d.existingId)?.size ?? 0) > 0)
+            .map((d) => {
+              const fields: Record<string, unknown> = {}
+              const selected = selectedFields.get(d.existingId) ?? new Set()
+              const item = d.importedItem
+
+              if (selected.has("description")) fields.description = item.description
+              if (selected.has("categoryName")) {
+                fields.categoryId = item.categoryName ? categoryMap[item.categoryName] ?? null : null
+              }
+              if (selected.has("priority")) fields.priority = item.priority
+              if (selected.has("phase")) fields.phase = item.phase ?? null
+              if (selected.has("estimatedPrice")) fields.estimatedPrice = item.estimatedPrice
+              if (selected.has("url")) fields.url = item.url
+              if (selected.has("imageUrl")) fields.imageUrl = item.imageUrl
+              if (selected.has("storeName")) fields.storeName = item.storeName
+
+              return { id: d.existingId, fields }
+            })
+
+          await bulkImportShoppingItemsWithDuplicates({
+            newItems,
+            updates,
+            listId,
+            categoryMap,
+          })
         }
 
-        const result = await bulkCreateShoppingItems({
-          items: parsedItems,
-          listId,
-          categoryMap,
-        })
-
-        const importedCount = result.count
+        const totalImported = newItems.length + (hasDuplicateUpdates ? duplicates.filter((d) => (selectedFields.get(d.existingId)?.size ?? 0) > 0).length : 0)
         handleReset()
-        toast.success(`${importedCount} ${importedCount === 1 ? "produkt" : "produkter"} importert`)
+        toast.success(`${totalImported} ${totalImported === 1 ? "produkt" : "produkter"} importert/oppdatert`)
         setOpen(false)
       } catch (err) {
         console.error("LLM import failed:", err)
@@ -337,8 +479,12 @@ export function LlmImportDialog({ listId, listName, categories }: LlmImportDialo
   }
 
   function handleRemoveItem(index: number) {
-    setParsedItems((prev) => prev.filter((_, i) => i !== index))
+    setNewItems((prev) => prev.filter((_, i) => i !== index))
   }
+
+  const updateCount = duplicates.filter(
+    (d) => (selectedFields.get(d.existingId)?.size ?? 0) > 0
+  ).length
 
   function handleReset() {
     setStep("prompt")
@@ -347,6 +493,9 @@ export function LlmImportDialog({ listId, listName, categories }: LlmImportDialo
     setParsedItems([])
     setParseError(null)
     setImportError(null)
+    setNewItems([])
+    setDuplicates([])
+    setSelectedFields(new Map())
   }
 
   function handleOpenChange(v: boolean) {
@@ -443,11 +592,20 @@ export function LlmImportDialog({ listId, listName, categories }: LlmImportDialo
               </Button>
               <Button
                 onClick={handleParse}
-                disabled={!jsonInput.trim()}
+                disabled={!jsonInput.trim() || isCheckingDuplicates}
                 className="flex-1"
               >
-                <ClipboardPaste className="h-4 w-4" data-icon="inline-start" />
-                Tolk JSON
+                {isCheckingDuplicates ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" data-icon="inline-start" />
+                    Sjekker duplikater...
+                  </>
+                ) : (
+                  <>
+                    <ClipboardPaste className="h-4 w-4" data-icon="inline-start" />
+                    Tolk JSON
+                  </>
+                )}
               </Button>
             </div>
           </div>
@@ -456,9 +614,17 @@ export function LlmImportDialog({ listId, listName, categories }: LlmImportDialo
         {step === "preview" && (
           <div className="flex flex-col gap-4 flex-1 min-h-0 overflow-hidden">
             <div className="flex items-center gap-2 shrink-0">
-              <p className="text-sm text-muted-foreground">
-                {parsedItems.length} {parsedItems.length === 1 ? "produkt" : "produkter"} klare for import.
-              </p>
+              {duplicates.length > 0 ? (
+                <DuplicateSummary
+                  newCount={newItems.length}
+                  duplicateCount={duplicates.length}
+                  updateCount={updateCount}
+                />
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  {parsedItems.length} {parsedItems.length === 1 ? "produkt" : "produkter"} klare for import.
+                </p>
+              )}
               {parseError && (
                 <Badge variant="secondary" className="text-xs">
                   {parseError}
@@ -468,8 +634,21 @@ export function LlmImportDialog({ listId, listName, categories }: LlmImportDialo
 
             <ScrollArea className="max-h-72 rounded-lg border">
               <div className="divide-y">
-                {parsedItems.map((item, i) => (
-                  <div key={i} className="flex gap-3 p-3">
+                {/* Duplicates first */}
+                {duplicates.map((dup) => (
+                  <div key={dup.existingId} className="p-3">
+                    <DuplicateFieldDiffCard
+                      label={dup.existingLabel}
+                      diffs={dup.diffs}
+                      selectedFields={selectedFields.get(dup.existingId) ?? new Set()}
+                      onToggleField={(field) => handleToggleField(dup.existingId, field)}
+                    />
+                  </div>
+                ))}
+
+                {/* New items */}
+                {newItems.map((item, i) => (
+                  <div key={`new-${i}`} className="flex gap-3 p-3">
                     {item.imageUrl && (
                       <img
                         src={item.imageUrl}
@@ -582,7 +761,7 @@ export function LlmImportDialog({ listId, listName, categories }: LlmImportDialo
               </Button>
               <Button
                 onClick={handleImport}
-                disabled={isPending || parsedItems.length === 0}
+                disabled={isPending || (newItems.length === 0 && updateCount === 0)}
                 className="flex-1"
               >
                 {isPending ? (
@@ -592,7 +771,12 @@ export function LlmImportDialog({ listId, listName, categories }: LlmImportDialo
                   </>
                 ) : (
                   <>
-                    Importer {parsedItems.length} {parsedItems.length === 1 ? "produkt" : "produkter"}
+                    {newItems.length > 0 && updateCount > 0
+                      ? `Importer ${newItems.length} nye + oppdater ${updateCount}`
+                      : newItems.length > 0
+                        ? `Importer ${newItems.length} ${newItems.length === 1 ? "produkt" : "produkter"}`
+                        : `Oppdater ${updateCount} ${updateCount === 1 ? "produkt" : "produkter"}`
+                    }
                   </>
                 )}
               </Button>
