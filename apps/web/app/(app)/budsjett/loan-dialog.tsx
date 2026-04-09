@@ -107,7 +107,7 @@ export function LoanDialog({ open, onOpenChange, loan }: LoanDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{loan ? "Rediger lån" : "Legg til lån"}</DialogTitle>
         </DialogHeader>
