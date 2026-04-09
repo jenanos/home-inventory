@@ -47,11 +47,13 @@ export default async function ListPage({ params }: ListPageProps) {
       rank: alt.rank,
     }))
 
-    // Use top-ranked alternative's price if item has no own price
+    // Preferred alternative (rank 0) takes precedence for price, url, store, image
     const topAlternative = alternatives[0] ?? null
-    const effectivePrice = item.estimatedPrice
-      ? Number(item.estimatedPrice)
-      : topAlternative?.price ?? null
+    const effectivePrice = topAlternative?.price != null
+      ? topAlternative.price
+      : item.estimatedPrice
+        ? Number(item.estimatedPrice)
+        : null
 
     return {
       id: item.id,

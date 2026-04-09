@@ -263,6 +263,8 @@ function MobileItemCard({
   // Show selected (rank 0) alternative's image if available
   const selectedAlt = item.alternatives[0] ?? null
   const selectedAltImage = selectedAlt?.imageUrl ?? null
+  const effectiveUrl = item.url || selectedAlt?.url || null
+  const effectiveStore = item.storeName || selectedAlt?.storeName || null
 
   function handleToggle() {
     startTransition(async () => {
@@ -361,10 +363,10 @@ function MobileItemCard({
             </span>
           )}
 
-          {item.storeName && (
+          {effectiveStore && (
             <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
               <Store className="h-2.5 w-2.5" />
-              {item.storeName}
+              {effectiveStore}
             </span>
           )}
 
@@ -375,9 +377,9 @@ function MobileItemCard({
             </span>
           )}
 
-          {item.url && (
+          {effectiveUrl && (
             <a
-              href={item.url}
+              href={effectiveUrl}
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
@@ -425,6 +427,8 @@ function DesktopItemRow({
   // Show selected (rank 0) alternative's image if available
   const selectedAlt = item.alternatives[0] ?? null
   const selectedAltImage = selectedAlt?.imageUrl ?? null
+  const effectiveUrl = item.url || selectedAlt?.url || null
+  const effectiveStore = item.storeName || selectedAlt?.storeName || null
 
   function handleToggle() {
     startTransition(async () => {
@@ -478,9 +482,9 @@ function DesktopItemRow({
                 {formatDate(item.dueDate)}
               </span>
             )}
-            {item.url && (
+            {effectiveUrl && (
               <a
-                href={item.url}
+                href={effectiveUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-0.5 text-[10px] text-primary hover:underline"
@@ -546,10 +550,10 @@ function DesktopItemRow({
         </div>
       </TableCell>
       <TableCell>
-        {item.storeName ? (
+        {effectiveStore ? (
           <span className="flex items-center gap-1 text-xs">
             <Store className="h-3 w-3 text-muted-foreground" />
-            {item.storeName}
+            {effectiveStore}
           </span>
         ) : (
           <span className="text-muted-foreground">—</span>

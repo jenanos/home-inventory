@@ -4,6 +4,15 @@ import { db, type Priority, type Phase, type ItemStatus } from "@workspace/db"
 import { requireHousehold } from "@/lib/session"
 import { revalidatePath } from "next/cache"
 
+interface CreateAlternativeInput {
+  name: string
+  price?: number
+  url?: string
+  imageUrl?: string
+  storeName?: string
+  notes?: string
+}
+
 interface CreateItemInput {
   name: string
   description?: string
@@ -16,6 +25,7 @@ interface CreateItemInput {
   storeName?: string
   assignedToId?: string
   listId: string
+  alternatives?: CreateAlternativeInput[]
 }
 
 export async function createShoppingItem(input: CreateItemInput) {
@@ -41,6 +51,20 @@ export async function createShoppingItem(input: CreateItemInput) {
       storeName: input.storeName,
       assignedToId: input.assignedToId,
       listId: input.listId,
+      alternatives:
+        input.alternatives && input.alternatives.length > 0
+          ? {
+              create: input.alternatives.map((alt, index) => ({
+                name: alt.name,
+                price: alt.price ?? undefined,
+                url: alt.url || undefined,
+                imageUrl: alt.imageUrl || undefined,
+                storeName: alt.storeName || undefined,
+                notes: alt.notes || undefined,
+                rank: index,
+              })),
+            }
+          : undefined,
     },
   })
 
