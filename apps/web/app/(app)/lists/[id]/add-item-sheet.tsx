@@ -124,15 +124,23 @@ export function AddItemSheet({ listId, categories, members }: AddItemSheetProps)
 
   function handleAddAlternative() {
     if (!newAlt.name.trim()) return
-    setAlternatives((prev) => [...prev, { ...newAlt, tempId: crypto.randomUUID() }])
+    const newEntry = { ...newAlt, tempId: crypto.randomUUID() }
+    setAlternatives((prev) => {
+      const updated = [...prev, newEntry]
+      // Navigate to the newly added alternative (last index)
+      setAltIndex(updated.length - 1)
+      return updated
+    })
     setNewAlt(createEmptyAlternative())
     setIsAddingAlt(false)
-    setAltIndex(alternatives.length)
   }
 
   function handleRemoveAlternative(tempId: string) {
-    setAlternatives((prev) => prev.filter((a) => a.tempId !== tempId))
-    setAltIndex((i) => Math.max(0, Math.min(i, alternatives.length - 2)))
+    setAlternatives((prev) => {
+      const updated = prev.filter((a) => a.tempId !== tempId)
+      setAltIndex((i) => Math.max(0, Math.min(i, updated.length - 1)))
+      return updated
+    })
   }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {

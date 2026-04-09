@@ -414,8 +414,10 @@ function AlternativesCarouselSection({
 
   function handleAddDone() {
     setIsAdding(false)
-    // Navigate to the newly added alternative (last one)
-    setCurrentIndex(total) // After revalidation, total will be total+1, so this will be the last
+    // After revalidation, the new alternative will be at the end.
+    // Set to current total (which will be valid after revalidation adds one).
+    // The useEffect clamp ensures this stays in bounds during the transition.
+    setCurrentIndex(Math.max(total, 0))
   }
 
   const current = total > 0 ? alternatives[currentIndex] : null
