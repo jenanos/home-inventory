@@ -15,6 +15,12 @@ import {
   SheetTitle,
 } from "@workspace/ui/components/sheet"
 import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+} from "@workspace/ui/components/drawer"
+import {
   Users,
   Plus,
   Loader2,
@@ -32,6 +38,7 @@ import {
   selectTaskVendor,
   updateTaskVendor,
 } from "@/lib/actions/maintenance-task"
+import { useMediaQuery } from "@/hooks/use-media-query"
 
 interface Vendor {
   id: string
@@ -62,6 +69,7 @@ export function VendorSection({ taskId, vendors }: VendorSectionProps) {
   const [isPending, startTransition] = useTransition()
   const [addOpen, setAddOpen] = useState(false)
   const [editingVendor, setEditingVendor] = useState<Vendor | null>(null)
+  const isDesktop = useMediaQuery("(min-width: 768px)")
 
   // Add form state
   const [name, setName] = useState("")
@@ -395,76 +403,153 @@ export function VendorSection({ taskId, vendors }: VendorSectionProps) {
         </div>
       )}
 
-      {/* Add vendor sheet */}
-      <Sheet open={addOpen} onOpenChange={setAddOpen}>
-        <SheetContent>
-          <SheetHeader>
-            <SheetTitle>Legg til aktør</SheetTitle>
-          </SheetHeader>
-          {vendorFormFields(
-            "add",
-            { name, description, phone, email, website, estimatedPrice, notes },
-            {
-              setName,
-              setDescription,
-              setPhone,
-              setEmail,
-              setWebsite,
-              setEstimatedPrice,
-              setNotes,
-            }
-          )}
-          <div className="mt-4 px-1">
-            <Button onClick={handleAdd} disabled={isPending} className="w-full">
-              {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Legg til aktør
-            </Button>
-          </div>
-        </SheetContent>
-      </Sheet>
+      {/* Add vendor sheet/drawer */}
+      {isDesktop ? (
+        <Sheet open={addOpen} onOpenChange={setAddOpen}>
+          <SheetContent>
+            <SheetHeader>
+              <SheetTitle>Legg til aktør</SheetTitle>
+            </SheetHeader>
+            {vendorFormFields(
+              "add",
+              { name, description, phone, email, website, estimatedPrice, notes },
+              {
+                setName,
+                setDescription,
+                setPhone,
+                setEmail,
+                setWebsite,
+                setEstimatedPrice,
+                setNotes,
+              }
+            )}
+            <div className="mt-4 px-1">
+              <Button onClick={handleAdd} disabled={isPending} className="w-full">
+                {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Legg til aktør
+              </Button>
+            </div>
+          </SheetContent>
+        </Sheet>
+      ) : (
+        <Drawer open={addOpen} onOpenChange={setAddOpen}>
+          <DrawerContent>
+            <DrawerHeader>
+              <DrawerTitle>Legg til aktør</DrawerTitle>
+            </DrawerHeader>
+            <div className="overflow-y-auto px-4 pb-6">
+              {vendorFormFields(
+                "add",
+                { name, description, phone, email, website, estimatedPrice, notes },
+                {
+                  setName,
+                  setDescription,
+                  setPhone,
+                  setEmail,
+                  setWebsite,
+                  setEstimatedPrice,
+                  setNotes,
+                }
+              )}
+              <div className="mt-4 px-1">
+                <Button onClick={handleAdd} disabled={isPending} className="w-full">
+                  {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Legg til aktør
+                </Button>
+              </div>
+            </div>
+          </DrawerContent>
+        </Drawer>
+      )}
 
-      {/* Edit vendor sheet */}
-      <Sheet
-        open={editingVendor !== null}
-        onOpenChange={(open) => !open && setEditingVendor(null)}
-      >
-        <SheetContent>
-          <SheetHeader>
-            <SheetTitle>Rediger aktør</SheetTitle>
-          </SheetHeader>
-          {vendorFormFields(
-            "edit",
-            {
-              name: editName,
-              description: editDescription,
-              phone: editPhone,
-              email: editEmail,
-              website: editWebsite,
-              estimatedPrice: editEstimatedPrice,
-              notes: editNotes,
-            },
-            {
-              setName: setEditName,
-              setDescription: setEditDescription,
-              setPhone: setEditPhone,
-              setEmail: setEditEmail,
-              setWebsite: setEditWebsite,
-              setEstimatedPrice: setEditEstimatedPrice,
-              setNotes: setEditNotes,
-            }
-          )}
-          <div className="mt-4 px-1">
-            <Button
-              onClick={handleUpdate}
-              disabled={isPending}
-              className="w-full"
-            >
-              {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Lagre endringer
-            </Button>
-          </div>
-        </SheetContent>
-      </Sheet>
+      {/* Edit vendor sheet/drawer */}
+      {isDesktop ? (
+        <Sheet
+          open={editingVendor !== null}
+          onOpenChange={(open) => !open && setEditingVendor(null)}
+        >
+          <SheetContent>
+            <SheetHeader>
+              <SheetTitle>Rediger aktør</SheetTitle>
+            </SheetHeader>
+            {vendorFormFields(
+              "edit",
+              {
+                name: editName,
+                description: editDescription,
+                phone: editPhone,
+                email: editEmail,
+                website: editWebsite,
+                estimatedPrice: editEstimatedPrice,
+                notes: editNotes,
+              },
+              {
+                setName: setEditName,
+                setDescription: setEditDescription,
+                setPhone: setEditPhone,
+                setEmail: setEditEmail,
+                setWebsite: setEditWebsite,
+                setEstimatedPrice: setEditEstimatedPrice,
+                setNotes: setEditNotes,
+              }
+            )}
+            <div className="mt-4 px-1">
+              <Button
+                onClick={handleUpdate}
+                disabled={isPending}
+                className="w-full"
+              >
+                {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Lagre endringer
+              </Button>
+            </div>
+          </SheetContent>
+        </Sheet>
+      ) : (
+        <Drawer
+          open={editingVendor !== null}
+          onOpenChange={(open) => !open && setEditingVendor(null)}
+        >
+          <DrawerContent>
+            <DrawerHeader>
+              <DrawerTitle>Rediger aktør</DrawerTitle>
+            </DrawerHeader>
+            <div className="overflow-y-auto px-4 pb-6">
+              {vendorFormFields(
+                "edit",
+                {
+                  name: editName,
+                  description: editDescription,
+                  phone: editPhone,
+                  email: editEmail,
+                  website: editWebsite,
+                  estimatedPrice: editEstimatedPrice,
+                  notes: editNotes,
+                },
+                {
+                  setName: setEditName,
+                  setDescription: setEditDescription,
+                  setPhone: setEditPhone,
+                  setEmail: setEditEmail,
+                  setWebsite: setEditWebsite,
+                  setEstimatedPrice: setEditEstimatedPrice,
+                  setNotes: setEditNotes,
+                }
+              )}
+              <div className="mt-4 px-1">
+                <Button
+                  onClick={handleUpdate}
+                  disabled={isPending}
+                  className="w-full"
+                >
+                  {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Lagre endringer
+                </Button>
+              </div>
+            </div>
+          </DrawerContent>
+        </Drawer>
+      )}
     </div>
   )
 }

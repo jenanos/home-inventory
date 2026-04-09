@@ -15,6 +15,12 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@workspace/ui/components/sheet"
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+} from "@workspace/ui/components/drawer"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
@@ -49,6 +55,7 @@ import {
   updateMaintenanceTask,
   deleteMaintenanceTask,
 } from "@/lib/actions/maintenance-task"
+import { useMediaQuery } from "@/hooks/use-media-query"
 import type { Priority, TaskStatus } from "@workspace/db"
 
 interface TaskActionsProps {
@@ -69,6 +76,7 @@ export function TaskActions({ taskId, currentStatus, task }: TaskActionsProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [editOpen, setEditOpen] = useState(false)
+  const isDesktop = useMediaQuery("(min-width: 768px)")
 
   const [title, setTitle] = useState(task.title)
   const [description, setDescription] = useState(task.description ?? "")
@@ -144,6 +152,121 @@ export function TaskActions({ taskId, currentStatus, task }: TaskActionsProps) {
     })
   }
 
+  const editFormContent = (
+    <div className="flex flex-col gap-4 px-1">
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="edit-title">Tittel</Label>
+        <Input
+          id="edit-title"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+        />
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="edit-description">Beskrivelse</Label>
+        <Textarea
+          id="edit-description"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          rows={3}
+        />
+      </div>
+
+      <Separator />
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="flex flex-col gap-2">
+          <Label>Prioritet</Label>
+          <Select
+            value={priority}
+            onValueChange={(v) => setPriority(v as Priority)}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="HIGH">Høy</SelectItem>
+              <SelectItem value="MEDIUM">Medium</SelectItem>
+              <SelectItem value="LOW">Lav</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <Label>Status</Label>
+          <Select
+            value={status}
+            onValueChange={(v) => setStatus(v as TaskStatus)}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="NOT_STARTED">Ikke startet</SelectItem>
+              <SelectItem value="IN_PROGRESS">Pågår</SelectItem>
+              <SelectItem value="COMPLETED">Fullført</SelectItem>
+              <SelectItem value="ON_HOLD">På vent</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="edit-duration">Antatt varighet</Label>
+          <Input
+            id="edit-duration"
+            value={estimatedDuration}
+            onChange={(e) => setEstimatedDuration(e.target.value)}
+          />
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="edit-price">Estimert pris (NOK)</Label>
+          <Input
+            id="edit-price"
+            type="number"
+            value={estimatedPrice}
+            onChange={(e) => setEstimatedPrice(e.target.value)}
+          />
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Label>Forfallsdato</Label>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              className={cn(
+                "justify-start text-left font-normal",
+                !dueDate && "text-muted-foreground"
+              )}
+            >
+              <CalendarIcon className="mr-2 h-4 w-4" />
+              {dueDate
+                ? dueDate.toLocaleDateString("nb-NO")
+                : "Velg dato"}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              mode="single"
+              selected={dueDate}
+              onSelect={setDueDate}
+            />
+          </PopoverContent>
+        </Popover>
+      </div>
+
+      <Button onClick={handleUpdate} disabled={isPending} className="mt-2">
+        {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+        Lagre endringer
+      </Button>
+    </div>
+  )
+
   return (
     <>
       <DropdownMenu>
@@ -182,125 +305,27 @@ export function TaskActions({ taskId, currentStatus, task }: TaskActionsProps) {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <Sheet open={editOpen} onOpenChange={setEditOpen}>
-        <SheetContent>
-          <SheetHeader>
-            <SheetTitle>Rediger oppgave</SheetTitle>
-          </SheetHeader>
-          <div className="flex flex-col gap-4 px-1">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="edit-title">Tittel</Label>
-              <Input
-                id="edit-title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-              />
+      {isDesktop ? (
+        <Sheet open={editOpen} onOpenChange={setEditOpen}>
+          <SheetContent>
+            <SheetHeader>
+              <SheetTitle>Rediger oppgave</SheetTitle>
+            </SheetHeader>
+            {editFormContent}
+          </SheetContent>
+        </Sheet>
+      ) : (
+        <Drawer open={editOpen} onOpenChange={setEditOpen}>
+          <DrawerContent>
+            <DrawerHeader>
+              <DrawerTitle>Rediger oppgave</DrawerTitle>
+            </DrawerHeader>
+            <div className="overflow-y-auto px-4 pb-6">
+              {editFormContent}
             </div>
-
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="edit-description">Beskrivelse</Label>
-              <Textarea
-                id="edit-description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={3}
-              />
-            </div>
-
-            <Separator />
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="flex flex-col gap-2">
-                <Label>Prioritet</Label>
-                <Select
-                  value={priority}
-                  onValueChange={(v) => setPriority(v as Priority)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="HIGH">Høy</SelectItem>
-                    <SelectItem value="MEDIUM">Medium</SelectItem>
-                    <SelectItem value="LOW">Lav</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <Label>Status</Label>
-                <Select
-                  value={status}
-                  onValueChange={(v) => setStatus(v as TaskStatus)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="NOT_STARTED">Ikke startet</SelectItem>
-                    <SelectItem value="IN_PROGRESS">Pågår</SelectItem>
-                    <SelectItem value="COMPLETED">Fullført</SelectItem>
-                    <SelectItem value="ON_HOLD">På vent</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="edit-duration">Antatt varighet</Label>
-                <Input
-                  id="edit-duration"
-                  value={estimatedDuration}
-                  onChange={(e) => setEstimatedDuration(e.target.value)}
-                />
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="edit-price">Estimert pris (NOK)</Label>
-                <Input
-                  id="edit-price"
-                  type="number"
-                  value={estimatedPrice}
-                  onChange={(e) => setEstimatedPrice(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <Label>Forfallsdato</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn(
-                      "justify-start text-left font-normal",
-                      !dueDate && "text-muted-foreground"
-                    )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {dueDate
-                      ? dueDate.toLocaleDateString("nb-NO")
-                      : "Velg dato"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={dueDate}
-                    onSelect={setDueDate}
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-
-            <Button onClick={handleUpdate} disabled={isPending} className="mt-2">
-              {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Lagre endringer
-            </Button>
-          </div>
-        </SheetContent>
-      </Sheet>
+          </DrawerContent>
+        </Drawer>
+      )}
     </>
   )
 }

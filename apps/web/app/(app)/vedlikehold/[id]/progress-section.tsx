@@ -14,6 +14,12 @@ import {
   SheetTitle,
 } from "@workspace/ui/components/sheet"
 import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+} from "@workspace/ui/components/drawer"
+import {
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -33,6 +39,7 @@ import {
   updateProgressEntry,
   deleteProgressEntry,
 } from "@/lib/actions/maintenance-task"
+import { useMediaQuery } from "@/hooks/use-media-query"
 
 interface ProgressEntry {
   id: string
@@ -54,6 +61,7 @@ export function ProgressSection({ taskId, entries }: ProgressSectionProps) {
   const [isPending, startTransition] = useTransition()
   const [addOpen, setAddOpen] = useState(false)
   const [editingEntry, setEditingEntry] = useState<ProgressEntry | null>(null)
+  const isDesktop = useMediaQuery("(min-width: 768px)")
 
   // Add form state
   const [title, setTitle] = useState("")
@@ -283,60 +291,121 @@ export function ProgressSection({ taskId, entries }: ProgressSectionProps) {
         </div>
       )}
 
-      {/* Add entry sheet */}
-      <Sheet open={addOpen} onOpenChange={setAddOpen}>
-        <SheetContent>
-          <SheetHeader>
-            <SheetTitle>Nytt steg i fremdriftsplanen</SheetTitle>
-          </SheetHeader>
-          {formContent(
-            "add",
-            { title, description, dueDate },
-            { setTitle, setDescription, setDueDate }
-          )}
-          <div className="mt-4 px-1">
-            <Button onClick={handleAdd} disabled={isPending} className="w-full">
-              {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Legg til steg
-            </Button>
-          </div>
-        </SheetContent>
-      </Sheet>
+      {/* Add entry sheet/drawer */}
+      {isDesktop ? (
+        <Sheet open={addOpen} onOpenChange={setAddOpen}>
+          <SheetContent>
+            <SheetHeader>
+              <SheetTitle>Nytt steg i fremdriftsplanen</SheetTitle>
+            </SheetHeader>
+            {formContent(
+              "add",
+              { title, description, dueDate },
+              { setTitle, setDescription, setDueDate }
+            )}
+            <div className="mt-4 px-1">
+              <Button onClick={handleAdd} disabled={isPending} className="w-full">
+                {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Legg til steg
+              </Button>
+            </div>
+          </SheetContent>
+        </Sheet>
+      ) : (
+        <Drawer open={addOpen} onOpenChange={setAddOpen}>
+          <DrawerContent>
+            <DrawerHeader>
+              <DrawerTitle>Nytt steg i fremdriftsplanen</DrawerTitle>
+            </DrawerHeader>
+            <div className="overflow-y-auto px-4 pb-6">
+              {formContent(
+                "add",
+                { title, description, dueDate },
+                { setTitle, setDescription, setDueDate }
+              )}
+              <div className="mt-4 px-1">
+                <Button onClick={handleAdd} disabled={isPending} className="w-full">
+                  {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Legg til steg
+                </Button>
+              </div>
+            </div>
+          </DrawerContent>
+        </Drawer>
+      )}
 
-      {/* Edit entry sheet */}
-      <Sheet
-        open={editingEntry !== null}
-        onOpenChange={(open) => !open && setEditingEntry(null)}
-      >
-        <SheetContent>
-          <SheetHeader>
-            <SheetTitle>Rediger steg</SheetTitle>
-          </SheetHeader>
-          {formContent(
-            "edit",
-            {
-              title: editTitle,
-              description: editDescription,
-              dueDate: editDueDate,
-            },
-            {
-              setTitle: setEditTitle,
-              setDescription: setEditDescription,
-              setDueDate: setEditDueDate,
-            }
-          )}
-          <div className="mt-4 px-1">
-            <Button
-              onClick={handleUpdate}
-              disabled={isPending}
-              className="w-full"
-            >
-              {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Lagre endringer
-            </Button>
-          </div>
-        </SheetContent>
-      </Sheet>
+      {/* Edit entry sheet/drawer */}
+      {isDesktop ? (
+        <Sheet
+          open={editingEntry !== null}
+          onOpenChange={(open) => !open && setEditingEntry(null)}
+        >
+          <SheetContent>
+            <SheetHeader>
+              <SheetTitle>Rediger steg</SheetTitle>
+            </SheetHeader>
+            {formContent(
+              "edit",
+              {
+                title: editTitle,
+                description: editDescription,
+                dueDate: editDueDate,
+              },
+              {
+                setTitle: setEditTitle,
+                setDescription: setEditDescription,
+                setDueDate: setEditDueDate,
+              }
+            )}
+            <div className="mt-4 px-1">
+              <Button
+                onClick={handleUpdate}
+                disabled={isPending}
+                className="w-full"
+              >
+                {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Lagre endringer
+              </Button>
+            </div>
+          </SheetContent>
+        </Sheet>
+      ) : (
+        <Drawer
+          open={editingEntry !== null}
+          onOpenChange={(open) => !open && setEditingEntry(null)}
+        >
+          <DrawerContent>
+            <DrawerHeader>
+              <DrawerTitle>Rediger steg</DrawerTitle>
+            </DrawerHeader>
+            <div className="overflow-y-auto px-4 pb-6">
+              {formContent(
+                "edit",
+                {
+                  title: editTitle,
+                  description: editDescription,
+                  dueDate: editDueDate,
+                },
+                {
+                  setTitle: setEditTitle,
+                  setDescription: setEditDescription,
+                  setDueDate: setEditDueDate,
+                }
+              )}
+              <div className="mt-4 px-1">
+                <Button
+                  onClick={handleUpdate}
+                  disabled={isPending}
+                  className="w-full"
+                >
+                  {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Lagre endringer
+                </Button>
+              </div>
+            </div>
+          </DrawerContent>
+        </Drawer>
+      )}
     </div>
   )
 }
