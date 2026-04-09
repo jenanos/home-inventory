@@ -390,12 +390,12 @@ function AlternativesCarouselSection({
 
   const total = alternatives.length
 
-  // Clamp index when alternatives change
+  // Clamp index when alternatives change (e.g. after deletion)
   useEffect(() => {
     if (currentIndex >= total && total > 0) {
       setCurrentIndex(total - 1)
     }
-  }, [total, currentIndex])
+  }, [total])
 
   function goNext() {
     setCurrentIndex((i) => (i + 1) % total)
@@ -414,10 +414,9 @@ function AlternativesCarouselSection({
 
   function handleAddDone() {
     setIsAdding(false)
-    // After revalidation, the new alternative will be at the end.
-    // Set to current total (which will be valid after revalidation adds one).
-    // The useEffect clamp ensures this stays in bounds during the transition.
-    setCurrentIndex(Math.max(total, 0))
+    // Navigate to the last existing alternative; the useEffect clamp
+    // ensures index stays valid during the revalidation transition.
+    setCurrentIndex(Math.max(total - 1, 0))
   }
 
   const current = total > 0 ? alternatives[currentIndex] : null
