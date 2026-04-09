@@ -389,13 +389,7 @@ function AlternativesCarouselSection({
   const [isPending, startTransition] = useTransition()
 
   const total = alternatives.length
-
-  // Clamp index when alternatives change (e.g. after deletion)
-  useEffect(() => {
-    if (currentIndex >= total && total > 0) {
-      setCurrentIndex(total - 1)
-    }
-  }, [total])
+  const safeCurrentIndex = total > 0 ? Math.min(currentIndex, total - 1) : 0
 
   function goNext() {
     setCurrentIndex((i) => (i + 1) % total)
@@ -419,16 +413,16 @@ function AlternativesCarouselSection({
     setCurrentIndex(Math.max(total - 1, 0))
   }
 
-  const current = total > 0 ? alternatives[currentIndex] : null
-  const isSelected = currentIndex === 0 && total > 0
+  const current = total > 0 ? alternatives[safeCurrentIndex] : null
+  const isSelected = safeCurrentIndex === 0 && total > 0
 
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium">Produktalternativer</span>
-        {total > 0 && (
+          {total > 0 && (
           <Badge variant="secondary" className="text-[10px]">
-            {currentIndex + 1} / {total}
+              {safeCurrentIndex + 1} / {total}
           </Badge>
         )}
       </div>
@@ -498,7 +492,7 @@ function AlternativesCarouselSection({
                 disabled={isPending || disabled}
                 className={cn(
                   "h-1.5 rounded-full transition-all",
-                  i === currentIndex && !isAdding
+                  i === safeCurrentIndex && !isAdding
                     ? "w-4 bg-primary"
                     : "w-1.5 bg-muted-foreground/30 hover:bg-muted-foreground/50"
                 )}
@@ -561,6 +555,7 @@ function AlternativeViewCard({
       {alternative.imageUrl ? (
         <div className="relative aspect-[16/10] bg-muted">
           <img
+            key={alternative.id}
             src={alternative.imageUrl}
             alt={alternative.name}
             className="h-full w-full object-cover"

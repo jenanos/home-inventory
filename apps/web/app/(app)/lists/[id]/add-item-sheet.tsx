@@ -444,6 +444,7 @@ export function AddItemSheet({ listId, categories, members }: AddItemSheetProps)
             {currentAlt.imageUrl ? (
               <div className="relative aspect-[16/10] bg-muted">
                 <img
+                  key={currentAlt.tempId}
                   src={currentAlt.imageUrl}
                   alt={currentAlt.name}
                   className="h-full w-full object-cover"

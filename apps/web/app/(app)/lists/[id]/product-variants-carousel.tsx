@@ -90,6 +90,7 @@ export function ProductVariantsCarousel({
             {current.imageUrl ? (
               <div className="relative aspect-[16/10] bg-muted">
                 <img
+                  key={current.id}
                   src={current.imageUrl}
                   alt={current.name}
                   className="h-full w-full object-cover"
