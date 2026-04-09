@@ -25,11 +25,7 @@ import {
 } from "@workspace/ui/components/popover"
 import { Calendar } from "@workspace/ui/components/calendar"
 import { Separator } from "@workspace/ui/components/separator"
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@workspace/ui/components/collapsible"
+import { Badge } from "@workspace/ui/components/badge"
 import { cn } from "@workspace/ui/lib/utils"
 import {
   Loader2,
@@ -37,12 +33,14 @@ import {
   Trash2,
   Save,
   Plus,
-  ChevronDown,
-  ArrowUp,
-  ArrowDown,
+  ChevronLeft,
+  ChevronRight,
   ExternalLink,
   X,
   Star,
+  Check,
+  ImageIcon,
+  Store,
 } from "lucide-react"
 import { CategoryIcon } from "@/components/category-icon"
 import {
@@ -53,7 +51,6 @@ import {
   createAlternative,
   updateAlternative,
   deleteAlternative,
-  reorderAlternatives,
   setPreferredAlternative,
 } from "@/lib/actions/product-alternative"
 import type { ShoppingItemData, AlternativeData } from "./item-list"
@@ -87,9 +84,6 @@ export function EditItemDialog({
   const [priority, setPriority] = useState<Priority>("MEDIUM")
   const [phase, setPhase] = useState("")
   const [dueDate, setDueDate] = useState<Date | undefined>(undefined)
-  const [estimatedPrice, setEstimatedPrice] = useState("")
-  const [url, setUrl] = useState("")
-  const [storeName, setStoreName] = useState("")
   const [assignedToId, setAssignedToId] = useState("")
   const [status, setStatus] = useState<ItemStatus>("PENDING")
 
@@ -102,9 +96,6 @@ export function EditItemDialog({
       setPriority(item.priority)
       setPhase(item.phase ?? "none")
       setDueDate(item.dueDate ? new Date(item.dueDate) : undefined)
-      setEstimatedPrice(item.estimatedPrice != null ? String(item.estimatedPrice) : "")
-      setUrl(item.url ?? "")
-      setStoreName(item.storeName ?? "")
       setAssignedToId(item.assignedTo?.id ?? "none")
       setStatus(item.status)
       setError(null)
@@ -128,9 +119,6 @@ export function EditItemDialog({
           priority,
           phase: (phase && phase !== "none" ? phase : null) as Phase | null,
           dueDate: dueDate ?? null,
-          estimatedPrice: estimatedPrice ? Number(estimatedPrice) : null,
-          url: url.trim() || null,
-          storeName: storeName.trim() || null,
           assignedToId: assignedToId && assignedToId !== "none" ? assignedToId : null,
           status,
         })
@@ -158,13 +146,6 @@ export function EditItemDialog({
       }
     })
   }
-
-  const formatDateDisplay = (date: Date) =>
-    new Intl.DateTimeFormat("nb-NO", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    }).format(date)
 
   if (!item) return null
 
@@ -268,76 +249,35 @@ export function EditItemDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="grid gap-1.5">
-              <Label htmlFor="edit-price">Estimert pris</Label>
-              <Input
-                id="edit-price"
-                type="number"
-                min="0"
-                step="1"
-                value={estimatedPrice}
-                onChange={(e) => setEstimatedPrice(e.target.value)}
-                placeholder="Kr"
-                disabled={isPending}
-              />
-            </div>
-
-            <div className="grid gap-1.5">
-              <Label>Frist</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn(
-                      "w-full justify-start text-left font-normal",
-                      !dueDate && "text-muted-foreground"
-                    )}
-                  >
-                    <CalendarIcon className="h-4 w-4 mr-2" />
-                    {dueDate
-                      ? new Intl.DateTimeFormat("nb-NO", {
-                          day: "numeric",
-                          month: "short",
-                        }).format(dueDate)
-                      : "Velg..."}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={dueDate}
-                    onSelect={setDueDate}
-                    weekStartsOn={1}
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-          </div>
-
-          <Separator />
-
           <div className="grid gap-1.5">
-            <Label htmlFor="edit-store">Butikk</Label>
-            <Input
-              id="edit-store"
-              value={storeName}
-              onChange={(e) => setStoreName(e.target.value)}
-              placeholder="F.eks. IKEA"
-              disabled={isPending}
-            />
-          </div>
-
-          <div className="grid gap-1.5">
-            <Label htmlFor="edit-url">Lenke</Label>
-            <Input
-              id="edit-url"
-              type="url"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder="https://..."
-              disabled={isPending}
-            />
+            <Label>Frist</Label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={cn(
+                    "w-full justify-start text-left font-normal",
+                    !dueDate && "text-muted-foreground"
+                  )}
+                >
+                  <CalendarIcon className="h-4 w-4 mr-2" />
+                  {dueDate
+                    ? new Intl.DateTimeFormat("nb-NO", {
+                        day: "numeric",
+                        month: "short",
+                      }).format(dueDate)
+                    : "Velg..."}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={dueDate}
+                  onSelect={setDueDate}
+                  weekStartsOn={1}
+                />
+              </PopoverContent>
+            </Popover>
           </div>
 
           {members.length > 1 && (
@@ -361,7 +301,7 @@ export function EditItemDialog({
 
           <Separator />
 
-          <AlternativesSection
+          <AlternativesCarouselSection
             itemId={item.id}
             alternatives={item.alternatives}
             disabled={isPending}
@@ -425,7 +365,7 @@ export function EditItemDialog({
   )
 }
 
-// ─── Alternatives Section ────────────────────────────────────────
+// ─── Alternatives Carousel Section ────────────────────────────────
 
 const formatCurrency = (amount: number) =>
   new Intl.NumberFormat("nb-NO", {
@@ -434,7 +374,7 @@ const formatCurrency = (amount: number) =>
     maximumFractionDigits: 0,
   }).format(amount)
 
-function AlternativesSection({
+function AlternativesCarouselSection({
   itemId,
   alternatives,
   disabled,
@@ -443,340 +383,286 @@ function AlternativesSection({
   alternatives: AlternativeData[]
   disabled: boolean
 }) {
-  const [isOpen, setIsOpen] = useState(true)
-  const [showAddForm, setShowAddForm] = useState(false)
+  const [currentIndex, setCurrentIndex] = useState(0)
+  const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [isReordering, startReorder] = useTransition()
+  const [isPending, startTransition] = useTransition()
 
-  function handleMoveUp(index: number) {
-    if (index === 0) return
-    const ordered = alternatives.map((a) => a.id)
-    ;[ordered[index - 1], ordered[index]] = [ordered[index]!, ordered[index - 1]!]
-    startReorder(async () => {
-      await reorderAlternatives(itemId, ordered)
-    })
+  const total = alternatives.length
+  const safeCurrentIndex = total > 0 ? Math.min(currentIndex, total - 1) : 0
+
+  function goNext() {
+    setCurrentIndex((i) => (i + 1) % total)
   }
 
-  function handleMoveDown(index: number) {
-    if (index === alternatives.length - 1) return
-    const ordered = alternatives.map((a) => a.id)
-    ;[ordered[index], ordered[index + 1]] = [ordered[index + 1]!, ordered[index]!]
-    startReorder(async () => {
-      await reorderAlternatives(itemId, ordered)
-    })
+  function goPrev() {
+    setCurrentIndex((i) => (i - 1 + total) % total)
   }
 
   function handleSetPreferred(alternativeId: string) {
-    startReorder(async () => {
+    startTransition(async () => {
       await setPreferredAlternative(itemId, alternativeId)
+      setCurrentIndex(0)
     })
   }
 
+  function handleAddDone() {
+    setIsAdding(false)
+    // Navigate to the last existing alternative; the useEffect clamp
+    // ensures index stays valid during the revalidation transition.
+    setCurrentIndex(Math.max(total - 1, 0))
+  }
+
+  const current = total > 0 ? alternatives[safeCurrentIndex] : null
+  const isSelected = safeCurrentIndex === 0 && total > 0
+
   return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <CollapsibleTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          className="w-full justify-between px-0 font-medium"
-        >
-          <span className="flex items-center gap-2">
-            Produktalternativer
-            {alternatives.length > 0 && (
-              <span className="rounded-full bg-primary/10 text-primary px-2 py-0.5 text-xs font-medium">
-                {alternatives.length}
-              </span>
-            )}
-          </span>
-          <ChevronDown
-            className={cn(
-              "h-4 w-4 transition-transform",
-              isOpen && "rotate-180"
-            )}
-          />
-        </Button>
-      </CollapsibleTrigger>
-      <CollapsibleContent className="space-y-3">
-        {alternatives.length === 0 && !showAddForm && (
-          <p className="text-xs text-muted-foreground py-1">
-            Ingen produktalternativer enda. Legg til ulike produkter du vurderer, f.eks. ulike modeller av en vaskemaskin.
-          </p>
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium">Produktalternativer</span>
+          {total > 0 && (
+          <Badge variant="secondary" className="text-[10px]">
+              {safeCurrentIndex + 1} / {total}
+          </Badge>
         )}
+      </div>
 
-        {alternatives.map((alt, index) => {
-          const isPreferred = index === 0
-
-          return editingId === alt.id ? (
-            <AlternativeEditForm
-              key={alt.id}
-              alternative={alt}
-              onDone={() => setEditingId(null)}
-            />
-          ) : (
-            <div
-              key={alt.id}
-              className={cn(
-                "group rounded-lg border p-3 transition-colors",
-                isPreferred
-                  ? "border-primary/30 bg-primary/5 ring-1 ring-primary/20"
-                  : "bg-muted/30 hover:bg-muted/50"
-              )}
-            >
-              {/* Selected badge for top alternative */}
-              {isPreferred && (
-                <div className="flex items-center gap-1.5 mb-2">
-                  <Star className="h-3.5 w-3.5 fill-primary text-primary" />
-                  <span className="text-xs font-semibold text-primary">
-                    Valgt
-                  </span>
-                </div>
-              )}
-
-              <div className="flex items-start gap-2.5">
-                {/* Reorder controls */}
-                <div className="flex flex-col items-center gap-0.5 pt-0.5">
-                  <button
-                    type="button"
-                    onClick={() => handleMoveUp(index)}
-                    disabled={isPreferred || isReordering || disabled}
-                    className="text-muted-foreground hover:text-foreground disabled:opacity-30"
-                    aria-label="Flytt opp"
-                  >
-                    <ArrowUp className="h-3.5 w-3.5" />
-                  </button>
-                  <span className="text-[10px] font-medium text-muted-foreground">
-                    {index + 1}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => handleMoveDown(index)}
-                    disabled={index === alternatives.length - 1 || isReordering || disabled}
-                    className="text-muted-foreground hover:text-foreground disabled:opacity-30"
-                    aria-label="Flytt ned"
-                  >
-                    <ArrowDown className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-
-                {/* Image */}
-                {alt.imageUrl && (
-                  <img
-                    src={alt.imageUrl}
-                    alt={alt.name}
-                    className="h-12 w-12 rounded-md object-cover shrink-0"
-                    onError={(e) => { e.currentTarget.style.display = "none" }}
-                  />
-                )}
-
-                {/* Alternative details */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex flex-col min-w-0">
-                      <span className={cn(
-                        "text-sm font-medium truncate",
-                        isPreferred && "text-primary"
-                      )}>
-                        {alt.name}
-                      </span>
-                      {alt.storeName && (
-                        <span className="text-xs text-muted-foreground">
-                          {alt.storeName}
-                        </span>
-                      )}
-                    </div>
-                    {alt.price != null && alt.price > 0 && (
-                      <span className={cn(
-                        "text-sm font-semibold tabular-nums shrink-0",
-                        isPreferred && "text-primary"
-                      )}>
-                        {formatCurrency(alt.price)}
-                      </span>
-                    )}
-                  </div>
-
-                  {alt.notes && (
-                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                      {alt.notes}
-                    </p>
-                  )}
-
-                  {/* Action buttons row */}
-                  <div className="flex items-center gap-2 mt-2">
-                    {!isPreferred && (
-                      <button
-                        type="button"
-                        onClick={() => handleSetPreferred(alt.id)}
-                        disabled={isReordering || disabled}
-                        className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary transition-colors disabled:opacity-30"
-                      >
-                        <Star className="h-3 w-3" />
-                        Velg denne
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => setEditingId(alt.id)}
-                      className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      Rediger
-                    </button>
-                    {alt.url && (
-                      <a
-                        href={alt.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="flex items-center gap-1 text-[11px] text-primary hover:text-primary/80 transition-colors"
-                      >
-                        <ExternalLink className="h-3 w-3" />
-                        Lenke
-                      </a>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )
-        })}
-
-        {showAddForm ? (
-          <AlternativeAddForm
-            itemId={itemId}
-            onDone={() => setShowAddForm(false)}
-          />
-        ) : (
+      {/* Card area */}
+      {total === 0 && !isAdding ? (
+        <div className="rounded-lg border border-dashed bg-muted/30 p-6 text-center">
+          <p className="text-xs text-muted-foreground mb-3">
+            Ingen produktalternativer enda. Legg til ulike produkter du
+            vurderer.
+          </p>
           <Button
             type="button"
             variant="outline"
             size="sm"
-            className="w-full"
-            onClick={() => setShowAddForm(true)}
+            onClick={() => setIsAdding(true)}
             disabled={disabled}
           >
             <Plus className="h-3.5 w-3.5" data-icon="inline-start" />
             Legg til produktalternativ
           </Button>
-        )}
-      </CollapsibleContent>
-    </Collapsible>
+        </div>
+      ) : isAdding ? (
+        <AlternativeAddCard
+          itemId={itemId}
+          onDone={handleAddDone}
+          onCancel={() => setIsAdding(false)}
+        />
+      ) : editingId && current && editingId === current.id ? (
+        <AlternativeEditCard
+          alternative={current}
+          onDone={() => setEditingId(null)}
+        />
+      ) : current ? (
+        <AlternativeViewCard
+          alternative={current}
+          isSelected={isSelected}
+          onEdit={() => setEditingId(current.id)}
+          onSelect={() => handleSetPreferred(current.id)}
+          isPending={isPending || disabled}
+        />
+      ) : null}
+
+      {/* Navigation */}
+      {(total > 0 || isAdding) && (
+        <div className="flex items-center justify-between">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            onClick={goPrev}
+            disabled={isPending || disabled || total <= 1 || isAdding || !!editingId}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+
+          <div className="flex items-center gap-1.5">
+            {alternatives.map((alt, i) => (
+              <button
+                key={alt.id}
+                type="button"
+                onClick={() => {
+                  setCurrentIndex(i)
+                  setIsAdding(false)
+                  setEditingId(null)
+                }}
+                disabled={isPending || disabled}
+                className={cn(
+                  "h-1.5 rounded-full transition-all",
+                  i === safeCurrentIndex && !isAdding
+                    ? "w-4 bg-primary"
+                    : "w-1.5 bg-muted-foreground/30 hover:bg-muted-foreground/50"
+                )}
+                aria-label={`Vis alternativ ${i + 1}: ${alt.name}`}
+              />
+            ))}
+            {/* Add button as dot */}
+            <button
+              type="button"
+              onClick={() => {
+                setIsAdding(true)
+                setEditingId(null)
+              }}
+              disabled={isPending || disabled || isAdding}
+              className={cn(
+                "flex items-center justify-center rounded-full transition-all",
+                isAdding
+                  ? "h-4 w-4 bg-primary text-primary-foreground"
+                  : "h-3 w-3 bg-muted-foreground/20 hover:bg-muted-foreground/40"
+              )}
+              aria-label="Legg til nytt produktalternativ"
+            >
+              <Plus className="h-2 w-2" />
+            </button>
+          </div>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            onClick={goNext}
+            disabled={isPending || disabled || total <= 1 || isAdding || !!editingId}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
+    </div>
   )
 }
 
-function AlternativeAddForm({
-  itemId,
-  onDone,
+// ─── View Card ─────────────────────────────────────────────────
+
+function AlternativeViewCard({
+  alternative,
+  isSelected,
+  onEdit,
+  onSelect,
+  isPending,
 }: {
-  itemId: string
-  onDone: () => void
+  alternative: AlternativeData
+  isSelected: boolean
+  onEdit: () => void
+  onSelect: () => void
+  isPending: boolean
 }) {
-  const [isPending, startTransition] = useTransition()
-  const [name, setName] = useState("")
-  const [price, setPrice] = useState("")
-  const [url, setUrl] = useState("")
-  const [imageUrl, setImageUrl] = useState("")
-  const [storeName, setStoreName] = useState("")
-  const [notes, setNotes] = useState("")
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    e.stopPropagation()
-    startTransition(async () => {
-      await createAlternative({
-        itemId,
-        name: name.trim(),
-        price: price ? Number(price) : undefined,
-        url: url.trim() || undefined,
-        imageUrl: imageUrl.trim() || undefined,
-        storeName: storeName.trim() || undefined,
-        notes: notes.trim() || undefined,
-      })
-      onDone()
-    })
-  }
-
   return (
-    <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-medium">Nytt produktalternativ</span>
-        <button
-          type="button"
-          onClick={onDone}
-          className="text-muted-foreground hover:text-foreground"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
-      </div>
-      <div className="grid gap-2">
-        <Input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Produktnavn *"
-          className="h-8 text-sm"
-          autoFocus
-          disabled={isPending}
-        />
-        <div className="grid grid-cols-2 gap-2">
-          <Input
-            type="number"
-            min="0"
-            step="1"
-            value={price}
-            onChange={(e) => setPrice(e.target.value)}
-            placeholder="Pris (kr)"
-            className="h-8 text-sm"
-            disabled={isPending}
+    <div className="rounded-lg border bg-card overflow-hidden">
+      {/* Image area */}
+      {alternative.imageUrl ? (
+        <div className="relative aspect-[16/10] bg-muted">
+          <img
+            key={alternative.id}
+            src={alternative.imageUrl}
+            alt={alternative.name}
+            className="h-full w-full object-cover"
+            onError={(e) => {
+              e.currentTarget.style.display = "none"
+            }}
           />
-          <Input
-            value={storeName}
-            onChange={(e) => setStoreName(e.target.value)}
-            placeholder="Butikk"
-            className="h-8 text-sm"
-            disabled={isPending}
-          />
-        </div>
-        <Input
-          type="url"
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          placeholder="Lenke (https://...)"
-          className="h-8 text-sm"
-          disabled={isPending}
-        />
-        <Input
-          type="url"
-          value={imageUrl}
-          onChange={(e) => setImageUrl(e.target.value)}
-          placeholder="Bilde-URL (https://...)"
-          className="h-8 text-sm"
-          disabled={isPending}
-        />
-        <Input
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          placeholder="Notater"
-          className="h-8 text-sm"
-          disabled={isPending}
-        />
-        <Button
-          type="button"
-          size="sm"
-          onClick={handleSubmit}
-          disabled={isPending || !name.trim()}
-          className="w-full"
-        >
-          {isPending ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" data-icon="inline-start" />
-          ) : (
-            <Plus className="h-3.5 w-3.5" data-icon="inline-start" />
+          {isSelected && (
+            <div className="absolute top-2 right-2">
+              <Badge className="bg-primary text-primary-foreground text-[10px] gap-1">
+                <Check className="h-3 w-3" />
+                Valgt
+              </Badge>
+            </div>
           )}
-          Legg til
-        </Button>
+        </div>
+      ) : (
+        <div className="relative flex items-center justify-center aspect-[16/10] bg-muted/50">
+          <ImageIcon className="h-8 w-8 text-muted-foreground/30" />
+          {isSelected && (
+            <div className="absolute top-2 right-2">
+              <Badge className="bg-primary text-primary-foreground text-[10px] gap-1">
+                <Check className="h-3 w-3" />
+                Valgt
+              </Badge>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Info */}
+      <div className="p-3 space-y-2">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold truncate">{alternative.name}</p>
+            {alternative.storeName && (
+              <p className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
+                <Store className="h-3 w-3" />
+                {alternative.storeName}
+              </p>
+            )}
+          </div>
+          {alternative.price != null && alternative.price > 0 && (
+            <span className="text-sm font-bold tabular-nums shrink-0">
+              {formatCurrency(alternative.price)}
+            </span>
+          )}
+        </div>
+
+        {alternative.notes && (
+          <p className="text-xs text-muted-foreground line-clamp-2">
+            {alternative.notes}
+          </p>
+        )}
+
+        {/* Actions */}
+        <div className="flex items-center gap-2 pt-1">
+          {!isSelected && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs flex-1"
+              onClick={onSelect}
+              disabled={isPending}
+            >
+              <Star className="h-3 w-3" data-icon="inline-start" />
+              Velg denne
+            </Button>
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={onEdit}
+            disabled={isPending}
+          >
+            Rediger
+          </Button>
+          {alternative.url && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs"
+              asChild
+            >
+              <a
+                href={alternative.url}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <ExternalLink className="h-3 w-3" data-icon="inline-start" />
+                Lenke
+              </a>
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   )
 }
 
-function AlternativeEditForm({
+// ─── Edit Card ─────────────────────────────────────────────────
+
+function AlternativeEditCard({
   alternative,
   onDone,
 }: {
@@ -819,7 +705,7 @@ function AlternativeEditForm({
   }
 
   return (
-    <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+    <div className="rounded-lg border bg-card p-3 space-y-2">
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium">Rediger produktalternativ</span>
         <button
@@ -899,6 +785,15 @@ function AlternativeEditForm({
           <div className="flex-1" />
           <Button
             type="button"
+            variant="outline"
+            size="sm"
+            onClick={onDone}
+            disabled={isPending}
+          >
+            Avbryt
+          </Button>
+          <Button
+            type="button"
             size="sm"
             onClick={handleSave}
             disabled={isPending || !name.trim()}
@@ -909,6 +804,135 @@ function AlternativeEditForm({
               <Save className="h-3.5 w-3.5" data-icon="inline-start" />
             )}
             Lagre
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Add Card ──────────────────────────────────────────────────
+
+function AlternativeAddCard({
+  itemId,
+  onDone,
+  onCancel,
+}: {
+  itemId: string
+  onDone: () => void
+  onCancel: () => void
+}) {
+  const [isPending, startTransition] = useTransition()
+  const [name, setName] = useState("")
+  const [price, setPrice] = useState("")
+  const [url, setUrl] = useState("")
+  const [imageUrl, setImageUrl] = useState("")
+  const [storeName, setStoreName] = useState("")
+  const [notes, setNotes] = useState("")
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    startTransition(async () => {
+      await createAlternative({
+        itemId,
+        name: name.trim(),
+        price: price ? Number(price) : undefined,
+        url: url.trim() || undefined,
+        imageUrl: imageUrl.trim() || undefined,
+        storeName: storeName.trim() || undefined,
+        notes: notes.trim() || undefined,
+      })
+      onDone()
+    })
+  }
+
+  return (
+    <div className="rounded-lg border bg-card p-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium">Nytt produktalternativ</span>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="text-muted-foreground hover:text-foreground"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      <div className="grid gap-2">
+        <Input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Produktnavn *"
+          className="h-8 text-sm"
+          autoFocus
+          disabled={isPending}
+        />
+        <div className="grid grid-cols-2 gap-2">
+          <Input
+            type="number"
+            min="0"
+            step="1"
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+            placeholder="Pris (kr)"
+            className="h-8 text-sm"
+            disabled={isPending}
+          />
+          <Input
+            value={storeName}
+            onChange={(e) => setStoreName(e.target.value)}
+            placeholder="Butikk"
+            className="h-8 text-sm"
+            disabled={isPending}
+          />
+        </div>
+        <Input
+          type="url"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="Lenke (https://...)"
+          className="h-8 text-sm"
+          disabled={isPending}
+        />
+        <Input
+          type="url"
+          value={imageUrl}
+          onChange={(e) => setImageUrl(e.target.value)}
+          placeholder="Bilde-URL (https://...)"
+          className="h-8 text-sm"
+          disabled={isPending}
+        />
+        <Input
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Notater"
+          className="h-8 text-sm"
+          disabled={isPending}
+        />
+        <div className="flex items-center gap-2">
+          <div className="flex-1" />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onCancel}
+            disabled={isPending}
+          >
+            Avbryt
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            onClick={handleSubmit}
+            disabled={isPending || !name.trim()}
+          >
+            {isPending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" data-icon="inline-start" />
+            ) : (
+              <Plus className="h-3.5 w-3.5" data-icon="inline-start" />
+            )}
+            Legg til
           </Button>
         </div>
       </div>
