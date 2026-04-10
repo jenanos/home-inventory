@@ -520,7 +520,7 @@ export function BudgetView({ budget }: BudgetViewProps) {
                   className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
                 >
                   <div className="min-w-0 flex-1">
-                    <p className="flex flex-wrap items-center gap-x-2 gap-y-1 font-medium">
+                    <p className="flex items-center gap-x-2 gap-y-1 font-medium sm:flex-wrap">
                       {loan.loanName}
                       <span className="text-muted-foreground text-sm font-normal hidden sm:inline">
                         {loan.bankName}
