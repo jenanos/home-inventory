@@ -368,7 +368,7 @@ export function EditItemDialog({
   if (isDesktop) {
     return (
       <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent className="overflow-y-auto sm:max-w-lg">
+        <SheetContent className="sm:max-w-lg">
           <SheetHeader>
             <SheetTitle>Rediger ting</SheetTitle>
           </SheetHeader>
@@ -384,7 +384,7 @@ export function EditItemDialog({
         <DrawerHeader>
           <DrawerTitle>Rediger ting</DrawerTitle>
         </DrawerHeader>
-        <ScrollArea className="max-h-[70vh] overflow-y-auto">
+        <ScrollArea className="max-h-[70vh]">
           <div className="px-4 pb-6">{formContent}</div>
         </ScrollArea>
       </DrawerContent>

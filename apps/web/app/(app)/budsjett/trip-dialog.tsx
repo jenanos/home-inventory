@@ -263,7 +263,7 @@ export function TripDialog({ open, onOpenChange, trip }: TripDialogProps) {
         <DrawerHeader>
           <DrawerTitle>{title}</DrawerTitle>
         </DrawerHeader>
-        <ScrollArea className="max-h-[60vh] overflow-y-auto">
+        <ScrollArea className="max-h-[60vh]">
           <div className="px-4 pb-6">{formContent}</div>
         </ScrollArea>
       </DrawerContent>
