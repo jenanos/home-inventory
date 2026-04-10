@@ -13,6 +13,7 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "@workspace/ui/components/drawer"
+import { ScrollArea } from "@workspace/ui/components/scroll-area"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
@@ -111,7 +112,7 @@ export function EntryDialog({
   const title = entry ? "Rediger budsjettpost" : "Legg til budsjettpost"
 
   const formContent = (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+    <form onSubmit={handleSubmit} className="flex min-w-0 flex-col gap-4">
       <div className="flex flex-col gap-2">
         <Label htmlFor="entry-name">Navn</Label>
         <Input
@@ -170,15 +171,16 @@ export function EntryDialog({
           placeholder="F.eks. 2000"
         />
       </div>
-      <div className="flex gap-2 justify-end">
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
         <Button
           type="button"
           variant="outline"
           onClick={() => onOpenChange(false)}
+          className="w-full sm:w-auto"
         >
           Avbryt
         </Button>
-        <Button type="submit" disabled={isPending}>
+        <Button type="submit" disabled={isPending} className="w-full sm:w-auto">
           {entry ? "Lagre" : "Legg til"}
         </Button>
       </div>
@@ -204,7 +206,9 @@ export function EntryDialog({
         <DrawerHeader>
           <DrawerTitle>{title}</DrawerTitle>
         </DrawerHeader>
-        <div className="px-4 pb-6">{formContent}</div>
+        <ScrollArea className="max-h-[70vh] overflow-x-hidden">
+          <div className="min-w-0 px-4 pb-6">{formContent}</div>
+        </ScrollArea>
       </DrawerContent>
     </Drawer>
   )

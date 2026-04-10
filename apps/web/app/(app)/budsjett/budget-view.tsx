@@ -333,7 +333,7 @@ export function BudgetView({ budget }: BudgetViewProps) {
   return (
     <div className="flex flex-col gap-6 overflow-x-hidden">
       {/* Period toggle */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <Tabs
           value={period}
           onValueChange={(v) => setPeriod(v as "month" | "year")}
@@ -445,17 +445,17 @@ export function BudgetView({ budget }: BudgetViewProps) {
               return (
                 <div
                   key={member.id}
-                  className="flex items-center justify-between gap-2 sm:gap-4 py-3"
+                  className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
                 >
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium">{member.name}</p>
-                    <p className="text-muted-foreground text-xs sm:text-sm truncate">
+                    <p className="text-muted-foreground text-xs sm:text-sm break-words">
                       Brutto: {formatCurrency(member.grossMonthlyIncome * multiplier)}
                       {" · "}
                       Skatt: {member.taxPercent}%
                     </p>
                   </div>
-                  <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+                  <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-start sm:gap-2">
                     <div className="text-right">
                       <p className="font-medium tabular-nums text-sm sm:text-base">
                         {formatCurrency(netIncome * multiplier)}
@@ -517,19 +517,19 @@ export function BudgetView({ budget }: BudgetViewProps) {
               return (
                 <div
                   key={loan.id}
-                  className="flex items-center justify-between gap-2 sm:gap-4 py-3"
+                  className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
                 >
                   <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">
+                    <p className="flex items-center gap-x-2 gap-y-1 font-medium sm:flex-wrap">
                       {loan.loanName}
-                      <span className="text-muted-foreground ml-2 text-sm font-normal hidden sm:inline">
+                      <span className="text-muted-foreground text-sm font-normal hidden sm:inline">
                         {loan.bankName}
                       </span>
-                      <Badge variant="secondary" className="ml-2 text-xs hidden sm:inline-flex">
+                      <Badge variant="secondary" className="text-xs hidden sm:inline-flex">
                         {loan.loanType === "MORTGAGE" ? "Boliglån" : "Annet"}
                       </Badge>
                     </p>
-                    <p className="text-muted-foreground text-xs sm:text-sm flex flex-wrap gap-x-1">
+                    <p className="text-muted-foreground text-xs sm:text-sm flex flex-wrap gap-x-1 gap-y-1 break-words">
                       <span className="sm:hidden">{loan.bankName}</span>
                       <span className="hidden sm:inline">Renter: {formatCurrency(loan.monthlyInterest * multiplier)}</span>
                       <span className="hidden sm:inline">·</span>
@@ -542,7 +542,7 @@ export function BudgetView({ budget }: BudgetViewProps) {
                       )}
                     </p>
                   </div>
-                  <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+                  <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-start sm:gap-2">
                     <p className="font-medium tabular-nums text-sm sm:text-base">
                       {formatCurrency(totalMonthly * multiplier)}
                     </p>
@@ -571,17 +571,17 @@ export function BudgetView({ budget }: BudgetViewProps) {
             {/* Auto-calculated rentefradrag row */}
             {calculations.totalLoanInterest > 0 && (
               <>
-                <div className="bg-muted/50 flex items-center justify-between gap-2 sm:gap-4 py-3">
+                <div className="bg-muted/50 flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                   <div className="min-w-0 flex-1">
                     <p className="font-medium text-blue-700 dark:text-blue-400">
                       Rentefradrag
                     </p>
-                    <p className="text-muted-foreground text-xs sm:text-sm truncate">
+                    <p className="text-muted-foreground text-xs sm:text-sm break-words">
                       {budget.taxDeductionPercent}% av totale rentekostnader (
                       {formatCurrency(calculations.totalLoanInterest * 12)}/år)
                     </p>
                   </div>
-                  <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+                  <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-start sm:gap-2">
                     <div className="text-right">
                       <p className="font-medium tabular-nums text-blue-700 dark:text-blue-400 text-sm sm:text-base">
                         −{formatCurrency(calculations.monthlyTaxDeduction * multiplier)}
@@ -628,16 +628,16 @@ export function BudgetView({ budget }: BudgetViewProps) {
               const monthly = (trip.annualTrips * perTrip) / 12
 
               return (
-                <div key={trip.id} className="flex items-center justify-between gap-2 sm:gap-4 py-3">
+                <div key={trip.id} className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium">{trip.name}</p>
-                    <p className="text-muted-foreground text-xs sm:text-sm truncate">
+                    <p className="text-muted-foreground text-xs sm:text-sm break-words">
                       {trip.transportType === "AIR_OR_PUBLIC"
                         ? `Fly/offentlig · ${trip.annualTrips} reiser/år · Billett ${formatCurrency(perTrip)}/reise`
                         : `Bil · ${trip.annualTrips} reiser/år · Bom/ferge/drivstoff ${formatCurrency(perTrip)}/reise`}
                     </p>
                   </div>
-                  <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+                  <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-start sm:gap-2">
                     <p className="font-medium tabular-nums text-sm sm:text-base">{formatCurrency(monthly * multiplier)}</p>
                     <Button
                       variant="ghost"
@@ -810,13 +810,18 @@ function BudgetSection({
   return (
     <Card className="overflow-hidden">
       <CardHeader className="pb-3">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-hidden">
             {icon}
-            <CardTitle className="text-base truncate">{title}</CardTitle>
+            <CardTitle className="min-w-0 text-base truncate">{title}</CardTitle>
             <span className="shrink-0">{badge}</span>
           </div>
-          <Button variant="outline" size="sm" onClick={onAdd} className="shrink-0">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onAdd}
+            className="w-full shrink-0 sm:w-auto"
+          >
             <PlusCircle className="h-3.5 w-3.5 sm:mr-1.5" />
             <span className="hidden sm:inline">{addLabel}</span>
           </Button>
@@ -859,11 +864,11 @@ function EntryList({
       {entries.map((entry) => (
         <div
           key={entry.id}
-          className="flex items-center justify-between gap-2 sm:gap-4 py-3"
+          className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
         >
           <div className="min-w-0 flex-1">
             <p className="truncate font-medium">{entry.name}</p>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               {showCategory && entry.category && (
                 <Badge variant="secondary" className="text-xs">
                   {CATEGORY_LABELS[entry.category]}
@@ -885,7 +890,7 @@ function EntryList({
               )}
             </div>
           </div>
-          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+          <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-start sm:gap-2">
             <p
               className={`font-medium tabular-nums text-sm sm:text-base ${
                 entry.type === "INCOME"

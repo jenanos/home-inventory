@@ -137,7 +137,7 @@ export function TripDialog({ open, onOpenChange, trip }: TripDialogProps) {
   const title = trip ? "Rediger reise" : "Legg til reise"
 
   const formContent = (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+    <form onSubmit={handleSubmit} className="flex min-w-0 flex-col gap-4">
       <div className="flex flex-col gap-2">
         <Label htmlFor="trip-name">Navn på reise</Label>
         <Input
@@ -148,7 +148,7 @@ export function TripDialog({ open, onOpenChange, trip }: TripDialogProps) {
         />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid min-w-0 gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-2">
           <Label htmlFor="trip-type">Transport</Label>
           <Select
@@ -192,7 +192,7 @@ export function TripDialog({ open, onOpenChange, trip }: TripDialogProps) {
           />
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid min-w-0 gap-4 sm:grid-cols-2">
           <div className="flex flex-col gap-2">
             <Label htmlFor="trip-toll">Bom per reise (kr)</Label>
             <Input
@@ -233,11 +233,16 @@ export function TripDialog({ open, onOpenChange, trip }: TripDialogProps) {
         Månedlig kostnad fra årlig reiseforbruk: <span className="font-bold">{formatCurrency(monthlyPreview)}</span>
       </div>
 
-      <div className="flex gap-2 justify-end">
-        <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => onOpenChange(false)}
+          className="w-full sm:w-auto"
+        >
           Avbryt
         </Button>
-        <Button type="submit" disabled={isPending}>
+        <Button type="submit" disabled={isPending} className="w-full sm:w-auto">
           {trip ? "Lagre" : "Legg til"}
         </Button>
       </div>
@@ -263,8 +268,8 @@ export function TripDialog({ open, onOpenChange, trip }: TripDialogProps) {
         <DrawerHeader>
           <DrawerTitle>{title}</DrawerTitle>
         </DrawerHeader>
-        <ScrollArea className="max-h-[60vh]">
-          <div className="px-4 pb-6">{formContent}</div>
+        <ScrollArea className="max-h-[70vh] overflow-x-hidden">
+          <div className="min-w-0 px-4 pb-6">{formContent}</div>
         </ScrollArea>
       </DrawerContent>
     </Drawer>
