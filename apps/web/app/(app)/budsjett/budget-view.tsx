@@ -814,7 +814,7 @@ function BudgetSection({
           <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-hidden">
             {icon}
             <CardTitle className="min-w-0 text-base truncate">{title}</CardTitle>
-            <span className="max-w-full shrink-0">{badge}</span>
+            <span className="min-w-0">{badge}</span>
           </div>
           <Button
             variant="outline"
