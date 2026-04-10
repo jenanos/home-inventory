@@ -2,12 +2,17 @@
 
 import { useState, useTransition, useEffect } from "react"
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@workspace/ui/components/dialog"
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@workspace/ui/components/sheet"
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+} from "@workspace/ui/components/drawer"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
@@ -23,6 +28,7 @@ import { toast } from "sonner"
 import type { BudgetCategory, BudgetEntryType } from "@workspace/db"
 import type { BudgetEntryData } from "./budget-view"
 import { CATEGORY_LABELS } from "./budget-view"
+import { useMediaQuery } from "@/hooks/use-media-query"
 
 const ALL_CATEGORIES: BudgetCategory[] = [
   "ELECTRICITY",
@@ -56,6 +62,7 @@ export function EntryDialog({
   const [type, setType] = useState<BudgetEntryType>("EXPENSE")
   const [monthlyAmount, setMonthlyAmount] = useState("")
   const [isPending, startTransition] = useTransition()
+  const isDesktop = useMediaQuery("(min-width: 768px)")
 
   useEffect(() => {
     if (open) {
@@ -101,87 +108,104 @@ export function EntryDialog({
     })
   }
 
+  const title = entry ? "Rediger budsjettpost" : "Legg til budsjettpost"
+
+  const formContent = (
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="entry-name">Navn</Label>
+        <Input
+          id="entry-name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="F.eks. Strøm"
+        />
+      </div>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="entry-type">Type</Label>
+        <Select
+          value={type}
+          onValueChange={(v) => setType(v as BudgetEntryType)}
+        >
+          <SelectTrigger id="entry-type">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="EXPENSE">Kostnad</SelectItem>
+            <SelectItem value="INCOME">Inntekt</SelectItem>
+            <SelectItem value="DEDUCTION">Fradrag (negativ kostnad)</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="entry-category">Kategori (valgfri)</Label>
+        <Select
+          value={category}
+          onValueChange={(v) =>
+            setCategory(v as BudgetCategory | "none")
+          }
+        >
+          <SelectTrigger id="entry-category">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">Ingen (manuell post)</SelectItem>
+            {ALL_CATEGORIES.map((cat) => (
+              <SelectItem key={cat} value={cat}>
+                {CATEGORY_LABELS[cat]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="entry-amount">Beløp per måned (kr)</Label>
+        <Input
+          id="entry-amount"
+          type="number"
+          step="1"
+          min="0"
+          value={monthlyAmount}
+          onChange={(e) => setMonthlyAmount(e.target.value)}
+          placeholder="F.eks. 2000"
+        />
+      </div>
+      <div className="flex gap-2 justify-end">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => onOpenChange(false)}
+        >
+          Avbryt
+        </Button>
+        <Button type="submit" disabled={isPending}>
+          {entry ? "Lagre" : "Legg til"}
+        </Button>
+      </div>
+    </form>
+  )
+
+  if (isDesktop) {
+    return (
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>{title}</SheetTitle>
+          </SheetHeader>
+          {formContent}
+        </SheetContent>
+      </Sheet>
+    )
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>
-            {entry ? "Rediger budsjettpost" : "Legg til budsjettpost"}
-          </DialogTitle>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="entry-name">Navn</Label>
-            <Input
-              id="entry-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="F.eks. Strøm"
-            />
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="entry-type">Type</Label>
-            <Select
-              value={type}
-              onValueChange={(v) => setType(v as BudgetEntryType)}
-            >
-              <SelectTrigger id="entry-type">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="EXPENSE">Kostnad</SelectItem>
-                <SelectItem value="INCOME">Inntekt</SelectItem>
-                <SelectItem value="DEDUCTION">Fradrag (negativ kostnad)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="entry-category">Kategori (valgfri)</Label>
-            <Select
-              value={category}
-              onValueChange={(v) =>
-                setCategory(v as BudgetCategory | "none")
-              }
-            >
-              <SelectTrigger id="entry-category">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Ingen (manuell post)</SelectItem>
-                {ALL_CATEGORIES.map((cat) => (
-                  <SelectItem key={cat} value={cat}>
-                    {CATEGORY_LABELS[cat]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="entry-amount">Beløp per måned (kr)</Label>
-            <Input
-              id="entry-amount"
-              type="number"
-              step="1"
-              min="0"
-              value={monthlyAmount}
-              onChange={(e) => setMonthlyAmount(e.target.value)}
-              placeholder="F.eks. 2000"
-            />
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              Avbryt
-            </Button>
-            <Button type="submit" disabled={isPending}>
-              {entry ? "Lagre" : "Legg til"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+    <Drawer open={open} onOpenChange={onOpenChange}>
+      <DrawerContent>
+        <DrawerHeader>
+          <DrawerTitle>{title}</DrawerTitle>
+        </DrawerHeader>
+        <div className="px-4 pb-6">{formContent}</div>
+      </DrawerContent>
+    </Drawer>
   )
 }
