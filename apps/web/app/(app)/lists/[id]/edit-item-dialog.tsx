@@ -2,11 +2,17 @@
 
 import { useState, useEffect, useTransition } from "react"
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@workspace/ui/components/dialog"
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@workspace/ui/components/sheet"
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+} from "@workspace/ui/components/drawer"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
@@ -26,6 +32,7 @@ import {
 import { Calendar } from "@workspace/ui/components/calendar"
 import { Separator } from "@workspace/ui/components/separator"
 import { Badge } from "@workspace/ui/components/badge"
+import { ScrollArea } from "@workspace/ui/components/scroll-area"
 import { cn } from "@workspace/ui/lib/utils"
 import {
   Loader2,
@@ -55,6 +62,7 @@ import {
 } from "@/lib/actions/product-alternative"
 import type { ShoppingItemData, AlternativeData } from "./item-list"
 import type { Priority, Phase, ItemStatus } from "@workspace/db"
+import { useMediaQuery } from "@/hooks/use-media-query"
 
 interface EditItemDialogProps {
   item: ShoppingItemData | null
@@ -72,6 +80,7 @@ export function EditItemDialog({
   categories,
   members,
 }: EditItemDialogProps) {
+  const isDesktop = useMediaQuery("(min-width: 768px)")
   const [isPending, startTransition] = useTransition()
   const [isDeleting, startDeleting] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -149,13 +158,7 @@ export function EditItemDialog({
 
   if (!item) return null
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Rediger ting</DialogTitle>
-        </DialogHeader>
-
+  const formContent = (
         <form onSubmit={handleSave} className="grid gap-4">
           <div className="grid gap-1.5">
             <Label htmlFor="edit-name">Navn *</Label>
@@ -360,8 +363,32 @@ export function EditItemDialog({
             </Button>
           </div>
         </form>
-      </DialogContent>
-    </Dialog>
+  )
+
+  if (isDesktop) {
+    return (
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <SheetContent className="overflow-y-auto sm:max-w-lg">
+          <SheetHeader>
+            <SheetTitle>Rediger ting</SheetTitle>
+          </SheetHeader>
+          {formContent}
+        </SheetContent>
+      </Sheet>
+    )
+  }
+
+  return (
+    <Drawer open={open} onOpenChange={onOpenChange}>
+      <DrawerContent>
+        <DrawerHeader>
+          <DrawerTitle>Rediger ting</DrawerTitle>
+        </DrawerHeader>
+        <ScrollArea className="max-h-[70vh] overflow-y-auto">
+          <div className="px-4 pb-6">{formContent}</div>
+        </ScrollArea>
+      </DrawerContent>
+    </Drawer>
   )
 }
 

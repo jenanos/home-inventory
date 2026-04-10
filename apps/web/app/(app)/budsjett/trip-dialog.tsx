@@ -2,12 +2,17 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react"
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@workspace/ui/components/dialog"
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@workspace/ui/components/sheet"
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+} from "@workspace/ui/components/drawer"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
@@ -18,10 +23,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@workspace/ui/components/select"
+import { ScrollArea } from "@workspace/ui/components/scroll-area"
 import { toast } from "sonner"
 import type { TripTransportType } from "@workspace/db"
 import { upsertBudgetTrip } from "@/lib/actions/budget"
 import type { BudgetTripData } from "./budget-view"
+import { useMediaQuery } from "@/hooks/use-media-query"
 
 interface TripDialogProps {
   open: boolean
@@ -38,6 +45,7 @@ export function TripDialog({ open, onOpenChange, trip }: TripDialogProps) {
   const [ferryPerTrip, setFerryPerTrip] = useState("")
   const [fuelPerTrip, setFuelPerTrip] = useState("")
   const [isPending, startTransition] = useTransition()
+  const isDesktop = useMediaQuery("(min-width: 768px)")
 
   useEffect(() => {
     if (!open) return
@@ -126,119 +134,139 @@ export function TripDialog({ open, onOpenChange, trip }: TripDialogProps) {
       maximumFractionDigits: 0,
     }).format(amount)
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{trip ? "Rediger reise" : "Legg til reise"}</DialogTitle>
-        </DialogHeader>
+  const title = trip ? "Rediger reise" : "Legg til reise"
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+  const formContent = (
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="trip-name">Navn på reise</Label>
+        <Input
+          id="trip-name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="F.eks. Sommerferie til Vestlandet"
+        />
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="trip-type">Transport</Label>
+          <Select
+            value={transportType}
+            onValueChange={(v) => setTransportType(v as TripTransportType)}
+          >
+            <SelectTrigger id="trip-type">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="AIR_OR_PUBLIC">Fly / offentlig transport</SelectItem>
+              <SelectItem value="CAR">Bil</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="trip-annual">Antall reiser per år</Label>
+          <Input
+            id="trip-annual"
+            type="number"
+            min="1"
+            step="1"
+            value={annualTrips}
+            onChange={(e) => setAnnualTrips(e.target.value)}
+          />
+        </div>
+      </div>
+
+      {transportType === "AIR_OR_PUBLIC" ? (
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="trip-ticket">Billettkostnad per reise (kr)</Label>
+          <Input
+            id="trip-ticket"
+            type="number"
+            min="0"
+            step="1"
+            value={ticketPerTrip}
+            onChange={(e) => setTicketPerTrip(e.target.value)}
+            placeholder="F.eks. 3500"
+          />
+        </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2">
           <div className="flex flex-col gap-2">
-            <Label htmlFor="trip-name">Navn på reise</Label>
+            <Label htmlFor="trip-toll">Bom per reise (kr)</Label>
             <Input
-              id="trip-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="F.eks. Sommerferie til Vestlandet"
+              id="trip-toll"
+              type="number"
+              min="0"
+              step="1"
+              value={tollPerTrip}
+              onChange={(e) => setTollPerTrip(e.target.value)}
             />
           </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="trip-type">Transport</Label>
-              <Select
-                value={transportType}
-                onValueChange={(v) => setTransportType(v as TripTransportType)}
-              >
-                <SelectTrigger id="trip-type">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="AIR_OR_PUBLIC">Fly / offentlig transport</SelectItem>
-                  <SelectItem value="CAR">Bil</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="trip-annual">Antall reiser per år</Label>
-              <Input
-                id="trip-annual"
-                type="number"
-                min="1"
-                step="1"
-                value={annualTrips}
-                onChange={(e) => setAnnualTrips(e.target.value)}
-              />
-            </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="trip-ferry">Ferge per reise (kr)</Label>
+            <Input
+              id="trip-ferry"
+              type="number"
+              min="0"
+              step="1"
+              value={ferryPerTrip}
+              onChange={(e) => setFerryPerTrip(e.target.value)}
+            />
           </div>
-
-          {transportType === "AIR_OR_PUBLIC" ? (
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="trip-ticket">Billettkostnad per reise (kr)</Label>
-              <Input
-                id="trip-ticket"
-                type="number"
-                min="0"
-                step="1"
-                value={ticketPerTrip}
-                onChange={(e) => setTicketPerTrip(e.target.value)}
-                placeholder="F.eks. 3500"
-              />
-            </div>
-          ) : (
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="trip-toll">Bom per reise (kr)</Label>
-                <Input
-                  id="trip-toll"
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={tollPerTrip}
-                  onChange={(e) => setTollPerTrip(e.target.value)}
-                />
-              </div>
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="trip-ferry">Ferge per reise (kr)</Label>
-                <Input
-                  id="trip-ferry"
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={ferryPerTrip}
-                  onChange={(e) => setFerryPerTrip(e.target.value)}
-                />
-              </div>
-              <div className="flex flex-col gap-2 sm:col-span-2">
-                <Label htmlFor="trip-fuel">Lading / drivstoff per reise (kr)</Label>
-                <Input
-                  id="trip-fuel"
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={fuelPerTrip}
-                  onChange={(e) => setFuelPerTrip(e.target.value)}
-                />
-              </div>
-            </div>
-          )}
-
-          <div className="bg-muted rounded-md p-3 text-sm">
-            Månedlig kostnad fra årlig reiseforbruk: <span className="font-bold">{formatCurrency(monthlyPreview)}</span>
+          <div className="flex flex-col gap-2 sm:col-span-2">
+            <Label htmlFor="trip-fuel">Lading / drivstoff per reise (kr)</Label>
+            <Input
+              id="trip-fuel"
+              type="number"
+              min="0"
+              step="1"
+              value={fuelPerTrip}
+              onChange={(e) => setFuelPerTrip(e.target.value)}
+            />
           </div>
+        </div>
+      )}
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Avbryt
-            </Button>
-            <Button type="submit" disabled={isPending}>
-              {trip ? "Lagre" : "Legg til"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+      <div className="bg-muted rounded-md p-3 text-sm">
+        Månedlig kostnad fra årlig reiseforbruk: <span className="font-bold">{formatCurrency(monthlyPreview)}</span>
+      </div>
+
+      <div className="flex gap-2 justify-end">
+        <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          Avbryt
+        </Button>
+        <Button type="submit" disabled={isPending}>
+          {trip ? "Lagre" : "Legg til"}
+        </Button>
+      </div>
+    </form>
+  )
+
+  if (isDesktop) {
+    return (
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>{title}</SheetTitle>
+          </SheetHeader>
+          {formContent}
+        </SheetContent>
+      </Sheet>
+    )
+  }
+
+  return (
+    <Drawer open={open} onOpenChange={onOpenChange}>
+      <DrawerContent>
+        <DrawerHeader>
+          <DrawerTitle>{title}</DrawerTitle>
+        </DrawerHeader>
+        <ScrollArea className="max-h-[60vh] overflow-y-auto">
+          <div className="px-4 pb-6">{formContent}</div>
+        </ScrollArea>
+      </DrawerContent>
+    </Drawer>
   )
 }

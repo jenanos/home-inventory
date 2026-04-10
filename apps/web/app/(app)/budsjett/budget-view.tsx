@@ -331,7 +331,7 @@ export function BudgetView({ budget }: BudgetViewProps) {
   // ─── Render ───────────────────────────────────────────────
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 overflow-x-hidden">
       {/* Period toggle */}
       <div className="flex items-center justify-between">
         <Tabs
@@ -811,10 +811,10 @@ function BudgetSection({
     <Card className="overflow-hidden">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-2 min-w-0 overflow-hidden">
             {icon}
             <CardTitle className="text-base truncate">{title}</CardTitle>
-            {badge}
+            <span className="shrink-0">{badge}</span>
           </div>
           <Button variant="outline" size="sm" onClick={onAdd} className="shrink-0">
             <PlusCircle className="h-3.5 w-3.5 sm:mr-1.5" />

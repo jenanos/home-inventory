@@ -2,18 +2,24 @@
 
 import { useState, useTransition, useEffect } from "react"
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@workspace/ui/components/dialog"
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@workspace/ui/components/sheet"
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+} from "@workspace/ui/components/drawer"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
 import { upsertBudgetMember } from "@/lib/actions/budget"
 import { toast } from "sonner"
 import type { BudgetMemberData } from "./budget-view"
+import { useMediaQuery } from "@/hooks/use-media-query"
 
 interface MemberDialogProps {
   open: boolean
@@ -26,6 +32,7 @@ export function MemberDialog({ open, onOpenChange, member }: MemberDialogProps) 
   const [grossIncome, setGrossIncome] = useState("")
   const [taxPercent, setTaxPercent] = useState("")
   const [isPending, startTransition] = useTransition()
+  const isDesktop = useMediaQuery("(min-width: 768px)")
 
   useEffect(() => {
     if (open) {
@@ -79,73 +86,90 @@ export function MemberDialog({ open, onOpenChange, member }: MemberDialogProps) 
       maximumFractionDigits: 0,
     }).format(amount)
 
+  const title = member ? "Rediger medlem" : "Legg til medlem"
+
+  const formContent = (
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="member-name">Navn</Label>
+        <Input
+          id="member-name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="F.eks. Ola Nordmann"
+        />
+      </div>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="member-gross">Brutto månedsinntekt (kr)</Label>
+        <Input
+          id="member-gross"
+          type="number"
+          step="1"
+          min="0"
+          value={grossIncome}
+          onChange={(e) => setGrossIncome(e.target.value)}
+          placeholder="F.eks. 50000"
+        />
+      </div>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="member-tax">Skatteprosent (%)</Label>
+        <Input
+          id="member-tax"
+          type="number"
+          step="0.1"
+          min="0"
+          max="100"
+          value={taxPercent}
+          onChange={(e) => setTaxPercent(e.target.value)}
+          placeholder="F.eks. 33"
+        />
+      </div>
+      {netIncome !== null && (
+        <div className="bg-muted rounded-md p-3">
+          <p className="text-sm">
+            Beregnet netto månedsinntekt:{" "}
+            <span className="font-bold text-green-600 dark:text-green-400">
+              {formatPreview(netIncome)}
+            </span>
+          </p>
+        </div>
+      )}
+      <div className="flex gap-2 justify-end">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => onOpenChange(false)}
+        >
+          Avbryt
+        </Button>
+        <Button type="submit" disabled={isPending}>
+          {member ? "Lagre" : "Legg til"}
+        </Button>
+      </div>
+    </form>
+  )
+
+  if (isDesktop) {
+    return (
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>{title}</SheetTitle>
+          </SheetHeader>
+          {formContent}
+        </SheetContent>
+      </Sheet>
+    )
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>
-            {member ? "Rediger medlem" : "Legg til medlem"}
-          </DialogTitle>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="member-name">Navn</Label>
-            <Input
-              id="member-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="F.eks. Ola Nordmann"
-            />
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="member-gross">Brutto månedsinntekt (kr)</Label>
-            <Input
-              id="member-gross"
-              type="number"
-              step="1"
-              min="0"
-              value={grossIncome}
-              onChange={(e) => setGrossIncome(e.target.value)}
-              placeholder="F.eks. 50000"
-            />
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="member-tax">Skatteprosent (%)</Label>
-            <Input
-              id="member-tax"
-              type="number"
-              step="0.1"
-              min="0"
-              max="100"
-              value={taxPercent}
-              onChange={(e) => setTaxPercent(e.target.value)}
-              placeholder="F.eks. 33"
-            />
-          </div>
-          {netIncome !== null && (
-            <div className="bg-muted rounded-md p-3">
-              <p className="text-sm">
-                Beregnet netto månedsinntekt:{" "}
-                <span className="font-bold text-green-600 dark:text-green-400">
-                  {formatPreview(netIncome)}
-                </span>
-              </p>
-            </div>
-          )}
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              Avbryt
-            </Button>
-            <Button type="submit" disabled={isPending}>
-              {member ? "Lagre" : "Legg til"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+    <Drawer open={open} onOpenChange={onOpenChange}>
+      <DrawerContent>
+        <DrawerHeader>
+          <DrawerTitle>{title}</DrawerTitle>
+        </DrawerHeader>
+        <div className="px-4 pb-6">{formContent}</div>
+      </DrawerContent>
+    </Drawer>
   )
 }
