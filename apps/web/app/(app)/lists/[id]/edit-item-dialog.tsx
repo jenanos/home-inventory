@@ -368,7 +368,7 @@ export function EditItemDialog({
   if (isDesktop) {
     return (
       <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent className="sm:max-w-lg">
+        <SheetContent className="overflow-y-auto sm:max-w-lg">
           <SheetHeader>
             <SheetTitle>Rediger ting</SheetTitle>
           </SheetHeader>
