@@ -159,7 +159,7 @@ export function EditItemDialog({
   if (!item) return null
 
   const formContent = (
-        <form onSubmit={handleSave} className="grid gap-4">
+        <form onSubmit={handleSave} className="grid min-w-0 gap-4">
           <div className="grid gap-1.5">
             <Label htmlFor="edit-name">Navn *</Label>
             <Input
@@ -316,13 +316,14 @@ export function EditItemDialog({
             </p>
           )}
 
-          <div className="flex items-center gap-2 pt-2">
+          <div className="flex flex-col gap-2 pt-2 sm:flex-row sm:items-center">
             <Button
               type="button"
               variant="destructive"
               size="sm"
               onClick={handleDelete}
               disabled={isPending || isDeleting}
+              className="w-full sm:w-auto"
             >
               {isDeleting ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" data-icon="inline-start" />
@@ -332,7 +333,7 @@ export function EditItemDialog({
               {confirmDelete ? "Bekreft sletting" : "Slett"}
             </Button>
 
-            <div className="flex-1" />
+            <div className="hidden flex-1 sm:block" />
 
             <Button
               type="button"
@@ -340,6 +341,7 @@ export function EditItemDialog({
               size="sm"
               onClick={() => onOpenChange(false)}
               disabled={isPending}
+              className="w-full sm:w-auto"
             >
               Avbryt
             </Button>
@@ -348,6 +350,7 @@ export function EditItemDialog({
               type="submit"
               size="sm"
               disabled={isPending || !name.trim()}
+              className="w-full sm:w-auto"
             >
               {isPending ? (
                 <>
@@ -384,8 +387,8 @@ export function EditItemDialog({
         <DrawerHeader>
           <DrawerTitle>Rediger ting</DrawerTitle>
         </DrawerHeader>
-        <ScrollArea className="max-h-[70vh]">
-          <div className="px-4 pb-6">{formContent}</div>
+        <ScrollArea className="max-h-[70vh] overflow-x-hidden">
+          <div className="min-w-0 px-4 pb-6">{formContent}</div>
         </ScrollArea>
       </DrawerContent>
     </Drawer>
@@ -752,7 +755,7 @@ function AlternativeEditCard({
           autoFocus
           disabled={isPending}
         />
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <Input
             type="number"
             min="0"
@@ -794,13 +797,14 @@ function AlternativeEditCard({
           className="h-8 text-sm"
           disabled={isPending}
         />
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <Button
             type="button"
             variant="destructive"
             size="sm"
             onClick={handleDelete}
             disabled={isPending || isDeleting}
+            className="w-full sm:w-auto"
           >
             {isDeleting ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" data-icon="inline-start" />
@@ -809,13 +813,14 @@ function AlternativeEditCard({
             )}
             Slett
           </Button>
-          <div className="flex-1" />
+          <div className="hidden flex-1 sm:block" />
           <Button
             type="button"
             variant="outline"
             size="sm"
             onClick={onDone}
             disabled={isPending}
+            className="w-full sm:w-auto"
           >
             Avbryt
           </Button>
@@ -824,6 +829,7 @@ function AlternativeEditCard({
             size="sm"
             onClick={handleSave}
             disabled={isPending || !name.trim()}
+            className="w-full sm:w-auto"
           >
             {isPending ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" data-icon="inline-start" />
@@ -895,7 +901,7 @@ function AlternativeAddCard({
           autoFocus
           disabled={isPending}
         />
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <Input
             type="number"
             min="0"
@@ -937,14 +943,15 @@ function AlternativeAddCard({
           className="h-8 text-sm"
           disabled={isPending}
         />
-        <div className="flex items-center gap-2">
-          <div className="flex-1" />
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="hidden flex-1 sm:block" />
           <Button
             type="button"
             variant="outline"
             size="sm"
             onClick={onCancel}
             disabled={isPending}
+            className="w-full sm:w-auto"
           >
             Avbryt
           </Button>
@@ -953,6 +960,7 @@ function AlternativeAddCard({
             size="sm"
             onClick={handleSubmit}
             disabled={isPending || !name.trim()}
+            className="w-full sm:w-auto"
           >
             {isPending ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" data-icon="inline-start" />

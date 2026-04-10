@@ -50,14 +50,14 @@ function DrawerContent({
   return (
     <DrawerPortal>
       <DrawerOverlay />
-      <DrawerPrimitive.Content
-        data-slot="drawer-content"
-        className={cn(
-          "fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto max-h-[96vh] flex-col rounded-t-[10px] bg-popover text-popover-foreground",
-          className
-        )}
-        {...props}
-      >
+        <DrawerPrimitive.Content
+          data-slot="drawer-content"
+          className={cn(
+           "fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto max-h-[96vh] w-full min-w-0 max-w-full flex-col overflow-hidden rounded-t-[10px] bg-popover text-popover-foreground",
+           className
+         )}
+         {...props}
+       >
         <div className="mx-auto mt-4 h-2 w-[100px] shrink-0 rounded-full bg-muted" />
         {children}
       </DrawerPrimitive.Content>
