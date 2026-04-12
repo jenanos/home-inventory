@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, useTransition } from "react"
+import { useState, useEffect, useRef, useTransition, useCallback } from "react"
 import {
   Sheet,
   SheetContent,
@@ -77,6 +77,28 @@ interface EditItemDialogProps {
   listId: string
 }
 
+type ItemSavePayload = {
+  id: string
+  name: string
+  description: string | null
+  categoryId: string | null
+  priority: Priority
+  phase: Phase | null
+  dueDate: Date | null
+  assignedToId: string | null
+  status: ItemStatus
+}
+
+type AlternativeSavePayload = {
+  id: string
+  name: string
+  price: number | null
+  url: string | null
+  imageUrl: string | null
+  storeName: string | null
+  notes: string | null
+}
+
 export function EditItemDialog({
   item,
   open,
@@ -100,17 +122,7 @@ export function EditItemDialog({
   const [status, setStatus] = useState<ItemStatus>("PENDING")
 
   const itemDirty = useRef(false)
-  const itemSavePayloadRef = useRef<{
-    id: string
-    name: string
-    description: string | null
-    categoryId: string | null
-    priority: Priority
-    phase: Phase | null
-    dueDate: Date | null
-    assignedToId: string | null
-    status: ItemStatus
-  } | null>(null)
+  const itemSavePayloadRef = useRef<ItemSavePayload | null>(null)
 
   // Sync form when item changes
   useEffect(() => {
@@ -148,21 +160,21 @@ export function EditItemDialog({
     }
   }, [item, name, description, categoryId, priority, phase, dueDate, assignedToId, status])
 
-  function flushItemSave() {
+  const flushItemSave = useCallback(() => {
     const payload = itemSavePayloadRef.current
     if (!itemDirty.current || !payload?.name) return
 
     itemDirty.current = false
     void updateShoppingItem(payload).catch(() => {
-      setError("Noe gikk galt. Prov igjen.")
+      setError("Noe gikk galt. Prøv igjen.")
     })
-  }
+  }, [])
 
   useEffect(() => {
     return () => {
       flushItemSave()
     }
-  }, [])
+  }, [flushItemSave])
 
   // Auto-save item fields with debounce
   useEffect(() => {
@@ -180,7 +192,7 @@ export function EditItemDialog({
         assignedToId:
           assignedToId && assignedToId !== "none" ? assignedToId : null,
         status,
-      }).catch(() => setError("Noe gikk galt. Prov igjen."))
+      }).catch(() => setError("Noe gikk galt. Prøv igjen."))
     }, 600)
 
     return () => clearTimeout(timeout)
@@ -211,7 +223,7 @@ export function EditItemDialog({
         await deleteShoppingItem(item.id)
         onOpenChange(false)
       } catch {
-        setError("Kunne ikke slette. Prov igjen.")
+        setError("Kunne ikke slette. Prøv igjen.")
       }
     })
   }
@@ -446,15 +458,7 @@ function AlternativesCarouselSection({
   const [altNotes, setAltNotes] = useState("")
 
   const altDirty = useRef(false)
-  const altSavePayloadRef = useRef<{
-    id: string
-    name: string
-    price: number | null
-    url: string | null
-    imageUrl: string | null
-    storeName: string | null
-    notes: string | null
-  } | null>(null)
+  const altSavePayloadRef = useRef<AlternativeSavePayload | null>(null)
 
   const total = alternatives.length
   const safeCurrentIndex = total > 0 ? Math.min(currentIndex, total - 1) : 0
@@ -515,19 +519,19 @@ function AlternativesCarouselSection({
   }
 
   // Flush pending changes immediately (used before navigation)
-  function flushAltSave() {
+  const flushAltSave = useCallback(() => {
     const payload = altSavePayloadRef.current
     if (!altDirty.current || !payload?.name) return
 
     altDirty.current = false
     void updateAlternative(payload)
-  }
+  }, [])
 
   useEffect(() => {
     return () => {
       flushAltSave()
     }
-  }, [])
+  }, [flushAltSave])
 
   function goNext() {
     flushAltSave()
