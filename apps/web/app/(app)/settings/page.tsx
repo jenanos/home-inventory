@@ -1,4 +1,6 @@
-import { requireHousehold } from "@/lib/session"
+import Link from "next/link"
+import { Shield } from "lucide-react"
+import { requireHousehold, isCurrentUserAdmin } from "@/lib/session"
 import { db } from "@workspace/db"
 import {
   Card,
@@ -6,6 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
+import { Button } from "@workspace/ui/components/button"
 import { Separator } from "@workspace/ui/components/separator"
 import { ProfileForm } from "./profile-form"
 import { MembersSection } from "./members-section"
@@ -13,6 +16,7 @@ import { CategoriesSection } from "./categories-section"
 
 export default async function SettingsPage() {
   const { session, membership } = await requireHousehold()
+  const isAdmin = await isCurrentUserAdmin()
 
   const [user, members, categories] = await Promise.all([
     db.user.findUnique({ where: { id: session.user.id } }),
@@ -79,6 +83,22 @@ export default async function SettingsPage() {
           />
         </CardContent>
       </Card>
+
+      {isAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Administrasjon</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Button asChild variant="outline">
+              <Link href="/admin">
+                <Shield className="mr-2 h-4 w-4" />
+                Gå til adminpanel
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

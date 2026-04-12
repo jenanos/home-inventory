@@ -2,15 +2,14 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutDashboard, ShoppingCart, Settings, Wrench, Wallet, Shield } from "lucide-react"
+import { LayoutDashboard, ShoppingCart, Settings, Wrench, Wallet } from "lucide-react"
 import { cn } from "@workspace/ui/lib/utils"
 
 interface MobileNavProps {
   lists: { id: string; name: string }[]
-  isAdmin?: boolean
 }
 
-export function MobileNav({ lists, isAdmin }: MobileNavProps) {
+export function MobileNav({ lists }: MobileNavProps) {
   const pathname = usePathname()
 
   const items = [
@@ -23,9 +22,6 @@ export function MobileNav({ lists, isAdmin }: MobileNavProps) {
     { href: "/vedlikehold", label: "Vedlikehold", icon: Wrench },
     { href: "/budsjett", label: "Budsjett", icon: Wallet },
     { href: "/settings", label: "Innstillinger", icon: Settings },
-    ...(isAdmin
-      ? [{ href: "/admin", label: "Admin", icon: Shield }]
-      : []),
   ]
 
   return (
