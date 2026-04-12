@@ -278,24 +278,23 @@ function MobileItemCard({
         isMuted && "opacity-60"
       )}
     >
-      <div className="pt-0.5">
+      <div className="flex w-10 shrink-0 flex-col items-center gap-3 pt-0.5">
         <Checkbox
           checked={isPurchased}
           onCheckedChange={handleToggle}
           disabled={isPending}
           aria-label={`Merk ${item.name} som ${isPurchased ? "ikke kjopt" : "kjopt"}`}
         />
+        {/* Show selected alternative's image, or item's own image */}
+        {(selectedAltImage || item.imageUrl) && (
+          <img
+            src={selectedAltImage ?? item.imageUrl!}
+            alt={item.name}
+            className="h-10 w-10 rounded-md object-cover"
+            onError={(e) => { e.currentTarget.style.display = "none" }}
+          />
+        )}
       </div>
-
-      {/* Show selected alternative's image, or item's own image */}
-      {(selectedAltImage || item.imageUrl) && (
-        <img
-          src={selectedAltImage ?? item.imageUrl!}
-          alt={item.name}
-          className="h-10 w-10 rounded-md object-cover shrink-0"
-          onError={(e) => { e.currentTarget.style.display = "none" }}
-        />
-      )}
 
       <div
         className="flex-1 min-w-0 cursor-pointer"

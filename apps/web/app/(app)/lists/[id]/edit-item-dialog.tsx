@@ -13,6 +13,12 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "@workspace/ui/components/drawer"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@workspace/ui/components/dialog"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
@@ -375,6 +381,7 @@ function AlternativesCarouselSection({
   const [isAdding, setIsAdding] = useState(false)
   const [isPending, startTransition] = useTransition()
   const [isDeleting, startDeleting] = useTransition()
+  const [previewOpen, setPreviewOpen] = useState(false)
 
   // Form state for current alternative
   const [altName, setAltName] = useState("")
@@ -516,15 +523,22 @@ function AlternativesCarouselSection({
           {/* Image */}
           {altImageUrl ? (
             <div className="relative aspect-[3/1] bg-muted">
-              <img
-                key={current.id}
-                src={altImageUrl}
-                alt={altName}
-                className="h-full w-full object-cover"
-                onError={(e) => {
-                  e.currentTarget.style.display = "none"
-                }}
-              />
+              <button
+                type="button"
+                className="h-full w-full cursor-zoom-in"
+                onClick={() => setPreviewOpen(true)}
+                aria-label={`Åpne bilde for ${altName || "produktalternativ"}`}
+              >
+                <img
+                  key={current.id}
+                  src={altImageUrl}
+                  alt={altName}
+                  className="h-full w-full object-cover"
+                  onError={(e) => {
+                    e.currentTarget.style.display = "none"
+                  }}
+                />
+              </button>
               {isSelected && (
                 <div className="absolute top-2 right-2">
                   <Badge className="bg-primary text-primary-foreground text-[10px] gap-1">
@@ -737,7 +751,45 @@ function AlternativesCarouselSection({
           </Button>
         </div>
       )}
+
+      <ImagePreviewDialog
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+        imageUrl={altImageUrl}
+        alt={altName || "Produktbilde"}
+      />
     </div>
+  )
+}
+
+function ImagePreviewDialog({
+  open,
+  onOpenChange,
+  imageUrl,
+  alt,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  imageUrl: string | null
+  alt: string
+}) {
+  if (!imageUrl) return null
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-[calc(100vw-1rem)] sm:max-w-5xl p-2 sm:p-3">
+        <DialogHeader className="sr-only">
+          <DialogTitle>Produktbilde</DialogTitle>
+        </DialogHeader>
+        <div className="flex max-h-[85vh] items-center justify-center overflow-hidden rounded-lg bg-muted/30">
+          <img
+            src={imageUrl}
+            alt={alt}
+            className="max-h-[85vh] w-auto max-w-full object-contain"
+          />
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 
