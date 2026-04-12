@@ -1,13 +1,8 @@
 "use client"
 
+import Link from "next/link"
 import { useState, useTransition } from "react"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@workspace/ui/components/dialog"
+import { useRouter } from "next/navigation"
 import { Button } from "@workspace/ui/components/button"
 import { Textarea } from "@workspace/ui/components/textarea"
 import { Label } from "@workspace/ui/components/label"
@@ -15,7 +10,13 @@ import { Badge } from "@workspace/ui/components/badge"
 import { Separator } from "@workspace/ui/components/separator"
 import { ScrollArea } from "@workspace/ui/components/scroll-area"
 import {
-  BotMessageSquare,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@workspace/ui/components/card"
+import { cn } from "@workspace/ui/lib/utils"
+import {
   Copy,
   Check,
   Loader2,
@@ -24,6 +25,9 @@ import {
   ArrowLeft,
   AlertCircle,
   X,
+  BotMessageSquare,
+  Sparkles,
+  WandSparkles,
 } from "lucide-react"
 import {
   bulkCreateShoppingItems,
@@ -41,7 +45,7 @@ import {
   type FieldDiff,
 } from "@/components/duplicate-field-diff"
 
-interface LlmImportDialogProps {
+interface LlmImportPageClientProps {
   listId: string
   listName: string
   categories: Array<{ id: string; name: string; icon: string | null }>
@@ -69,7 +73,10 @@ interface ParsedItem {
   alternatives?: ParsedAlternative[]
 }
 
-function buildPrompt(listName: string, categories: Array<{ name: string; icon: string | null }>) {
+function buildPrompt(
+  listName: string,
+  categories: Array<{ name: string; icon: string | null }>
+) {
   const categoryNames = categories.map((c) => c.name).join(", ")
 
   return `Ta alle produktene du har researchet og tilpass dem til følgende JSON-format, slik at jeg kan importere dem direkte i innkjøpslisten min "${listName}".
@@ -143,8 +150,6 @@ Eksempel på forventet svar:
 }
 
 function cleanMarkdownUrl(value: string): string {
-  // Extract URL from markdown link syntax: [text](url)
-  // Uses greedy match for the URL to handle parentheses within URLs
   const match = value.match(/\[.*?\]\((.+)\)/)
   return match?.[1]?.trim() || value.trim()
 }
@@ -152,7 +157,6 @@ function cleanMarkdownUrl(value: string): string {
 function parseJsonInput(raw: string): { items: ParsedItem[]; error: string | null } {
   const trimmed = raw.trim()
 
-  // Try to extract JSON array from the input (LLMs sometimes wrap in markdown code blocks)
   let jsonStr = trimmed
   const codeBlockMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/)
   if (codeBlockMatch?.[1]) {
@@ -224,7 +228,6 @@ function parseJsonInput(raw: string): { items: ParsedItem[]; error: string | nul
         item.storeName = entry.storeName.trim()
       }
 
-      // Parse alternatives
       if (Array.isArray(entry.alternatives) && entry.alternatives.length > 0) {
         const alts: ParsedAlternative[] = []
         for (const altEntry of entry.alternatives) {
@@ -295,8 +298,6 @@ const formatPrice = (price: number) =>
     maximumFractionDigits: 0,
   }).format(price)
 
-// ─── Duplicate helpers ─────────────────────────────────────────
-
 type ItemDuplicate = DuplicateItem<ParsedItem>
 
 function buildItemDiffs(
@@ -304,17 +305,13 @@ function buildItemDiffs(
   existing: ExistingShoppingItem,
   categoryIdToName: Record<string, string>,
 ): FieldDiff[] {
-  // Resolve category name from existing categoryId
-  const existingCategoryName = existing.categoryId ? categoryIdToName[existing.categoryId] ?? null : null
+  const existingCategoryName = existing.categoryId
+    ? categoryIdToName[existing.categoryId] ?? null
+    : null
 
   return computeFieldDiffs([
     { key: "description", label: "Beskrivelse", existingValue: existing.description, newValue: imported.description },
-    {
-      key: "categoryName",
-      label: "Kategori",
-      existingValue: existingCategoryName,
-      newValue: imported.categoryName,
-    },
+    { key: "categoryName", label: "Kategori", existingValue: existingCategoryName, newValue: imported.categoryName },
     { key: "priority", label: "Prioritet", existingValue: existing.priority, newValue: imported.priority, format: (v) => priorityLabel[String(v)] ?? String(v) },
     { key: "phase", label: "Fase", existingValue: existing.phase, newValue: imported.phase, format: (v) => phaseLabel[String(v)] ?? String(v) },
     { key: "estimatedPrice", label: "Pris", existingValue: existing.estimatedPrice, newValue: imported.estimatedPrice, format: (v) => formatPrice(Number(v)) },
@@ -324,10 +321,18 @@ function buildItemDiffs(
   ])
 }
 
-// ─── Component ─────────────────────────────────────────────────
+const STEPS = [
+  { key: "prompt", label: "Prompt" },
+  { key: "paste", label: "JSON" },
+  { key: "preview", label: "Forhåndsvisning" },
+] as const
 
-export function LlmImportDialog({ listId, listName, categories }: LlmImportDialogProps) {
-  const [open, setOpen] = useState(false)
+export function LlmImportPageClient({
+  listId,
+  listName,
+  categories,
+}: LlmImportPageClientProps) {
+  const router = useRouter()
   const [step, setStep] = useState<"prompt" | "paste" | "preview">("prompt")
   const [copied, setCopied] = useState(false)
   const [jsonInput, setJsonInput] = useState("")
@@ -335,8 +340,6 @@ export function LlmImportDialog({ listId, listName, categories }: LlmImportDialo
   const [parseError, setParseError] = useState<string | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
-
-  // Duplicate state
   const [newItems, setNewItems] = useState<ParsedItem[]>([])
   const [duplicates, setDuplicates] = useState<ItemDuplicate[]>([])
   const [selectedFields, setSelectedFields] = useState<Map<string, Set<string>>>(new Map())
@@ -351,6 +354,10 @@ export function LlmImportDialog({ listId, listName, categories }: LlmImportDialo
     categoryIdToName[cat.id] = cat.name
   }
 
+  const updateCount = duplicates.filter(
+    (d) => (selectedFields.get(d.existingId)?.size ?? 0) > 0
+  ).length
+
   function handleCopyPrompt() {
     navigator.clipboard.writeText(prompt)
     setCopied(true)
@@ -361,50 +368,51 @@ export function LlmImportDialog({ listId, listName, categories }: LlmImportDialo
     const { items, error } = parseJsonInput(jsonInput)
     setParsedItems(items)
     setParseError(error)
-    if (items.length > 0) {
-      // Check for duplicates
-      setIsCheckingDuplicates(true)
-      try {
-        const names = items.map((it) => it.name)
-        const existing = await findExistingShoppingItems(listId, names)
 
-        const existingByName = new Map<string, ExistingShoppingItem>()
-        for (const e of existing) {
-          existingByName.set(e.name.toLowerCase(), e)
-        }
+    if (items.length === 0) return
 
-        const fresh: ParsedItem[] = []
-        const dupes: ItemDuplicate[] = []
-        const fieldSelections = new Map<string, Set<string>>()
+    setIsCheckingDuplicates(true)
+    try {
+      const names = items.map((it) => it.name)
+      const existing = await findExistingShoppingItems(listId, names)
 
-        for (const item of items) {
-          const match = existingByName.get(item.name.toLowerCase())
-          if (match) {
-            const diffs = buildItemDiffs(item, match, categoryIdToName)
-            dupes.push({
-              importedItem: item,
-              existingId: match.id,
-              existingLabel: match.name,
-              diffs,
-            })
-            fieldSelections.set(match.id, new Set(diffs.map((d) => d.key)))
-          } else {
-            fresh.push(item)
-          }
-        }
-
-        setNewItems(fresh)
-        setDuplicates(dupes)
-        setSelectedFields(fieldSelections)
-      } catch {
-        setNewItems(items)
-        setDuplicates([])
-        setSelectedFields(new Map())
-      } finally {
-        setIsCheckingDuplicates(false)
+      const existingByName = new Map<string, ExistingShoppingItem>()
+      for (const entry of existing) {
+        existingByName.set(entry.name.toLowerCase(), entry)
       }
-      setStep("preview")
+
+      const fresh: ParsedItem[] = []
+      const dupes: ItemDuplicate[] = []
+      const fieldSelections = new Map<string, Set<string>>()
+
+      for (const item of items) {
+        const match = existingByName.get(item.name.toLowerCase())
+        if (match) {
+          const diffs = buildItemDiffs(item, match, categoryIdToName)
+          dupes.push({
+            importedItem: item,
+            existingId: match.id,
+            existingLabel: match.name,
+            diffs,
+          })
+          fieldSelections.set(match.id, new Set(diffs.map((d) => d.key)))
+        } else {
+          fresh.push(item)
+        }
+      }
+
+      setNewItems(fresh)
+      setDuplicates(dupes)
+      setSelectedFields(fieldSelections)
+    } catch {
+      setNewItems(items)
+      setDuplicates([])
+      setSelectedFields(new Map())
+    } finally {
+      setIsCheckingDuplicates(false)
     }
+
+    setStep("preview")
   }
 
   function handleToggleField(existingId: string, field: string) {
@@ -477,9 +485,9 @@ export function LlmImportDialog({ listId, listName, categories }: LlmImportDialo
         }
 
         const totalImported = newItems.length + (hasDuplicateUpdates ? updateCount : 0)
-        handleReset()
         toast.success(`${totalImported} ${totalImported === 1 ? "produkt" : "produkter"} importert/oppdatert`)
-        setOpen(false)
+        router.push(`/lists/${listId}`)
+        router.refresh()
       } catch (err) {
         console.error("LLM import failed:", err)
         setImportError("Noe gikk galt under importen. Prøv igjen.")
@@ -491,65 +499,84 @@ export function LlmImportDialog({ listId, listName, categories }: LlmImportDialo
     setNewItems((prev) => prev.filter((_, i) => i !== index))
   }
 
-  const updateCount = duplicates.filter(
-    (d) => (selectedFields.get(d.existingId)?.size ?? 0) > 0
-  ).length
-
-  function handleReset() {
-    setStep("prompt")
-    setCopied(false)
-    setJsonInput("")
-    setParsedItems([])
-    setParseError(null)
-    setImportError(null)
-    setNewItems([])
-    setDuplicates([])
-    setSelectedFields(new Map())
-  }
-
-  function handleOpenChange(v: boolean) {
-    setOpen(v)
-    if (!v) handleReset()
-  }
-
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
-          <BotMessageSquare className="h-4 w-4" data-icon="inline-start" />
-          LLM-import
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
-        <DialogHeader>
-          <DialogTitle>
-            {step === "prompt" && "Kopier prompt til LLM"}
-            {step === "paste" && "Lim inn JSON fra LLM"}
-            {step === "preview" && "Forhåndsvisning"}
-          </DialogTitle>
-        </DialogHeader>
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
+      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="space-y-3">
+          <Button variant="ghost" size="sm" asChild className="w-fit">
+            <Link href={`/lists/${listId}`}>
+              <ArrowLeft className="h-4 w-4" data-icon="inline-start" />
+              Tilbake til listen
+            </Link>
+          </Button>
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <BotMessageSquare className="h-4 w-4" />
+              <span className="text-sm">LLM-import</span>
+            </div>
+            <div>
+              <h1 className="font-heading text-2xl font-medium sm:text-3xl">
+                Importer produkter til {listName}
+              </h1>
+              <p className="mt-1 max-w-3xl text-sm text-muted-foreground sm:text-base">
+                Lim inn JSON fra en LLM, gå gjennom duplikater og importer med mye bedre plass enn i en modal.
+              </p>
+            </div>
+          </div>
+        </div>
 
-        {step === "prompt" && (
-          <div className="flex flex-col gap-4 flex-1 min-h-0 overflow-hidden">
-            <p className="text-sm text-muted-foreground shrink-0">
-              Kopier prompten under og lim den inn i din favoritt-LLM (ChatGPT, Claude, osv.).
-              LLM-en vil formatere produktene dine som JSON som du kan importere tilbake hit.
-            </p>
+        <div className="flex flex-wrap gap-2">
+          {STEPS.map((entry, index) => {
+            const isActive = entry.key === step
+            const isDone =
+              (step === "paste" && entry.key === "prompt") ||
+              (step === "preview" &&
+                (entry.key === "prompt" || entry.key === "paste"))
 
-            <div className="relative overflow-hidden rounded-lg border bg-muted/50">
-              <ScrollArea className="max-h-64 p-3">
-                <pre className="whitespace-pre-wrap text-xs leading-relaxed font-mono">
+            return (
+              <div
+                key={entry.key}
+                className={cn(
+                  "flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm",
+                  isActive && "border-primary bg-primary/10 text-foreground",
+                  isDone && "border-emerald-500/40 bg-emerald-500/10 text-foreground",
+                  !isActive && !isDone && "text-muted-foreground"
+                )}
+              >
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-background text-xs ring-1 ring-foreground/10">
+                  {isDone ? <Check className="h-3 w-3" /> : index + 1}
+                </span>
+                <span>{entry.label}</span>
+              </div>
+            )
+          })}
+        </div>
+      </header>
+
+      {step === "prompt" && (
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,22rem)]">
+          <section className="space-y-4">
+            <div className="space-y-2 border-b pb-3">
+              <h2 className="font-heading text-xl font-medium">Kopier prompt til LLM</h2>
+              <p className="max-w-3xl text-sm text-muted-foreground sm:text-base">
+                Bruk prompten under i ChatGPT, Claude eller annen LLM. Be modellen svare kun med JSON.
+              </p>
+            </div>
+
+            <div className="overflow-hidden rounded-lg border bg-muted/30">
+              <ScrollArea className="h-[32rem] px-3 py-3 sm:px-4 sm:py-4">
+                <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed sm:text-[13px]">
                   {prompt}
                 </pre>
               </ScrollArea>
             </div>
 
-            <div className="flex items-center gap-2">
-              <Button onClick={handleCopyPrompt} className="flex-1">
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={handleCopyPrompt}>
                 {copied ? (
                   <>
                     <Check className="h-4 w-4" data-icon="inline-start" />
-                    Kopiert!
+                    Kopiert
                   </>
                 ) : (
                   <>
@@ -560,20 +587,46 @@ export function LlmImportDialog({ listId, listName, categories }: LlmImportDialo
               </Button>
               <Button variant="outline" onClick={() => setStep("paste")}>
                 Neste
-                <ArrowRight className="h-4 w-4 ml-1" />
+                <ArrowRight className="ml-1 h-4 w-4" />
               </Button>
             </div>
-          </div>
-        )}
+          </section>
 
-        {step === "paste" && (
-          <div className="flex flex-col gap-4 flex-1 min-h-0 overflow-hidden">
-            <p className="text-sm text-muted-foreground shrink-0">
-              Lim inn JSON-svaret du fikk fra LLM-en.
-            </p>
+          <aside className="space-y-3 xl:pt-[3.25rem]">
+            <div className="rounded-lg border bg-muted/20 px-3 py-3">
+              <div className="flex items-start gap-3 text-sm text-muted-foreground">
+                <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                <p>Kategorien bør matche en eksisterende kategori nøyaktig for at importen skal plassere produktet riktig.</p>
+              </div>
+            </div>
+            <div className="rounded-lg border bg-muted/20 px-3 py-3">
+              <div className="flex items-start gap-3 text-sm text-muted-foreground">
+                <WandSparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                <p>Hvis et produkt finnes fra før, får du velge hvilke felt som skal oppdateres før noe skrives til listen.</p>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Tilgjengelige kategorier</p>
+              <div className="flex flex-wrap gap-2">
+                {categories.map((category) => (
+                  <Badge key={category.id} variant="secondary" className="text-xs">
+                    {category.name}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          </aside>
+        </div>
+      )}
 
-            <div className="flex flex-col gap-1.5 flex-1 min-h-0">
-              <Label htmlFor="llm-json-input" className="shrink-0">JSON fra LLM</Label>
+      {step === "paste" && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Lim inn JSON-svaret</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="llm-json-input">JSON fra LLM</Label>
               <Textarea
                 id="llm-json-input"
                 value={jsonInput}
@@ -582,27 +635,26 @@ export function LlmImportDialog({ listId, listName, categories }: LlmImportDialo
                   setParseError(null)
                 }}
                 placeholder={'[\n  {\n    "name": "Produktnavn",\n    ...\n  }\n]'}
-                rows={10}
-                className="font-mono text-xs flex-1 min-h-32 resize-y"
+                rows={18}
+                className="min-h-[28rem] resize-y font-mono text-xs"
               />
             </div>
 
             {parseError && parsedItems.length === 0 && (
               <div className="flex items-start gap-2 rounded-lg border border-destructive/50 bg-destructive/5 p-3">
-                <AlertCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
-                <p className="text-sm text-destructive whitespace-pre-line">{parseError}</p>
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                <p className="whitespace-pre-line text-sm text-destructive">{parseError}</p>
               </div>
             )}
 
-            <div className="flex items-center gap-2 shrink-0 flex-wrap">
+            <div className="flex flex-wrap gap-2">
               <Button variant="outline" onClick={() => setStep("prompt")}>
-                <ArrowLeft className="h-4 w-4 mr-1" />
+                <ArrowLeft className="h-4 w-4" data-icon="inline-start" />
                 Tilbake
               </Button>
               <Button
                 onClick={handleParse}
                 disabled={!jsonInput.trim() || isCheckingDuplicates}
-                className="flex-1"
               >
                 {isCheckingDuplicates ? (
                   <>
@@ -617,184 +669,241 @@ export function LlmImportDialog({ listId, listName, categories }: LlmImportDialo
                 )}
               </Button>
             </div>
-          </div>
-        )}
+          </CardContent>
+        </Card>
+      )}
 
-        {step === "preview" && (
-          <div className="flex flex-col gap-4 flex-1 min-h-0 overflow-hidden">
-            <div className="flex items-center gap-2 shrink-0 flex-wrap">
-              {duplicates.length > 0 ? (
-                <DuplicateSummary
-                  newCount={newItems.length}
-                  duplicateCount={duplicates.length}
-                  updateCount={updateCount}
-                />
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  {parsedItems.length} {parsedItems.length === 1 ? "produkt" : "produkter"} klare for import.
-                </p>
-              )}
-              {parseError && (
-                <Badge variant="secondary" className="text-xs">
-                  {parseError}
-                </Badge>
-              )}
+      {step === "preview" && (
+        <>
+          <section className="space-y-2 border-b pb-4">
+            <h2 className="font-heading text-xl font-medium">Forhåndsvisning</h2>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-wrap items-center gap-2">
+                {duplicates.length > 0 ? (
+                  <DuplicateSummary
+                    newCount={newItems.length}
+                    duplicateCount={duplicates.length}
+                    updateCount={updateCount}
+                  />
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    {parsedItems.length} {parsedItems.length === 1 ? "produkt" : "produkter"} klare for import.
+                  </p>
+                )}
+                {parseError && (
+                  <Badge variant="secondary" className="text-xs">
+                    {parseError}
+                  </Badge>
+                )}
+              </div>
+              <p className="max-w-2xl text-sm text-muted-foreground">
+                Gå gjennom nye produkter og velg hvilke duplikatfelt som skal oppdateres.
+              </p>
             </div>
+          </section>
 
-            <ScrollArea className="flex-1 min-h-0 rounded-lg border">
-              <div className="divide-y pb-3">
-                {/* Duplicates first */}
-                {duplicates.map((dup) => (
-                  <div key={dup.existingId} className="p-3">
+          <div
+            className={cn(
+              "grid gap-6",
+              duplicates.length > 0 &&
+                newItems.length > 0 &&
+                "xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
+            )}
+          >
+            {duplicates.length > 0 && (
+              <section className="space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="font-heading text-lg font-medium">Duplikater</h3>
+                  <span className="text-sm text-muted-foreground">
+                    {duplicates.length} {duplicates.length === 1 ? "treff" : "treff"}
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {duplicates.map((dup) => (
                     <DuplicateFieldDiffCard
+                      key={dup.existingId}
                       label={dup.existingLabel}
                       diffs={dup.diffs}
                       selectedFields={selectedFields.get(dup.existingId) ?? new Set()}
                       onToggleField={(field) => handleToggleField(dup.existingId, field)}
                     />
-                  </div>
-                ))}
-
-                {/* New items */}
-                {newItems.map((item, i) => (
-                  <div key={`new-${i}`} className="flex items-start gap-3 p-3">
-                    {item.imageUrl && (
-                      <img
-                        src={item.imageUrl}
-                        alt={item.name}
-                        className="h-12 w-12 rounded-md object-cover shrink-0"
-                        onError={(e) => { e.currentTarget.style.display = "none" }}
-                      />
-                    )}
-                    <div className="flex flex-col gap-1 min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="min-w-0 flex-1 font-medium text-sm break-words">{item.name}</span>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          {item.estimatedPrice != null && (
-                            <span className="text-sm tabular-nums text-muted-foreground">
-                              {formatPrice(item.estimatedPrice)}
-                            </span>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6"
-                            onClick={() => handleRemoveItem(i)}
-                          >
-                            <X className="h-3.5 w-3.5" />
-                            <span className="sr-only">Fjern {item.name}</span>
-                          </Button>
-                        </div>
-                      </div>
-                      {item.description && (
-                        <p className="text-xs text-muted-foreground">{item.description}</p>
-                      )}
-                      <div className="flex flex-wrap gap-1.5 mt-0.5">
-                        {item.categoryName && (
-                          <Badge variant="outline" className="text-xs">
-                            {item.categoryName}
-                          </Badge>
-                        )}
-                        {item.priority && (
-                          <Badge variant="secondary" className="text-xs">
-                            {priorityLabel[item.priority] ?? item.priority}
-                          </Badge>
-                        )}
-                        {item.phase && (
-                          <Badge variant="secondary" className="text-xs">
-                            {phaseLabel[item.phase] ?? item.phase}
-                          </Badge>
-                        )}
-                        {item.storeName && (
-                          <Badge variant="outline" className="text-xs">
-                            {item.storeName}
-                          </Badge>
-                        )}
-                        {item.alternatives && item.alternatives.length > 0 && (
-                          <Badge variant="secondary" className="text-xs">
-                            {item.alternatives.length} {item.alternatives.length === 1 ? "alternativ" : "alternativer"}
-                          </Badge>
-                        )}
-                      </div>
-                      {item.alternatives && item.alternatives.length > 0 && (
-                        <div className="mt-1.5 space-y-1 pl-2 border-l-2 border-muted">
-                          {item.alternatives.map((alt, j) => (
-                            <div key={j} className="flex items-center gap-2">
-                              {alt.imageUrl && (
-                                <img
-                                  src={alt.imageUrl}
-                                  alt={alt.name}
-                                  className="h-7 w-7 rounded object-cover shrink-0"
-                                  onError={(e) => { e.currentTarget.style.display = "none" }}
-                                />
-                              )}
-                              <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                                <span className="text-xs text-muted-foreground font-medium shrink-0">
-                                  {j + 1}.
-                                </span>
-                                <span className="text-xs truncate">{alt.name}</span>
-                                {alt.storeName && (
-                                  <span className="text-[10px] text-muted-foreground shrink-0">
-                                    ({alt.storeName})
-                                  </span>
-                                )}
-                              </div>
-                              {alt.price != null && (
-                                <span className="text-xs tabular-nums text-muted-foreground shrink-0">
-                                  {formatPrice(alt.price)}
-                                </span>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </ScrollArea>
-
-            <div className="shrink-0 space-y-4 bg-background relative z-10">
-              <Separator />
-
-              {importError && (
-                <div className="flex items-start gap-2 rounded-lg border border-destructive/50 bg-destructive/5 p-3">
-                  <AlertCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
-                  <p className="text-sm text-destructive">{importError}</p>
+                  ))}
                 </div>
-              )}
+              </section>
+            )}
 
-              <div className="flex items-center gap-2">
-                <Button variant="outline" onClick={() => setStep("paste")}>
-                  <ArrowLeft className="h-4 w-4 mr-1" />
-                  Tilbake
-                </Button>
-                <Button
-                  onClick={handleImport}
-                  disabled={isPending || (newItems.length === 0 && updateCount === 0)}
-                  className="flex-1"
-                >
-                  {isPending ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" data-icon="inline-start" />
-                      Importerer...
-                    </>
-                  ) : (
-                    <>
-                      {newItems.length > 0 && updateCount > 0
-                        ? `Importer ${newItems.length} nye + oppdater ${updateCount}`
-                        : newItems.length > 0
-                          ? `Importer ${newItems.length} ${newItems.length === 1 ? "produkt" : "produkter"}`
-                          : `Oppdater ${updateCount} ${updateCount === 1 ? "produkt" : "produkter"}`
-                      }
-                    </>
-                  )}
-                </Button>
-              </div>
+            {newItems.length > 0 && (
+              <section className="space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="font-heading text-lg font-medium">Nye produkter</h3>
+                  <span className="text-sm text-muted-foreground">
+                    {newItems.length} {newItems.length === 1 ? "produkt" : "produkter"}
+                  </span>
+                </div>
+                <div className="grid gap-3 lg:grid-cols-2">
+                  {newItems.map((item, index) => (
+                    <ImportItemPreviewCard
+                      key={`new-${index}`}
+                      item={item}
+                      onRemove={() => handleRemoveItem(index)}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+          </div>
+
+          {importError && (
+            <div className="flex items-start gap-2 rounded-lg border border-destructive/50 bg-destructive/5 p-3">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+              <p className="text-sm text-destructive">{importError}</p>
+            </div>
+          )}
+
+          <div className="sticky bottom-0 z-10 -mx-4 border-t bg-background/95 px-4 py-4 backdrop-blur sm:-mx-6 sm:px-6">
+            <div className="mx-auto flex max-w-7xl flex-wrap gap-2">
+              <Button variant="outline" onClick={() => setStep("paste")}>
+                <ArrowLeft className="h-4 w-4" data-icon="inline-start" />
+                Tilbake
+              </Button>
+              <Button variant="ghost" asChild>
+                <Link href={`/lists/${listId}`}>Avbryt</Link>
+              </Button>
+              <div className="flex-1" />
+              <Button
+                onClick={handleImport}
+                disabled={isPending || (newItems.length === 0 && updateCount === 0)}
+              >
+                {isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" data-icon="inline-start" />
+                    Importerer...
+                  </>
+                ) : newItems.length > 0 && updateCount > 0 ? (
+                  `Importer ${newItems.length} nye + oppdater ${updateCount}`
+                ) : newItems.length > 0 ? (
+                  `Importer ${newItems.length} ${newItems.length === 1 ? "produkt" : "produkter"}`
+                ) : (
+                  `Oppdater ${updateCount} ${updateCount === 1 ? "produkt" : "produkter"}`
+                )}
+              </Button>
             </div>
           </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function ImportItemPreviewCard({
+  item,
+  onRemove,
+}: {
+  item: ParsedItem
+  onRemove: () => void
+}) {
+  return (
+    <div className="flex h-full items-start gap-3 rounded-lg border bg-card p-3 ring-1 ring-foreground/5">
+      {item.imageUrl && (
+        <img
+          src={item.imageUrl}
+          alt={item.name}
+          className="h-14 w-14 shrink-0 rounded-md object-cover"
+          onError={(e) => {
+            e.currentTarget.style.display = "none"
+          }}
+        />
+      )}
+
+      <div className="flex min-w-0 flex-1 flex-col gap-2">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="break-words font-medium">{item.name}</p>
+            {item.description && (
+              <p className="mt-1 text-sm text-muted-foreground">{item.description}</p>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {item.estimatedPrice != null && (
+              <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
+                {formatPrice(item.estimatedPrice)}
+              </span>
+            )}
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={onRemove}
+            >
+              <X className="h-3.5 w-3.5" />
+              <span className="sr-only">Fjern {item.name}</span>
+            </Button>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-1.5">
+          {item.categoryName && (
+            <Badge variant="outline" className="text-xs">
+              {item.categoryName}
+            </Badge>
+          )}
+          {item.priority && (
+            <Badge variant="secondary" className="text-xs">
+              {priorityLabel[item.priority] ?? item.priority}
+            </Badge>
+          )}
+          {item.phase && (
+            <Badge variant="secondary" className="text-xs">
+              {phaseLabel[item.phase] ?? item.phase}
+            </Badge>
+          )}
+          {item.storeName && (
+            <Badge variant="outline" className="text-xs">
+              {item.storeName}
+            </Badge>
+          )}
+          {item.alternatives && item.alternatives.length > 0 && (
+            <Badge variant="secondary" className="text-xs">
+              {item.alternatives.length} {item.alternatives.length === 1 ? "alternativ" : "alternativer"}
+            </Badge>
+          )}
+        </div>
+
+        {item.alternatives && item.alternatives.length > 0 && (
+          <>
+            <Separator />
+            <div className="space-y-2">
+              {item.alternatives.map((alt, index) => (
+                <div key={`${item.name}-${index}`} className="flex items-start gap-2">
+                  {alt.imageUrl && (
+                    <img
+                      src={alt.imageUrl}
+                      alt={alt.name}
+                      className="mt-0.5 h-8 w-8 shrink-0 rounded object-cover"
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none"
+                      }}
+                    />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span className="text-xs text-muted-foreground">{index + 1}.</span>
+                      <span className="min-w-0 break-words text-sm">{alt.name}</span>
+                      {alt.storeName && (
+                        <span className="text-xs text-muted-foreground">{alt.storeName}</span>
+                      )}
+                    </div>
+                    {alt.price != null && (
+                      <span className="text-xs tabular-nums text-muted-foreground">
+                        {formatPrice(alt.price)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
-      </DialogContent>
-    </Dialog>
+      </div>
+    </div>
   )
 }
