@@ -46,7 +46,7 @@ export default async function AppLayout({
         <main className="flex-1 pb-20 md:pb-0">
           <div className="mx-auto max-w-5xl p-4 md:p-8">{children}</div>
         </main>
-        <MobileNav lists={lists} />
+        <MobileNav />
       </div>
       <Toaster />
     </SidebarProvider>

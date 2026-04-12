@@ -5,20 +5,12 @@ import { usePathname } from "next/navigation"
 import { LayoutDashboard, ShoppingCart, Settings, Wrench, Wallet } from "lucide-react"
 import { cn } from "@workspace/ui/lib/utils"
 
-interface MobileNavProps {
-  lists: { id: string; name: string }[]
-}
-
-export function MobileNav({ lists }: MobileNavProps) {
+export function MobileNav() {
   const pathname = usePathname()
 
   const items = [
     { href: "/", label: "Oversikt", icon: LayoutDashboard },
-    {
-      href: lists[0] ? `/lists/${lists[0].id}` : "/",
-      label: "Innkjøp",
-      icon: ShoppingCart,
-    },
+    { href: "/lists", label: "Innkjøp", icon: ShoppingCart },
     { href: "/vedlikehold", label: "Vedlikehold", icon: Wrench },
     { href: "/budsjett", label: "Budsjett", icon: Wallet },
     { href: "/settings", label: "Innstillinger", icon: Settings },
