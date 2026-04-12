@@ -26,7 +26,6 @@ import {
 import { CategoryIcon } from "@/components/category-icon"
 import { toggleItemPurchased } from "@/lib/actions/shopping-item"
 import { EditItemDialog } from "./edit-item-dialog"
-import { ProductVariantsCarousel } from "./product-variants-carousel"
 
 const formatCurrency = (amount: number) =>
   new Intl.NumberFormat("nb-NO", {
@@ -391,20 +390,10 @@ function MobileItemCard({
           )}
 
           {item.alternatives.length > 0 && (
-            <ProductVariantsCarousel
-              itemId={item.id}
-              itemName={item.name}
-              alternatives={item.alternatives}
-            >
-              <button
-                type="button"
-                onClick={(e) => e.stopPropagation()}
-                className="flex items-center gap-1 text-[10px] font-medium text-primary hover:text-primary/80 transition-colors"
-              >
-                <Layers className="h-2.5 w-2.5" />
-                Produktvalg ({item.alternatives.length})
-              </button>
-            </ProductVariantsCarousel>
+            <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
+              <Layers className="h-2.5 w-2.5" />
+              Produktvalg ({item.alternatives.length})
+            </span>
           )}
         </div>
       </div>
@@ -533,19 +522,10 @@ function DesktopItemRow({
             <span className="text-muted-foreground">—</span>
           )}
           {item.alternatives.length > 0 && (
-            <ProductVariantsCarousel
-              itemId={item.id}
-              itemName={item.name}
-              alternatives={item.alternatives}
-            >
-              <button
-                type="button"
-                className="flex items-center gap-1 text-[10px] font-medium text-primary hover:text-primary/80 transition-colors mt-0.5 w-fit"
-              >
-                <Layers className="h-2.5 w-2.5" />
-                Produktvalg ({item.alternatives.length})
-              </button>
-            </ProductVariantsCarousel>
+            <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground mt-0.5">
+              <Layers className="h-2.5 w-2.5" />
+              Produktvalg ({item.alternatives.length})
+            </span>
           )}
         </div>
       </TableCell>

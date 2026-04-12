@@ -160,6 +160,14 @@ export function EditItemDialog({
 
   const formContent = (
         <form onSubmit={handleSave} className="grid min-w-0 gap-4">
+          <AlternativesCarouselSection
+            itemId={item.id}
+            alternatives={item.alternatives}
+            disabled={isPending}
+          />
+
+          <Separator />
+
           <div className="grid gap-1.5">
             <Label htmlFor="edit-name">Navn *</Label>
             <Input
@@ -302,14 +310,6 @@ export function EditItemDialog({
             </div>
           )}
 
-          <Separator />
-
-          <AlternativesCarouselSection
-            itemId={item.id}
-            alternatives={item.alternatives}
-            disabled={isPending}
-          />
-
           {error && (
             <p className="text-sm text-destructive" role="alert">
               {error}
@@ -372,7 +372,7 @@ export function EditItemDialog({
     return (
       <Sheet open={open} onOpenChange={onOpenChange}>
         <SheetContent className="overflow-y-auto sm:max-w-lg">
-          <SheetHeader>
+          <SheetHeader className="sr-only">
             <SheetTitle>Rediger ting</SheetTitle>
           </SheetHeader>
           {formContent}
@@ -384,7 +384,7 @@ export function EditItemDialog({
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
       <DrawerContent>
-        <DrawerHeader>
+        <DrawerHeader className="sr-only">
           <DrawerTitle>Rediger ting</DrawerTitle>
         </DrawerHeader>
         <ScrollArea className="max-h-[70vh] overflow-x-hidden">
