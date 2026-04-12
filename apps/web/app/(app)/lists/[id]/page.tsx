@@ -180,15 +180,15 @@ export default async function ListPage({ params }: ListPageProps) {
               .map(([name, data]) => (
                 <div
                   key={name}
-                  className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2"
+                  className="flex items-center justify-between gap-2 rounded-lg bg-muted/50 px-3 py-2"
                 >
-                  <div className="flex items-center gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
                     {data.icon && (
-                      <CategoryIcon name={data.icon} className="h-4 w-4" />
+                      <CategoryIcon name={data.icon} className="h-4 w-4 shrink-0" />
                     )}
-                    <span className="text-sm font-medium">{name}</span>
-                    <span className="text-xs text-muted-foreground">
-                      ({data.count} {data.count === 1 ? "ting" : "ting"})
+                    <span className="truncate text-sm font-medium">{name}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      ({data.count})
                     </span>
                   </div>
                   <span className="text-sm font-medium tabular-nums">

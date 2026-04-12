@@ -348,7 +348,7 @@ export function EditItemDialog({
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent>
+      <DrawerContent className="overflow-hidden">
         <DrawerHeader className="sr-only">
           <DrawerTitle>Rediger ting</DrawerTitle>
         </DrawerHeader>
