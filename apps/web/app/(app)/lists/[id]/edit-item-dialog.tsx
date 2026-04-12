@@ -100,6 +100,17 @@ export function EditItemDialog({
   const [status, setStatus] = useState<ItemStatus>("PENDING")
 
   const itemDirty = useRef(false)
+  const itemSavePayloadRef = useRef<{
+    id: string
+    name: string
+    description: string | null
+    categoryId: string | null
+    priority: Priority
+    phase: Phase | null
+    dueDate: Date | null
+    assignedToId: string | null
+    status: ItemStatus
+  } | null>(null)
 
   // Sync form when item changes
   useEffect(() => {
@@ -117,6 +128,41 @@ export function EditItemDialog({
       itemDirty.current = false
     }
   }, [item])
+
+  useEffect(() => {
+    if (!item) {
+      itemSavePayloadRef.current = null
+      return
+    }
+
+    itemSavePayloadRef.current = {
+      id: item.id,
+      name: name.trim(),
+      description: description.trim() || null,
+      categoryId: categoryId && categoryId !== "none" ? categoryId : null,
+      priority,
+      phase: (phase && phase !== "none" ? phase : null) as Phase | null,
+      dueDate: dueDate ?? null,
+      assignedToId: assignedToId && assignedToId !== "none" ? assignedToId : null,
+      status,
+    }
+  }, [item, name, description, categoryId, priority, phase, dueDate, assignedToId, status])
+
+  function flushItemSave() {
+    const payload = itemSavePayloadRef.current
+    if (!itemDirty.current || !payload?.name) return
+
+    itemDirty.current = false
+    void updateShoppingItem(payload).catch(() => {
+      setError("Noe gikk galt. Prov igjen.")
+    })
+  }
+
+  useEffect(() => {
+    return () => {
+      flushItemSave()
+    }
+  }, [])
 
   // Auto-save item fields with debounce
   useEffect(() => {
@@ -142,6 +188,14 @@ export function EditItemDialog({
 
   function markItemDirty() {
     itemDirty.current = true
+  }
+
+  function handleOpenChange(nextOpen: boolean) {
+    if (!nextOpen) {
+      flushItemSave()
+    }
+
+    onOpenChange(nextOpen)
   }
 
   function handleDelete() {
@@ -341,7 +395,7 @@ export function EditItemDialog({
 
   if (isDesktop) {
     return (
-      <Sheet open={open} onOpenChange={onOpenChange}>
+      <Sheet open={open} onOpenChange={handleOpenChange}>
         <SheetContent className="overflow-y-auto sm:max-w-lg">
           <SheetHeader className="sr-only">
             <SheetTitle>Rediger ting</SheetTitle>
@@ -353,7 +407,7 @@ export function EditItemDialog({
   }
 
   return (
-    <Drawer open={open} onOpenChange={onOpenChange}>
+    <Drawer open={open} onOpenChange={handleOpenChange}>
       <DrawerContent className="overflow-hidden">
         <DrawerHeader className="sr-only">
           <DrawerTitle>Rediger ting</DrawerTitle>
@@ -392,6 +446,15 @@ function AlternativesCarouselSection({
   const [altNotes, setAltNotes] = useState("")
 
   const altDirty = useRef(false)
+  const altSavePayloadRef = useRef<{
+    id: string
+    name: string
+    price: number | null
+    url: string | null
+    imageUrl: string | null
+    storeName: string | null
+    notes: string | null
+  } | null>(null)
 
   const total = alternatives.length
   const safeCurrentIndex = total > 0 ? Math.min(currentIndex, total - 1) : 0
@@ -410,6 +473,23 @@ function AlternativesCarouselSection({
       altDirty.current = false
     }
   }, [current?.id])
+
+  useEffect(() => {
+    if (!current) {
+      altSavePayloadRef.current = null
+      return
+    }
+
+    altSavePayloadRef.current = {
+      id: current.id,
+      name: altName.trim(),
+      price: altPrice ? Number(altPrice) : null,
+      url: altUrl.trim() || null,
+      imageUrl: altImageUrl.trim() || null,
+      storeName: altStoreName.trim() || null,
+      notes: altNotes.trim() || null,
+    }
+  }, [current, altName, altPrice, altUrl, altImageUrl, altStoreName, altNotes])
 
   // Auto-save alternative fields with debounce
   useEffect(() => {
@@ -436,18 +516,18 @@ function AlternativesCarouselSection({
 
   // Flush pending changes immediately (used before navigation)
   function flushAltSave() {
-    if (!altDirty.current || !current || !altName.trim()) return
+    const payload = altSavePayloadRef.current
+    if (!altDirty.current || !payload?.name) return
+
     altDirty.current = false
-    updateAlternative({
-      id: current.id,
-      name: altName.trim(),
-      price: altPrice ? Number(altPrice) : null,
-      url: altUrl.trim() || null,
-      imageUrl: altImageUrl.trim() || null,
-      storeName: altStoreName.trim() || null,
-      notes: altNotes.trim() || null,
-    })
+    void updateAlternative(payload)
   }
+
+  useEffect(() => {
+    return () => {
+      flushAltSave()
+    }
+  }, [])
 
   function goNext() {
     flushAltSave()
