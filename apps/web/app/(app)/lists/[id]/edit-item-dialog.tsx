@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useTransition } from "react"
+import { useState, useEffect, useRef, useTransition } from "react"
 import {
   Sheet,
   SheetContent,
@@ -38,7 +38,6 @@ import {
   Loader2,
   CalendarIcon,
   Trash2,
-  Save,
   Plus,
   ChevronLeft,
   ChevronRight,
@@ -47,7 +46,6 @@ import {
   Star,
   Check,
   ImageIcon,
-  Store,
 } from "lucide-react"
 import { CategoryIcon } from "@/components/category-icon"
 import {
@@ -81,7 +79,6 @@ export function EditItemDialog({
   members,
 }: EditItemDialogProps) {
   const isDesktop = useMediaQuery("(min-width: 768px)")
-  const [isPending, startTransition] = useTransition()
   const [isDeleting, startDeleting] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -96,6 +93,8 @@ export function EditItemDialog({
   const [assignedToId, setAssignedToId] = useState("")
   const [status, setStatus] = useState<ItemStatus>("PENDING")
 
+  const itemDirty = useRef(false)
+
   // Sync form when item changes
   useEffect(() => {
     if (item) {
@@ -109,33 +108,34 @@ export function EditItemDialog({
       setStatus(item.status)
       setError(null)
       setConfirmDelete(false)
+      itemDirty.current = false
     }
   }, [item])
 
-  function handleSave(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    if (!item) return
+  // Auto-save item fields with debounce
+  useEffect(() => {
+    if (!itemDirty.current || !item || !name.trim()) return
 
-    setError(null)
+    const timeout = setTimeout(() => {
+      updateShoppingItem({
+        id: item.id,
+        name: name.trim(),
+        description: description.trim() || null,
+        categoryId: categoryId && categoryId !== "none" ? categoryId : null,
+        priority,
+        phase: (phase && phase !== "none" ? phase : null) as Phase | null,
+        dueDate: dueDate ?? null,
+        assignedToId:
+          assignedToId && assignedToId !== "none" ? assignedToId : null,
+        status,
+      }).catch(() => setError("Noe gikk galt. Prov igjen."))
+    }, 600)
 
-    startTransition(async () => {
-      try {
-        await updateShoppingItem({
-          id: item.id,
-          name: name.trim(),
-          description: description.trim() || null,
-          categoryId: categoryId && categoryId !== "none" ? categoryId : null,
-          priority,
-          phase: (phase && phase !== "none" ? phase : null) as Phase | null,
-          dueDate: dueDate ?? null,
-          assignedToId: assignedToId && assignedToId !== "none" ? assignedToId : null,
-          status,
-        })
-        onOpenChange(false)
-      } catch {
-        setError("Noe gikk galt. Prov igjen.")
-      }
-    })
+    return () => clearTimeout(timeout)
+  }, [name, description, categoryId, priority, phase, dueDate, assignedToId, status])
+
+  function markItemDirty() {
+    itemDirty.current = true
   }
 
   function handleDelete() {
@@ -159,11 +159,11 @@ export function EditItemDialog({
   if (!item) return null
 
   const formContent = (
-        <form onSubmit={handleSave} className="grid min-w-0 gap-4">
+        <div className="grid min-w-0 gap-4">
           <AlternativesCarouselSection
             itemId={item.id}
             alternatives={item.alternatives}
-            disabled={isPending}
+            disabled={false}
           />
 
           <Separator />
@@ -173,9 +173,7 @@ export function EditItemDialog({
             <Input
               id="edit-name"
               value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              disabled={isPending}
+              onChange={(e) => { setName(e.target.value); markItemDirty() }}
             />
           </div>
 
@@ -184,8 +182,7 @@ export function EditItemDialog({
             <Textarea
               id="edit-description"
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              disabled={isPending}
+              onChange={(e) => { setDescription(e.target.value); markItemDirty() }}
               rows={2}
             />
           </div>
@@ -195,7 +192,7 @@ export function EditItemDialog({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="grid gap-1.5">
               <Label>Kategori</Label>
-              <Select value={categoryId} onValueChange={setCategoryId}>
+              <Select value={categoryId} onValueChange={(v) => { setCategoryId(v); markItemDirty() }}>
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Velg..." />
                 </SelectTrigger>
@@ -215,7 +212,7 @@ export function EditItemDialog({
 
             <div className="grid gap-1.5">
               <Label>Prioritet</Label>
-              <Select value={priority} onValueChange={(v) => setPriority(v as Priority)}>
+              <Select value={priority} onValueChange={(v) => { setPriority(v as Priority); markItemDirty() }}>
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -231,7 +228,7 @@ export function EditItemDialog({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="grid gap-1.5">
               <Label>Fase</Label>
-              <Select value={phase} onValueChange={setPhase}>
+              <Select value={phase} onValueChange={(v) => { setPhase(v); markItemDirty() }}>
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Velg..." />
                 </SelectTrigger>
@@ -247,7 +244,7 @@ export function EditItemDialog({
 
             <div className="grid gap-1.5">
               <Label>Status</Label>
-              <Select value={status} onValueChange={(v) => setStatus(v as ItemStatus)}>
+              <Select value={status} onValueChange={(v) => { setStatus(v as ItemStatus); markItemDirty() }}>
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -284,7 +281,7 @@ export function EditItemDialog({
                 <Calendar
                   mode="single"
                   selected={dueDate}
-                  onSelect={setDueDate}
+                  onSelect={(d) => { setDueDate(d); markItemDirty() }}
                   weekStartsOn={1}
                 />
               </PopoverContent>
@@ -294,7 +291,7 @@ export function EditItemDialog({
           {members.length > 1 && (
             <div className="grid gap-1.5">
               <Label>Tildelt til</Label>
-              <Select value={assignedToId} onValueChange={setAssignedToId}>
+              <Select value={assignedToId} onValueChange={(v) => { setAssignedToId(v); markItemDirty() }}>
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Velg person..." />
                 </SelectTrigger>
@@ -316,13 +313,13 @@ export function EditItemDialog({
             </p>
           )}
 
-          <div className="flex flex-col gap-2 pt-2 sm:flex-row sm:items-center">
+          <div className="pt-2">
             <Button
               type="button"
               variant="destructive"
               size="sm"
               onClick={handleDelete}
-              disabled={isPending || isDeleting}
+              disabled={isDeleting}
               className="w-full sm:w-auto"
             >
               {isDeleting ? (
@@ -332,40 +329,8 @@ export function EditItemDialog({
               )}
               {confirmDelete ? "Bekreft sletting" : "Slett"}
             </Button>
-
-            <div className="hidden flex-1 sm:block" />
-
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => onOpenChange(false)}
-              disabled={isPending}
-              className="w-full sm:w-auto"
-            >
-              Avbryt
-            </Button>
-
-            <Button
-              type="submit"
-              size="sm"
-              disabled={isPending || !name.trim()}
-              className="w-full sm:w-auto"
-            >
-              {isPending ? (
-                <>
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" data-icon="inline-start" />
-                  Lagrer...
-                </>
-              ) : (
-                <>
-                  <Save className="h-3.5 w-3.5" data-icon="inline-start" />
-                  Lagre
-                </>
-              )}
-            </Button>
           </div>
-        </form>
+        </div>
   )
 
   if (isDesktop) {
@@ -387,7 +352,7 @@ export function EditItemDialog({
         <DrawerHeader className="sr-only">
           <DrawerTitle>Rediger ting</DrawerTitle>
         </DrawerHeader>
-        <ScrollArea className="max-h-[70vh] overflow-x-hidden">
+        <ScrollArea className="max-h-[85vh] overflow-x-hidden">
           <div className="min-w-0 px-4 pb-6">{formContent}</div>
         </ScrollArea>
       </DrawerContent>
@@ -396,13 +361,6 @@ export function EditItemDialog({
 }
 
 // ─── Alternatives Carousel Section ────────────────────────────────
-
-const formatCurrency = (amount: number) =>
-  new Intl.NumberFormat("nb-NO", {
-    style: "currency",
-    currency: "NOK",
-    maximumFractionDigits: 0,
-  }).format(amount)
 
 function AlternativesCarouselSection({
   itemId,
@@ -415,49 +373,121 @@ function AlternativesCarouselSection({
 }) {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [isAdding, setIsAdding] = useState(false)
-  const [editingId, setEditingId] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+  const [isDeleting, startDeleting] = useTransition()
+
+  // Form state for current alternative
+  const [altName, setAltName] = useState("")
+  const [altPrice, setAltPrice] = useState("")
+  const [altUrl, setAltUrl] = useState("")
+  const [altImageUrl, setAltImageUrl] = useState("")
+  const [altStoreName, setAltStoreName] = useState("")
+  const [altNotes, setAltNotes] = useState("")
+
+  const altDirty = useRef(false)
 
   const total = alternatives.length
   const safeCurrentIndex = total > 0 ? Math.min(currentIndex, total - 1) : 0
+  const current = total > 0 ? alternatives[safeCurrentIndex] : null
+  const isSelected = safeCurrentIndex === 0 && total > 0
+
+  // Sync form fields when current alternative changes
+  useEffect(() => {
+    if (current) {
+      setAltName(current.name)
+      setAltPrice(current.price != null ? String(current.price) : "")
+      setAltUrl(current.url ?? "")
+      setAltImageUrl(current.imageUrl ?? "")
+      setAltStoreName(current.storeName ?? "")
+      setAltNotes(current.notes ?? "")
+      altDirty.current = false
+    }
+  }, [current?.id])
+
+  // Auto-save alternative fields with debounce
+  useEffect(() => {
+    if (!altDirty.current || !current || !altName.trim()) return
+
+    const timeout = setTimeout(() => {
+      updateAlternative({
+        id: current.id,
+        name: altName.trim(),
+        price: altPrice ? Number(altPrice) : null,
+        url: altUrl.trim() || null,
+        imageUrl: altImageUrl.trim() || null,
+        storeName: altStoreName.trim() || null,
+        notes: altNotes.trim() || null,
+      })
+    }, 600)
+
+    return () => clearTimeout(timeout)
+  }, [altName, altPrice, altUrl, altImageUrl, altStoreName, altNotes])
+
+  function markAltDirty() {
+    altDirty.current = true
+  }
+
+  // Flush pending changes immediately (used before navigation)
+  function flushAltSave() {
+    if (!altDirty.current || !current || !altName.trim()) return
+    altDirty.current = false
+    updateAlternative({
+      id: current.id,
+      name: altName.trim(),
+      price: altPrice ? Number(altPrice) : null,
+      url: altUrl.trim() || null,
+      imageUrl: altImageUrl.trim() || null,
+      storeName: altStoreName.trim() || null,
+      notes: altNotes.trim() || null,
+    })
+  }
 
   function goNext() {
+    flushAltSave()
     setCurrentIndex((i) => (i + 1) % total)
   }
 
   function goPrev() {
+    flushAltSave()
     setCurrentIndex((i) => (i - 1 + total) % total)
   }
 
   function handleSetPreferred(alternativeId: string) {
+    flushAltSave()
     startTransition(async () => {
       await setPreferredAlternative(itemId, alternativeId)
       setCurrentIndex(0)
     })
   }
 
+  function handleDelete() {
+    if (!current) return
+    altDirty.current = false
+    startDeleting(async () => {
+      await deleteAlternative(current.id)
+      setCurrentIndex((i) => Math.max(i - 1, 0))
+    })
+  }
+
   function handleAddDone() {
     setIsAdding(false)
-    // Navigate to the last existing alternative; the useEffect clamp
-    // ensures index stays valid during the revalidation transition.
     setCurrentIndex(Math.max(total - 1, 0))
   }
 
-  const current = total > 0 ? alternatives[safeCurrentIndex] : null
-  const isSelected = safeCurrentIndex === 0 && total > 0
+  const busy = isPending || isDeleting || disabled
 
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium">Produktalternativer</span>
-          {total > 0 && (
+        {total > 0 && (
           <Badge variant="secondary" className="text-[10px]">
-              {safeCurrentIndex + 1} / {total}
+            {safeCurrentIndex + 1} / {total}
           </Badge>
         )}
       </div>
 
-      {/* Card area */}
+      {/* Content area */}
       {total === 0 && !isAdding ? (
         <div className="rounded-lg border border-dashed bg-muted/30 p-6 text-center">
           <p className="text-xs text-muted-foreground mb-3">
@@ -481,19 +511,169 @@ function AlternativesCarouselSection({
           onDone={handleAddDone}
           onCancel={() => setIsAdding(false)}
         />
-      ) : editingId && current && editingId === current.id ? (
-        <AlternativeEditCard
-          alternative={current}
-          onDone={() => setEditingId(null)}
-        />
       ) : current ? (
-        <AlternativeViewCard
-          alternative={current}
-          isSelected={isSelected}
-          onEdit={() => setEditingId(current.id)}
-          onSelect={() => handleSetPreferred(current.id)}
-          isPending={isPending || disabled}
-        />
+        <div className="rounded-lg border bg-card overflow-hidden">
+          {/* Image */}
+          {altImageUrl ? (
+            <div className="relative aspect-[3/1] bg-muted">
+              <img
+                key={current.id}
+                src={altImageUrl}
+                alt={altName}
+                className="h-full w-full object-cover"
+                onError={(e) => {
+                  e.currentTarget.style.display = "none"
+                }}
+              />
+              {isSelected && (
+                <div className="absolute top-2 right-2">
+                  <Badge className="bg-primary text-primary-foreground text-[10px] gap-1">
+                    <Check className="h-3 w-3" />
+                    Valgt
+                  </Badge>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="relative flex items-center justify-center aspect-[3/1] bg-muted/50">
+              <ImageIcon className="h-8 w-8 text-muted-foreground/30" />
+              {isSelected && (
+                <div className="absolute top-2 right-2">
+                  <Badge className="bg-primary text-primary-foreground text-[10px] gap-1">
+                    <Check className="h-3 w-3" />
+                    Valgt
+                  </Badge>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Editable fields */}
+          <div className="grid gap-2 p-3">
+            <div className="grid gap-1.5">
+              <Label className="text-xs">Produktnavn</Label>
+              <Input
+                value={altName}
+                onChange={(e) => { setAltName(e.target.value); markAltDirty() }}
+                placeholder="Produktnavn *"
+                className="h-8 text-sm"
+                disabled={busy}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div className="grid gap-1.5">
+                <Label className="text-xs">Pris</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={altPrice}
+                  onChange={(e) => { setAltPrice(e.target.value); markAltDirty() }}
+                  placeholder="kr"
+                  className="h-8 text-sm"
+                  disabled={busy}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label className="text-xs">Butikk</Label>
+                <Input
+                  value={altStoreName}
+                  onChange={(e) => { setAltStoreName(e.target.value); markAltDirty() }}
+                  placeholder="Butikk"
+                  className="h-8 text-sm"
+                  disabled={busy}
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-1.5">
+              <Label className="text-xs">Lenke</Label>
+              <Input
+                type="url"
+                value={altUrl}
+                onChange={(e) => { setAltUrl(e.target.value); markAltDirty() }}
+                placeholder="https://..."
+                className="h-8 text-sm"
+                disabled={busy}
+              />
+            </div>
+
+            <div className="grid gap-1.5">
+              <Label className="text-xs">Bilde-URL</Label>
+              <Input
+                type="url"
+                value={altImageUrl}
+                onChange={(e) => { setAltImageUrl(e.target.value); markAltDirty() }}
+                placeholder="https://..."
+                className="h-8 text-sm"
+                disabled={busy}
+              />
+            </div>
+
+            <div className="grid gap-1.5">
+              <Label className="text-xs">Notater</Label>
+              <Input
+                value={altNotes}
+                onChange={(e) => { setAltNotes(e.target.value); markAltDirty() }}
+                placeholder="Notater"
+                className="h-8 text-sm"
+                disabled={busy}
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              {!isSelected && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => handleSetPreferred(current.id)}
+                  disabled={busy}
+                >
+                  <Star className="h-3 w-3" data-icon="inline-start" />
+                  Velg denne
+                </Button>
+              )}
+              {altUrl && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs"
+                  asChild
+                >
+                  <a
+                    href={altUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <ExternalLink className="h-3 w-3" data-icon="inline-start" />
+                    Lenke
+                  </a>
+                </Button>
+              )}
+              <div className="flex-1" />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs text-destructive hover:text-destructive"
+                onClick={handleDelete}
+                disabled={busy}
+              >
+                {isDeleting ? (
+                  <Loader2 className="h-3 w-3 animate-spin" data-icon="inline-start" />
+                ) : (
+                  <Trash2 className="h-3 w-3" data-icon="inline-start" />
+                )}
+                Slett
+              </Button>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       {/* Navigation */}
@@ -504,7 +684,7 @@ function AlternativesCarouselSection({
             variant="outline"
             size="icon-sm"
             onClick={goPrev}
-            disabled={isPending || disabled || total <= 1 || isAdding || !!editingId}
+            disabled={busy || total <= 1 || isAdding}
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
@@ -515,11 +695,11 @@ function AlternativesCarouselSection({
                 key={alt.id}
                 type="button"
                 onClick={() => {
+                  flushAltSave()
                   setCurrentIndex(i)
                   setIsAdding(false)
-                  setEditingId(null)
                 }}
-                disabled={isPending || disabled}
+                disabled={busy}
                 className={cn(
                   "h-1.5 rounded-full transition-all",
                   i === safeCurrentIndex && !isAdding
@@ -532,11 +712,8 @@ function AlternativesCarouselSection({
             {/* Add button as dot */}
             <button
               type="button"
-              onClick={() => {
-                setIsAdding(true)
-                setEditingId(null)
-              }}
-              disabled={isPending || disabled || isAdding}
+              onClick={() => setIsAdding(true)}
+              disabled={busy || isAdding}
               className={cn(
                 "flex items-center justify-center rounded-full transition-all",
                 isAdding
@@ -554,292 +731,12 @@ function AlternativesCarouselSection({
             variant="outline"
             size="icon-sm"
             onClick={goNext}
-            disabled={isPending || disabled || total <= 1 || isAdding || !!editingId}
+            disabled={busy || total <= 1 || isAdding}
           >
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
       )}
-    </div>
-  )
-}
-
-// ─── View Card ─────────────────────────────────────────────────
-
-function AlternativeViewCard({
-  alternative,
-  isSelected,
-  onEdit,
-  onSelect,
-  isPending,
-}: {
-  alternative: AlternativeData
-  isSelected: boolean
-  onEdit: () => void
-  onSelect: () => void
-  isPending: boolean
-}) {
-  return (
-    <div className="rounded-lg border bg-card overflow-hidden">
-      {/* Image area */}
-      {alternative.imageUrl ? (
-        <div className="relative aspect-[16/10] bg-muted">
-          <img
-            key={alternative.id}
-            src={alternative.imageUrl}
-            alt={alternative.name}
-            className="h-full w-full object-cover"
-            onError={(e) => {
-              e.currentTarget.style.display = "none"
-            }}
-          />
-          {isSelected && (
-            <div className="absolute top-2 right-2">
-              <Badge className="bg-primary text-primary-foreground text-[10px] gap-1">
-                <Check className="h-3 w-3" />
-                Valgt
-              </Badge>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="relative flex items-center justify-center aspect-[16/10] bg-muted/50">
-          <ImageIcon className="h-8 w-8 text-muted-foreground/30" />
-          {isSelected && (
-            <div className="absolute top-2 right-2">
-              <Badge className="bg-primary text-primary-foreground text-[10px] gap-1">
-                <Check className="h-3 w-3" />
-                Valgt
-              </Badge>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Info */}
-      <div className="p-3 space-y-2">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <p className="text-sm font-semibold truncate">{alternative.name}</p>
-            {alternative.storeName && (
-              <p className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
-                <Store className="h-3 w-3" />
-                {alternative.storeName}
-              </p>
-            )}
-          </div>
-          {alternative.price != null && alternative.price > 0 && (
-            <span className="text-sm font-bold tabular-nums shrink-0">
-              {formatCurrency(alternative.price)}
-            </span>
-          )}
-        </div>
-
-        {alternative.notes && (
-          <p className="text-xs text-muted-foreground line-clamp-2">
-            {alternative.notes}
-          </p>
-        )}
-
-        {/* Actions */}
-        <div className="flex items-center gap-2 pt-1">
-          {!isSelected && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs flex-1"
-              onClick={onSelect}
-              disabled={isPending}
-            >
-              <Star className="h-3 w-3" data-icon="inline-start" />
-              Velg denne
-            </Button>
-          )}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-7 text-xs"
-            onClick={onEdit}
-            disabled={isPending}
-          >
-            Rediger
-          </Button>
-          {alternative.url && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 text-xs"
-              asChild
-            >
-              <a
-                href={alternative.url}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <ExternalLink className="h-3 w-3" data-icon="inline-start" />
-                Lenke
-              </a>
-            </Button>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── Edit Card ─────────────────────────────────────────────────
-
-function AlternativeEditCard({
-  alternative,
-  onDone,
-}: {
-  alternative: AlternativeData
-  onDone: () => void
-}) {
-  const [isPending, startTransition] = useTransition()
-  const [isDeleting, startDeleting] = useTransition()
-  const [name, setName] = useState(alternative.name)
-  const [price, setPrice] = useState(
-    alternative.price != null ? String(alternative.price) : ""
-  )
-  const [url, setUrl] = useState(alternative.url ?? "")
-  const [imageUrl, setImageUrl] = useState(alternative.imageUrl ?? "")
-  const [storeName, setStoreName] = useState(alternative.storeName ?? "")
-  const [notes, setNotes] = useState(alternative.notes ?? "")
-
-  function handleSave(e: React.FormEvent) {
-    e.preventDefault()
-    e.stopPropagation()
-    startTransition(async () => {
-      await updateAlternative({
-        id: alternative.id,
-        name: name.trim(),
-        price: price ? Number(price) : null,
-        url: url.trim() || null,
-        imageUrl: imageUrl.trim() || null,
-        storeName: storeName.trim() || null,
-        notes: notes.trim() || null,
-      })
-      onDone()
-    })
-  }
-
-  function handleDelete() {
-    startDeleting(async () => {
-      await deleteAlternative(alternative.id)
-      onDone()
-    })
-  }
-
-  return (
-    <div className="rounded-lg border bg-card p-3 space-y-2">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-medium">Rediger produktalternativ</span>
-        <button
-          type="button"
-          onClick={onDone}
-          className="text-muted-foreground hover:text-foreground"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
-      </div>
-      <div className="grid gap-2">
-        <Input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Produktnavn *"
-          className="h-8 text-sm"
-          autoFocus
-          disabled={isPending}
-        />
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <Input
-            type="number"
-            min="0"
-            step="1"
-            value={price}
-            onChange={(e) => setPrice(e.target.value)}
-            placeholder="Pris (kr)"
-            className="h-8 text-sm"
-            disabled={isPending}
-          />
-          <Input
-            value={storeName}
-            onChange={(e) => setStoreName(e.target.value)}
-            placeholder="Butikk"
-            className="h-8 text-sm"
-            disabled={isPending}
-          />
-        </div>
-        <Input
-          type="url"
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          placeholder="Lenke (https://...)"
-          className="h-8 text-sm"
-          disabled={isPending}
-        />
-        <Input
-          type="url"
-          value={imageUrl}
-          onChange={(e) => setImageUrl(e.target.value)}
-          placeholder="Bilde-URL (https://...)"
-          className="h-8 text-sm"
-          disabled={isPending}
-        />
-        <Input
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          placeholder="Notater"
-          className="h-8 text-sm"
-          disabled={isPending}
-        />
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <Button
-            type="button"
-            variant="destructive"
-            size="sm"
-            onClick={handleDelete}
-            disabled={isPending || isDeleting}
-            className="w-full sm:w-auto"
-          >
-            {isDeleting ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" data-icon="inline-start" />
-            ) : (
-              <Trash2 className="h-3.5 w-3.5" data-icon="inline-start" />
-            )}
-            Slett
-          </Button>
-          <div className="hidden flex-1 sm:block" />
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={onDone}
-            disabled={isPending}
-            className="w-full sm:w-auto"
-          >
-            Avbryt
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            onClick={handleSave}
-            disabled={isPending || !name.trim()}
-            className="w-full sm:w-auto"
-          >
-            {isPending ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" data-icon="inline-start" />
-            ) : (
-              <Save className="h-3.5 w-3.5" data-icon="inline-start" />
-            )}
-            Lagre
-          </Button>
-        </div>
-      </div>
     </div>
   )
 }
