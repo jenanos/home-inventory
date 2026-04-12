@@ -1,31 +1,13 @@
 "use client"
 
-import Link from "next/link"
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@workspace/ui/components/button"
-import { Textarea } from "@workspace/ui/components/textarea"
-import { Label } from "@workspace/ui/components/label"
 import { Badge } from "@workspace/ui/components/badge"
 import { Separator } from "@workspace/ui/components/separator"
-import { ScrollArea } from "@workspace/ui/components/scroll-area"
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@workspace/ui/components/card"
 import { cn } from "@workspace/ui/lib/utils"
 import {
-  Copy,
-  Check,
-  Loader2,
-  ClipboardPaste,
-  ArrowRight,
-  ArrowLeft,
-  AlertCircle,
   X,
-  BotMessageSquare,
   Sparkles,
   WandSparkles,
 } from "lucide-react"
@@ -44,6 +26,13 @@ import {
   type DuplicateItem,
   type FieldDiff,
 } from "@/components/duplicate-field-diff"
+import {
+  LlmImportPageHeader,
+  LlmImportPasteStep,
+  LlmImportPreviewHeader,
+  LlmImportPromptStep,
+  LlmImportStickyActions,
+} from "@/components/llm-import-page"
 
 interface LlmImportPageClientProps {
   listId: string
@@ -321,12 +310,6 @@ function buildItemDiffs(
   ])
 }
 
-const STEPS = [
-  { key: "prompt", label: "Prompt" },
-  { key: "paste", label: "JSON" },
-  { key: "preview", label: "Forhåndsvisning" },
-] as const
-
 export function LlmImportPageClient({
   listId,
   listName,
@@ -501,206 +484,89 @@ export function LlmImportPageClient({
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
-      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div className="space-y-3">
-          <Button variant="ghost" size="sm" asChild className="w-fit">
-            <Link href={`/lists/${listId}`}>
-              <ArrowLeft className="h-4 w-4" data-icon="inline-start" />
-              Tilbake til listen
-            </Link>
-          </Button>
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <BotMessageSquare className="h-4 w-4" />
-              <span className="text-sm">LLM-import</span>
-            </div>
-            <div>
-              <h1 className="font-heading text-2xl font-medium sm:text-3xl">
-                Importer produkter til {listName}
-              </h1>
-              <p className="mt-1 max-w-3xl text-sm text-muted-foreground sm:text-base">
-                Lim inn JSON fra en LLM, gå gjennom duplikater og importer med mye bedre plass enn i en modal.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          {STEPS.map((entry, index) => {
-            const isActive = entry.key === step
-            const isDone =
-              (step === "paste" && entry.key === "prompt") ||
-              (step === "preview" &&
-                (entry.key === "prompt" || entry.key === "paste"))
-
-            return (
-              <div
-                key={entry.key}
-                className={cn(
-                  "flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm",
-                  isActive && "border-primary bg-primary/10 text-foreground",
-                  isDone && "border-emerald-500/40 bg-emerald-500/10 text-foreground",
-                  !isActive && !isDone && "text-muted-foreground"
-                )}
-              >
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-background text-xs ring-1 ring-foreground/10">
-                  {isDone ? <Check className="h-3 w-3" /> : index + 1}
-                </span>
-                <span>{entry.label}</span>
-              </div>
-            )
-          })}
-        </div>
-      </header>
+      <LlmImportPageHeader
+        backHref={`/lists/${listId}`}
+        backLabel="Tilbake til listen"
+        title={`Importer produkter til ${listName}`}
+        description="Lim inn JSON fra en LLM, gå gjennom duplikater og importer med mye bedre plass enn i en modal."
+        step={step}
+      />
 
       {step === "prompt" && (
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,22rem)]">
-          <section className="space-y-4">
-            <div className="space-y-2 border-b pb-3">
-              <h2 className="font-heading text-xl font-medium">Kopier prompt til LLM</h2>
-              <p className="max-w-3xl text-sm text-muted-foreground sm:text-base">
-                Bruk prompten under i ChatGPT, Claude eller annen LLM. Be modellen svare kun med JSON.
-              </p>
-            </div>
-
-            <div className="overflow-hidden rounded-lg border bg-muted/30">
-              <ScrollArea className="h-[32rem] px-3 py-3 sm:px-4 sm:py-4">
-                <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed sm:text-[13px]">
-                  {prompt}
-                </pre>
-              </ScrollArea>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <Button onClick={handleCopyPrompt}>
-                {copied ? (
-                  <>
-                    <Check className="h-4 w-4" data-icon="inline-start" />
-                    Kopiert
-                  </>
-                ) : (
-                  <>
-                    <Copy className="h-4 w-4" data-icon="inline-start" />
-                    Kopier prompt
-                  </>
-                )}
-              </Button>
-              <Button variant="outline" onClick={() => setStep("paste")}>
-                Neste
-                <ArrowRight className="ml-1 h-4 w-4" />
-              </Button>
-            </div>
-          </section>
-
-          <aside className="space-y-3 xl:pt-[3.25rem]">
-            <div className="rounded-lg border bg-muted/20 px-3 py-3">
+        <LlmImportPromptStep
+          title="Kopier prompt til LLM"
+          description="Bruk prompten under i ChatGPT, Claude eller annen LLM. Be modellen svare kun med JSON."
+          prompt={prompt}
+          copied={copied}
+          onCopy={handleCopyPrompt}
+          onNext={() => setStep("paste")}
+          sidebar={
+            <>
+              <div className="rounded-lg border bg-muted/20 px-3 py-3">
               <div className="flex items-start gap-3 text-sm text-muted-foreground">
                 <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                 <p>Kategorien bør matche en eksisterende kategori nøyaktig for at importen skal plassere produktet riktig.</p>
               </div>
-            </div>
-            <div className="rounded-lg border bg-muted/20 px-3 py-3">
+              </div>
+              <div className="rounded-lg border bg-muted/20 px-3 py-3">
               <div className="flex items-start gap-3 text-sm text-muted-foreground">
                 <WandSparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                 <p>Hvis et produkt finnes fra før, får du velge hvilke felt som skal oppdateres før noe skrives til listen.</p>
               </div>
-            </div>
-            <div className="space-y-2">
-              <p className="text-sm font-medium">Tilgjengelige kategorier</p>
-              <div className="flex flex-wrap gap-2">
-                {categories.map((category) => (
-                  <Badge key={category.id} variant="secondary" className="text-xs">
-                    {category.name}
-                  </Badge>
-                ))}
               </div>
-            </div>
-          </aside>
-        </div>
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Tilgjengelige kategorier</p>
+                <div className="flex flex-wrap gap-2">
+                  {categories.map((category) => (
+                    <Badge key={category.id} variant="secondary" className="text-xs">
+                      {category.name}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            </>
+          }
+        />
       )}
 
       {step === "paste" && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Lim inn JSON-svaret</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="llm-json-input">JSON fra LLM</Label>
-              <Textarea
-                id="llm-json-input"
-                value={jsonInput}
-                onChange={(e) => {
-                  setJsonInput(e.target.value)
-                  setParseError(null)
-                }}
-                placeholder={'[\n  {\n    "name": "Produktnavn",\n    ...\n  }\n]'}
-                rows={18}
-                className="min-h-[28rem] resize-y font-mono text-xs"
-              />
-            </div>
-
-            {parseError && parsedItems.length === 0 && (
-              <div className="flex items-start gap-2 rounded-lg border border-destructive/50 bg-destructive/5 p-3">
-                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-                <p className="whitespace-pre-line text-sm text-destructive">{parseError}</p>
-              </div>
-            )}
-
-            <div className="flex flex-wrap gap-2">
-              <Button variant="outline" onClick={() => setStep("prompt")}>
-                <ArrowLeft className="h-4 w-4" data-icon="inline-start" />
-                Tilbake
-              </Button>
-              <Button
-                onClick={handleParse}
-                disabled={!jsonInput.trim() || isCheckingDuplicates}
-              >
-                {isCheckingDuplicates ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" data-icon="inline-start" />
-                    Sjekker duplikater...
-                  </>
-                ) : (
-                  <>
-                    <ClipboardPaste className="h-4 w-4" data-icon="inline-start" />
-                    Tolk JSON
-                  </>
-                )}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+        <LlmImportPasteStep
+          title="Lim inn JSON-svaret"
+          label="JSON fra LLM"
+          inputId="llm-json-input"
+          value={jsonInput}
+          onChange={(value) => {
+            setJsonInput(value)
+            setParseError(null)
+          }}
+          placeholder={'[\n  {\n    "name": "Produktnavn",\n    ...\n  }\n]'}
+          parseError={parseError}
+          showError={parsedItems.length === 0}
+          onBack={() => setStep("prompt")}
+          onParse={handleParse}
+          isParsing={isCheckingDuplicates}
+        />
       )}
 
       {step === "preview" && (
         <>
-          <section className="space-y-2 border-b pb-4">
-            <h2 className="font-heading text-xl font-medium">Forhåndsvisning</h2>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex flex-wrap items-center gap-2">
-                {duplicates.length > 0 ? (
-                  <DuplicateSummary
-                    newCount={newItems.length}
-                    duplicateCount={duplicates.length}
-                    updateCount={updateCount}
-                  />
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    {parsedItems.length} {parsedItems.length === 1 ? "produkt" : "produkter"} klare for import.
-                  </p>
-                )}
-                {parseError && (
-                  <Badge variant="secondary" className="text-xs">
-                    {parseError}
-                  </Badge>
-                )}
-              </div>
-              <p className="max-w-2xl text-sm text-muted-foreground">
-                Gå gjennom nye produkter og velg hvilke duplikatfelt som skal oppdateres.
-              </p>
-            </div>
-          </section>
+          <LlmImportPreviewHeader
+            summary={
+              duplicates.length > 0 ? (
+                <DuplicateSummary
+                  newCount={newItems.length}
+                  duplicateCount={duplicates.length}
+                  updateCount={updateCount}
+                />
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  {parsedItems.length} {parsedItems.length === 1 ? "produkt" : "produkter"} klare for import.
+                </p>
+              )
+            }
+            parseError={parseError}
+            description="Gå gjennom nye produkter og velg hvilke duplikatfelt som skal oppdateres."
+          />
 
           <div
             className={cn(
@@ -753,42 +619,21 @@ export function LlmImportPageClient({
             )}
           </div>
 
-          {importError && (
-            <div className="flex items-start gap-2 rounded-lg border border-destructive/50 bg-destructive/5 p-3">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-              <p className="text-sm text-destructive">{importError}</p>
-            </div>
-          )}
-
-          <div className="sticky bottom-0 z-10 -mx-4 border-t bg-background/95 px-4 py-4 backdrop-blur sm:-mx-6 sm:px-6">
-            <div className="mx-auto flex max-w-7xl flex-wrap gap-2">
-              <Button variant="outline" onClick={() => setStep("paste")}>
-                <ArrowLeft className="h-4 w-4" data-icon="inline-start" />
-                Tilbake
-              </Button>
-              <Button variant="ghost" asChild>
-                <Link href={`/lists/${listId}`}>Avbryt</Link>
-              </Button>
-              <div className="flex-1" />
-              <Button
-                onClick={handleImport}
-                disabled={isPending || (newItems.length === 0 && updateCount === 0)}
-              >
-                {isPending ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" data-icon="inline-start" />
-                    Importerer...
-                  </>
-                ) : newItems.length > 0 && updateCount > 0 ? (
-                  `Importer ${newItems.length} nye + oppdater ${updateCount}`
-                ) : newItems.length > 0 ? (
-                  `Importer ${newItems.length} ${newItems.length === 1 ? "produkt" : "produkter"}`
-                ) : (
-                  `Oppdater ${updateCount} ${updateCount === 1 ? "produkt" : "produkter"}`
-                )}
-              </Button>
-            </div>
-          </div>
+          <LlmImportStickyActions
+            importError={importError}
+            onBack={() => setStep("paste")}
+            cancelHref={`/lists/${listId}`}
+            onPrimary={handleImport}
+            isPending={isPending}
+            primaryDisabled={isPending || (newItems.length === 0 && updateCount === 0)}
+            primaryLabel={
+              newItems.length > 0 && updateCount > 0
+                ? `Importer ${newItems.length} nye + oppdater ${updateCount}`
+                : newItems.length > 0
+                  ? `Importer ${newItems.length} ${newItems.length === 1 ? "produkt" : "produkter"}`
+                  : `Oppdater ${updateCount} ${updateCount === 1 ? "produkt" : "produkter"}`
+            }
+          />
         </>
       )}
     </div>
