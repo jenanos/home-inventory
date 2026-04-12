@@ -2,11 +2,12 @@ import { requireHousehold } from "@/lib/session"
 import { getMaintenanceTasks } from "@/lib/queries/maintenance"
 import { Wrench, AlertTriangle, Clock, CheckCircle2 } from "lucide-react"
 import Link from "next/link"
+import { Button } from "@workspace/ui/components/button"
 import { Badge } from "@workspace/ui/components/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@workspace/ui/components/card"
 import { Progress } from "@workspace/ui/components/progress"
 import { CreateTaskDialog } from "./create-task-dialog"
-import { MaintenanceLlmImportDialog } from "./llm-import-dialog"
+import { BotMessageSquare } from "lucide-react"
 
 const priorityConfig = {
   HIGH: { label: "Høy", className: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400" },
@@ -53,7 +54,12 @@ export default async function VedlikeholdPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <MaintenanceLlmImportDialog />
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/vedlikehold/llm-import">
+              <BotMessageSquare className="h-4 w-4" data-icon="inline-start" />
+              LLM-import
+            </Link>
+          </Button>
           <CreateTaskDialog />
         </div>
       </div>

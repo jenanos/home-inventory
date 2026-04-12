@@ -1,8 +1,10 @@
+import Link from "next/link"
 import { requireHousehold } from "@/lib/session"
 import { getBudget } from "@/lib/queries/budget"
 import { ensureBudget } from "@/lib/actions/budget"
+import { Button } from "@workspace/ui/components/button"
+import { BotMessageSquare } from "lucide-react"
 import { BudgetView } from "./budget-view"
-import { BudgetLlmImportDialog } from "./llm-import-dialog"
 
 function toNumber(d: unknown): number {
   return d != null ? Number(d) : 0
@@ -64,7 +66,12 @@ export default async function BudsjettPage() {
             Oversikt over husstandens inntekter og kostnader
           </p>
         </div>
-        <BudgetLlmImportDialog />
+        <Button variant="outline" size="sm" asChild>
+          <Link href="/budsjett/llm-import">
+            <BotMessageSquare className="h-4 w-4" data-icon="inline-start" />
+            LLM-import
+          </Link>
+        </Button>
       </div>
       <BudgetView budget={serialized} />
     </div>

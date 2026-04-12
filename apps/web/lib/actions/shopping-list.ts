@@ -15,6 +15,7 @@ export async function createShoppingList(name: string) {
   })
 
   revalidatePath("/")
+  revalidatePath("/lists")
   return list
 }
 
@@ -32,6 +33,7 @@ export async function updateShoppingList(listId: string, name: string) {
   })
 
   revalidatePath(`/lists/${listId}`)
+  revalidatePath("/lists")
   revalidatePath("/")
 }
 
@@ -45,5 +47,6 @@ export async function deleteShoppingList(listId: string) {
 
   await db.shoppingList.delete({ where: { id: listId } })
 
+  revalidatePath("/lists")
   revalidatePath("/")
 }

@@ -64,9 +64,11 @@ export function DuplicateFieldDiffCard({
 
   if (diffs.length === 0) {
     return (
-      <div className="flex items-center gap-2 p-3 rounded-lg border border-yellow-200 bg-yellow-50 dark:border-yellow-900/50 dark:bg-yellow-950/30">
-        <AlertTriangle className="h-4 w-4 text-yellow-600 dark:text-yellow-500 shrink-0" />
-        <span className="text-sm font-medium flex-1">{label}</span>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-yellow-200 bg-yellow-50 px-3 py-2 dark:border-yellow-900/50 dark:bg-yellow-950/30">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-yellow-600 dark:text-yellow-500" />
+          <span className="min-w-0 text-sm font-medium break-words">{label}</span>
+        </div>
         <Badge variant="outline" className="text-xs text-yellow-700 dark:text-yellow-400">
           Duplikat – ingen endringer
         </Badge>
@@ -78,25 +80,27 @@ export function DuplicateFieldDiffCard({
     <div className="rounded-lg border border-yellow-200 bg-yellow-50 dark:border-yellow-900/50 dark:bg-yellow-950/30 overflow-hidden">
       <Button
         variant="ghost"
-        className="w-full justify-between h-auto py-2.5 px-3 rounded-none hover:bg-yellow-100 dark:hover:bg-yellow-950/50"
+        className="h-auto w-full rounded-none px-3 py-2 text-left hover:bg-yellow-100 dark:hover:bg-yellow-950/50"
         onClick={() => setExpanded(!expanded)}
       >
-        <div className="flex items-center gap-2 min-w-0">
-          <AlertTriangle className="h-4 w-4 text-yellow-600 dark:text-yellow-500 shrink-0" />
-          <span className="text-sm font-medium truncate">{label}</span>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <Badge variant="secondary" className="text-xs">
-            {diffs.length} {diffs.length === 1 ? "endring" : "endringer"}
-          </Badge>
-          <Badge variant="outline" className="text-xs">
-            {selectedFields.size}/{diffs.length} valgt
-          </Badge>
-          {expanded ? (
-            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-          ) : (
-            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-          )}
+        <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-2">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-yellow-600 dark:text-yellow-500" />
+            <span className="min-w-0 text-sm font-medium break-words">{label}</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+            <Badge variant="secondary" className="text-xs">
+              {diffs.length} {diffs.length === 1 ? "endring" : "endringer"}
+            </Badge>
+            <Badge variant="outline" className="text-xs">
+              {selectedFields.size}/{diffs.length} valgt
+            </Badge>
+            {expanded ? (
+              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            )}
+          </div>
         </div>
       </Button>
 
@@ -106,7 +110,7 @@ export function DuplicateFieldDiffCard({
             {diffs.map((diff) => (
               <label
                 key={diff.key}
-                className="flex items-start gap-3 p-3 cursor-pointer hover:bg-yellow-100/50 dark:hover:bg-yellow-950/40 transition-colors"
+                className="flex cursor-pointer items-start gap-3 px-3 py-2.5 transition-colors hover:bg-yellow-100/50 dark:hover:bg-yellow-950/40"
               >
                 <Checkbox
                   checked={selectedFields.has(diff.key)}

@@ -26,7 +26,6 @@ import {
 import { CategoryIcon } from "@/components/category-icon"
 import { toggleItemPurchased } from "@/lib/actions/shopping-item"
 import { EditItemDialog } from "./edit-item-dialog"
-import { ProductVariantsCarousel } from "./product-variants-carousel"
 
 const formatCurrency = (amount: number) =>
   new Intl.NumberFormat("nb-NO", {
@@ -279,24 +278,23 @@ function MobileItemCard({
         isMuted && "opacity-60"
       )}
     >
-      <div className="pt-0.5">
+      <div className="flex w-10 shrink-0 flex-col items-center gap-3 pt-0.5">
         <Checkbox
           checked={isPurchased}
           onCheckedChange={handleToggle}
           disabled={isPending}
           aria-label={`Merk ${item.name} som ${isPurchased ? "ikke kjopt" : "kjopt"}`}
         />
+        {/* Show selected alternative's image, or item's own image */}
+        {(selectedAltImage || item.imageUrl) && (
+          <img
+            src={selectedAltImage ?? item.imageUrl!}
+            alt={item.name}
+            className="h-10 w-10 rounded-md object-cover"
+            onError={(e) => { e.currentTarget.style.display = "none" }}
+          />
+        )}
       </div>
-
-      {/* Show selected alternative's image, or item's own image */}
-      {(selectedAltImage || item.imageUrl) && (
-        <img
-          src={selectedAltImage ?? item.imageUrl!}
-          alt={item.name}
-          className="h-10 w-10 rounded-md object-cover shrink-0"
-          onError={(e) => { e.currentTarget.style.display = "none" }}
-        />
-      )}
 
       <div
         className="flex-1 min-w-0 cursor-pointer"
@@ -391,20 +389,10 @@ function MobileItemCard({
           )}
 
           {item.alternatives.length > 0 && (
-            <ProductVariantsCarousel
-              itemId={item.id}
-              itemName={item.name}
-              alternatives={item.alternatives}
-            >
-              <button
-                type="button"
-                onClick={(e) => e.stopPropagation()}
-                className="flex items-center gap-1 text-[10px] font-medium text-primary hover:text-primary/80 transition-colors"
-              >
-                <Layers className="h-2.5 w-2.5" />
-                Produktvalg ({item.alternatives.length})
-              </button>
-            </ProductVariantsCarousel>
+            <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
+              <Layers className="h-2.5 w-2.5" />
+              Produktvalg ({item.alternatives.length})
+            </span>
           )}
         </div>
       </div>
@@ -533,19 +521,10 @@ function DesktopItemRow({
             <span className="text-muted-foreground">—</span>
           )}
           {item.alternatives.length > 0 && (
-            <ProductVariantsCarousel
-              itemId={item.id}
-              itemName={item.name}
-              alternatives={item.alternatives}
-            >
-              <button
-                type="button"
-                className="flex items-center gap-1 text-[10px] font-medium text-primary hover:text-primary/80 transition-colors mt-0.5 w-fit"
-              >
-                <Layers className="h-2.5 w-2.5" />
-                Produktvalg ({item.alternatives.length})
-              </button>
-            </ProductVariantsCarousel>
+            <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground mt-0.5">
+              <Layers className="h-2.5 w-2.5" />
+              Produktvalg ({item.alternatives.length})
+            </span>
           )}
         </div>
       </TableCell>

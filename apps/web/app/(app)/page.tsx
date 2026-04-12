@@ -25,7 +25,6 @@ import {
 } from "lucide-react"
 import { cn } from "@workspace/ui/lib/utils"
 import { Progress } from "@workspace/ui/components/progress"
-import { CreateListDialog } from "./create-list-dialog"
 
 const formatNOK = (amount: number) =>
   new Intl.NumberFormat("nb-NO", {
@@ -242,7 +241,13 @@ export default async function DashboardPage() {
       <section className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <h2 className="font-heading text-xl tracking-tight">Innkjøp</h2>
-          <CreateListDialog />
+          <Link
+            href="/lists"
+            className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm transition-colors"
+          >
+            Se alle
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
         </div>
 
         {/* Shopping Stats */}

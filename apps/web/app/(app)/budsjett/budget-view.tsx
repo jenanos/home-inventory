@@ -455,7 +455,7 @@ export function BudgetView({ budget }: BudgetViewProps) {
                       Skatt: {member.taxPercent}%
                     </p>
                   </div>
-                  <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-start sm:gap-2">
+                  <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-start">
                     <div className="text-right">
                       <p className="font-medium tabular-nums text-sm sm:text-base">
                         {formatCurrency(netIncome * multiplier)}
@@ -464,24 +464,26 @@ export function BudgetView({ budget }: BudgetViewProps) {
                         Beregnet
                       </Badge>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => {
-                        setEditingMember(member)
-                        setMemberDialogOpen(true)
-                      }}
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => handleDeleteMember(member.id)}
-                      disabled={isPending}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
+                    <div className="flex items-center gap-1 sm:gap-2">
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => {
+                          setEditingMember(member)
+                          setMemberDialogOpen(true)
+                        }}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => handleDeleteMember(member.id)}
+                        disabled={isPending}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
               )
@@ -542,28 +544,30 @@ export function BudgetView({ budget }: BudgetViewProps) {
                       )}
                     </p>
                   </div>
-                  <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-start sm:gap-2">
+                  <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-start">
                     <p className="font-medium tabular-nums text-sm sm:text-base">
                       {formatCurrency(totalMonthly * multiplier)}
                     </p>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => {
-                        setEditingLoan(loan)
-                        setLoanDialogOpen(true)
-                      }}
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => handleDeleteLoan(loan.id)}
-                      disabled={isPending}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
+                    <div className="flex items-center gap-1 sm:gap-2">
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => {
+                          setEditingLoan(loan)
+                          setLoanDialogOpen(true)
+                        }}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => handleDeleteLoan(loan.id)}
+                        disabled={isPending}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
               )
@@ -637,26 +641,28 @@ export function BudgetView({ budget }: BudgetViewProps) {
                         : `Bil · ${trip.annualTrips} reiser/år · Bom/ferge/drivstoff ${formatCurrency(perTrip)}/reise`}
                     </p>
                   </div>
-                  <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-start sm:gap-2">
+                  <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-start">
                     <p className="font-medium tabular-nums text-sm sm:text-base">{formatCurrency(monthly * multiplier)}</p>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => {
-                        setEditingTrip(trip)
-                        setTripDialogOpen(true)
-                      }}
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => handleDeleteTrip(trip.id)}
-                      disabled={isPending}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
+                    <div className="flex items-center gap-1 sm:gap-2">
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => {
+                          setEditingTrip(trip)
+                          setTripDialogOpen(true)
+                        }}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => handleDeleteTrip(trip.id)}
+                        disabled={isPending}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
               )
@@ -890,7 +896,7 @@ function EntryList({
               )}
             </div>
           </div>
-          <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-start sm:gap-2">
+          <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-start">
             <p
               className={`font-medium tabular-nums text-sm sm:text-base ${
                 entry.type === "INCOME"
@@ -903,21 +909,23 @@ function EntryList({
               {entry.type === "DEDUCTION" && "−"}
               {formatCurrency(entry.monthlyAmount * multiplier)}
             </p>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => onEdit(entry)}
-            >
-              <Pencil className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => onDelete(entry.id)}
-              disabled={isPending}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
+            <div className="flex items-center gap-1 sm:gap-2">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => onEdit(entry)}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => onDelete(entry.id)}
+                disabled={isPending}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
           </div>
         </div>
       ))}

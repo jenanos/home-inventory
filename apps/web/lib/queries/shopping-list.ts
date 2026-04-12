@@ -1,5 +1,28 @@
 import { db } from "@workspace/db"
 
+export async function getShoppingLists(householdId: string) {
+  const lists = await db.shoppingList.findMany({
+    where: { householdId },
+    include: {
+      items: {
+        select: {
+          id: true,
+          status: true,
+          estimatedPrice: true,
+          alternatives: {
+            select: { price: true },
+            orderBy: { rank: "asc" },
+            take: 1,
+          },
+        },
+      },
+    },
+    orderBy: { updatedAt: "desc" },
+  })
+
+  return lists
+}
+
 export async function getShoppingList(listId: string, householdId: string) {
   const list = await db.shoppingList.findUnique({
     where: { id: listId },

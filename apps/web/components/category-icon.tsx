@@ -1,27 +1,36 @@
 import {
+  Baby,
   Sofa,
   Monitor,
   ChefHat,
   Bath,
   BedDouble,
+  Briefcase,
+  Box,
+  CircleHelp,
+  HousePlug,
   Lamp,
+  Lightbulb,
+  Refrigerator,
+  Shirt,
+  Archive,
+  Sparkles,
   Wrench,
   Flower2,
-  Sparkles,
-  Shirt,
-  Lightbulb,
-  Archive,
-  Box,
   type LucideProps,
 } from "lucide-react"
 import type { ComponentType } from "react"
 
 const ICON_MAP: Record<string, ComponentType<LucideProps>> = {
+  baby: Baby,
   sofa: Sofa,
   monitor: Monitor,
   "chef-hat": ChefHat,
   bath: Bath,
   "bed-double": BedDouble,
+  briefcase: Briefcase,
+  refrigerator: Refrigerator,
+  "house-plug": HousePlug,
   lamp: Lamp,
   wrench: Wrench,
   "flower-2": Flower2,
@@ -39,7 +48,7 @@ export function CategoryIcon({
   name: string
   className?: string
 }) {
-  const Icon = ICON_MAP[name]
-  if (!Icon) return <span>{name}</span>
+  const normalizedName = name.toLowerCase()
+  const Icon = ICON_MAP[normalizedName] ?? CircleHelp
   return <Icon className={className} />
 }

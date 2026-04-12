@@ -48,6 +48,7 @@ export function AppSidebar({ user, householdName, lists, isAdmin }: AppSidebarPr
 
   const navItems = [
     { href: "/", label: "Oversikt", icon: LayoutDashboard },
+    { href: "/lists", label: "Innkjøp", icon: ShoppingCart },
     { href: "/vedlikehold", label: "Vedlikehold", icon: Wrench },
     { href: "/budsjett", label: "Budsjett", icon: Wallet },
     { href: "/settings", label: "Innstillinger", icon: Settings },
@@ -116,7 +117,7 @@ export function AppSidebar({ user, householdName, lists, isAdmin }: AppSidebarPr
                   asChild
                   className="text-muted-foreground"
                 >
-                  <Link href="/?new=true">
+                  <Link href="/lists">
                     <Plus className="h-4 w-4" />
                     <span>Ny liste</span>
                   </Link>
