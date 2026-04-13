@@ -2,9 +2,7 @@
 
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { Badge } from "@workspace/ui/components/badge"
 import { ScrollArea } from "@workspace/ui/components/scroll-area"
-import { cn } from "@workspace/ui/lib/utils"
 import { Sparkles, WandSparkles } from "lucide-react"
 import {
   bulkImportBudget,
