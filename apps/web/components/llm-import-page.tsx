@@ -6,6 +6,7 @@ import { Badge } from "@workspace/ui/components/badge"
 import { Label } from "@workspace/ui/components/label"
 import { Textarea } from "@workspace/ui/components/textarea"
 import { ScrollArea } from "@workspace/ui/components/scroll-area"
+import { Tabs, TabsList, TabsTrigger } from "@workspace/ui/components/tabs"
 import { cn } from "@workspace/ui/lib/utils"
 import {
   AlertCircle,
@@ -26,6 +27,16 @@ const STEPS = [
 ] as const
 
 type LlmImportStep = (typeof STEPS)[number]["key"]
+
+interface LlmImportPromptSection {
+  id: string
+  title: string
+  description?: string
+  prompt: string
+  copied: boolean
+  onCopy: () => void
+  copyLabel?: string
+}
 
 export function LlmImportPageHeader({
   backHref,
@@ -79,7 +90,8 @@ export function LlmImportPageHeader({
               className={cn(
                 "flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm",
                 isActive && "border-primary bg-primary/10 text-foreground",
-                isDone && "border-emerald-500/40 bg-emerald-500/10 text-foreground",
+                isDone &&
+                  "border-emerald-500/40 bg-emerald-500/10 text-foreground",
                 !isActive && !isDone && "text-muted-foreground"
               )}
             >
@@ -122,37 +134,125 @@ export function LlmImportPromptStep({
           </p>
         </div>
 
-        <div className="overflow-hidden rounded-lg border bg-muted/30">
-          <ScrollArea className="h-[32rem] px-3 py-3 sm:px-4 sm:py-4">
-            <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed sm:text-[13px]">
-              {prompt}
-            </pre>
-          </ScrollArea>
-        </div>
+        <LlmImportPromptCard
+          title="Prompt"
+          prompt={prompt}
+          copied={copied}
+          onCopy={onCopy}
+        />
 
-        <div className="flex flex-wrap gap-2">
-          <Button onClick={onCopy}>
-            {copied ? (
-              <>
-                <Check className="h-4 w-4" data-icon="inline-start" />
-                Kopiert
-              </>
-            ) : (
-              <>
-                <Copy className="h-4 w-4" data-icon="inline-start" />
-                Kopier prompt
-              </>
-            )}
-          </Button>
-          <Button variant="outline" onClick={onNext}>
-            Neste
-            <ArrowRight className="ml-1 h-4 w-4" />
-          </Button>
-        </div>
+        <Button variant="outline" onClick={onNext}>
+          Neste
+          <ArrowRight className="ml-1 h-4 w-4" />
+        </Button>
       </section>
 
-      {sidebar ? <aside className="space-y-3 xl:pt-[3.25rem]">{sidebar}</aside> : null}
+      {sidebar ? (
+        <aside className="space-y-3 xl:pt-[3.25rem]">{sidebar}</aside>
+      ) : null}
     </div>
+  )
+}
+
+export function LlmImportMultiPromptStep({
+  title,
+  description,
+  sections,
+  onNext,
+  nextLabel = "Neste",
+  sidebar,
+}: {
+  title: string
+  description: string
+  sections: LlmImportPromptSection[]
+  onNext: () => void
+  nextLabel?: string
+  sidebar?: ReactNode
+}) {
+  return (
+    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,22rem)]">
+      <section className="space-y-4">
+        <div className="space-y-2 border-b pb-3">
+          <h2 className="font-heading text-xl font-medium">{title}</h2>
+          <p className="max-w-3xl text-sm text-muted-foreground sm:text-base">
+            {description}
+          </p>
+        </div>
+
+        <div className="space-y-4">
+          {sections.map((section) => (
+            <LlmImportPromptCard
+              key={section.id}
+              title={section.title}
+              description={section.description}
+              prompt={section.prompt}
+              copied={section.copied}
+              onCopy={section.onCopy}
+              copyLabel={section.copyLabel}
+            />
+          ))}
+        </div>
+
+        <Button variant="outline" onClick={onNext}>
+          {nextLabel}
+          <ArrowRight className="ml-1 h-4 w-4" />
+        </Button>
+      </section>
+
+      {sidebar ? (
+        <aside className="space-y-3 xl:pt-[3.25rem]">{sidebar}</aside>
+      ) : null}
+    </div>
+  )
+}
+
+export function LlmImportModeToggle<TValue extends string>({
+  value,
+  onValueChange,
+  options,
+}: {
+  value: TValue
+  onValueChange: (value: TValue) => void
+  options: Array<{
+    value: TValue
+    label: string
+    description: string
+  }>
+}) {
+  const activeOption = options.find((option) => option.value === value)
+
+  return (
+    <section className="space-y-3 rounded-lg border bg-muted/20 p-4">
+      <div className="space-y-1">
+        <h2 className="font-heading text-lg font-medium">Velg importspor</h2>
+        <p className="text-sm text-muted-foreground">
+          Bytt mellom vanlig LLM-import og sparring med full erstatning.
+        </p>
+      </div>
+
+      <Tabs
+        value={value}
+        onValueChange={(nextValue) => onValueChange(nextValue as TValue)}
+      >
+        <TabsList className="w-full sm:w-fit">
+          {options.map((option) => (
+            <TabsTrigger
+              key={option.value}
+              value={option.value}
+              className="flex-1 px-3 sm:flex-none"
+            >
+              {option.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
+
+      {activeOption ? (
+        <p className="text-sm text-muted-foreground">
+          {activeOption.description}
+        </p>
+      ) : null}
+    </section>
   )
 }
 
@@ -213,13 +313,13 @@ export function LlmImportPasteStep({
           <ArrowLeft className="h-4 w-4" data-icon="inline-start" />
           Tilbake
         </Button>
-        <Button
-          onClick={onParse}
-          disabled={!value.trim() || isParsing}
-        >
+        <Button onClick={onParse} disabled={!value.trim() || isParsing}>
           {isParsing ? (
             <>
-              <Loader2 className="h-4 w-4 animate-spin" data-icon="inline-start" />
+              <Loader2
+                className="h-4 w-4 animate-spin"
+                data-icon="inline-start"
+              />
               Sjekker duplikater...
             </>
           ) : (
@@ -255,9 +355,7 @@ export function LlmImportPreviewHeader({
             </Badge>
           ) : null}
         </div>
-        <p className="max-w-2xl text-sm text-muted-foreground">
-          {description}
-        </p>
+        <p className="max-w-2xl text-sm text-muted-foreground">{description}</p>
       </div>
     </section>
   )
@@ -284,7 +382,9 @@ export function LlmImportStickyActions({
 }) {
   return (
     <>
-      {importError ? <LlmImportErrorAlert>{importError}</LlmImportErrorAlert> : null}
+      {importError ? (
+        <LlmImportErrorAlert>{importError}</LlmImportErrorAlert>
+      ) : null}
 
       <div className="sticky bottom-0 z-10 -mx-4 border-t bg-background/95 px-4 py-4 backdrop-blur sm:-mx-6 sm:px-6">
         <div className="mx-auto flex max-w-7xl flex-wrap gap-2">
@@ -296,13 +396,13 @@ export function LlmImportStickyActions({
             <Link href={cancelHref}>Avbryt</Link>
           </Button>
           <div className="flex-1" />
-          <Button
-            onClick={onPrimary}
-            disabled={primaryDisabled}
-          >
+          <Button onClick={onPrimary} disabled={primaryDisabled}>
             {isPending ? (
               <>
-                <Loader2 className="h-4 w-4 animate-spin" data-icon="inline-start" />
+                <Loader2
+                  className="h-4 w-4 animate-spin"
+                  data-icon="inline-start"
+                />
                 {pendingLabel}
               </>
             ) : (
@@ -315,15 +415,60 @@ export function LlmImportStickyActions({
   )
 }
 
-export function LlmImportErrorAlert({
-  children,
-}: {
-  children: ReactNode
-}) {
+export function LlmImportErrorAlert({ children }: { children: ReactNode }) {
   return (
     <div className="flex items-start gap-2 rounded-lg border border-destructive/50 bg-destructive/5 p-3">
       <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-      <p className="whitespace-pre-line text-sm text-destructive">{children}</p>
+      <p className="text-sm whitespace-pre-line text-destructive">{children}</p>
+    </div>
+  )
+}
+
+function LlmImportPromptCard({
+  title,
+  description,
+  prompt,
+  copied,
+  onCopy,
+  copyLabel = "Kopier prompt",
+}: {
+  title: string
+  description?: string
+  prompt: string
+  copied: boolean
+  onCopy: () => void
+  copyLabel?: string
+}) {
+  return (
+    <div className="space-y-3 rounded-lg border bg-muted/20 p-3 sm:p-4">
+      <div className="space-y-1">
+        <h3 className="font-medium">{title}</h3>
+        {description ? (
+          <p className="text-sm text-muted-foreground">{description}</p>
+        ) : null}
+      </div>
+
+      <div className="overflow-hidden rounded-lg border bg-muted/30">
+        <ScrollArea className="h-[24rem] px-3 py-3 sm:px-4 sm:py-4">
+          <pre className="font-mono text-xs leading-relaxed whitespace-pre-wrap sm:text-[13px]">
+            {prompt}
+          </pre>
+        </ScrollArea>
+      </div>
+
+      <Button onClick={onCopy}>
+        {copied ? (
+          <>
+            <Check className="h-4 w-4" data-icon="inline-start" />
+            Kopiert
+          </>
+        ) : (
+          <>
+            <Copy className="h-4 w-4" data-icon="inline-start" />
+            {copyLabel}
+          </>
+        )}
+      </Button>
     </div>
   )
 }
