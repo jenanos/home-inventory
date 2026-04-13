@@ -448,6 +448,7 @@ export function LlmImportPageClient({
   const updateCount = duplicates.filter(
     (d) => (selectedFields.get(d.existingId)?.size ?? 0) > 0
   ).length
+  const replaceItems = mode === "replace" ? newItems : parsedItems
 
   function handleCopyPrompt(
     value: string,
@@ -556,14 +557,14 @@ export function LlmImportPageClient({
       try {
         if (mode === "replace") {
           await replaceShoppingItems({
-            items: parsedItems,
+            items: newItems,
             listId,
             categoryMap,
           })
           toast.success(
-            parsedItems.length === 0
+            newItems.length === 0
               ? "Listen ble tømt"
-              : `${parsedItems.length} ${parsedItems.length === 1 ? "produkt" : "produkter"} erstattet listen`
+              : `${newItems.length} ${newItems.length === 1 ? "produkt" : "produkter"} erstattet listen`
           )
           router.push(`/lists/${listId}`)
           router.refresh()
@@ -810,8 +811,8 @@ export function LlmImportPageClient({
                 />
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  {parsedItems.length}{" "}
-                  {parsedItems.length === 1 ? "produkt" : "produkter"}{" "}
+                  {replaceItems.length}{" "}
+                  {replaceItems.length === 1 ? "produkt" : "produkter"}{" "}
                   {mode === "replace"
                     ? "klare til å erstatte listen."
                     : "klare for import."}
@@ -903,13 +904,14 @@ export function LlmImportPageClient({
             isPending={isPending}
             primaryDisabled={
               isPending ||
+              (mode === "replace" && Boolean(parseError)) ||
               (mode === "merge" && newItems.length === 0 && updateCount === 0)
             }
             primaryLabel={
               mode === "replace"
-                ? parsedItems.length === 0
+                ? replaceItems.length === 0
                   ? "Tøm listen"
-                  : `Erstatt med ${parsedItems.length} ${parsedItems.length === 1 ? "produkt" : "produkter"}`
+                  : `Erstatt med ${replaceItems.length} ${replaceItems.length === 1 ? "produkt" : "produkter"}`
                 : newItems.length > 0 && updateCount > 0
                   ? `Importer ${newItems.length} nye + oppdater ${updateCount}`
                   : newItems.length > 0
