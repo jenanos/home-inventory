@@ -448,7 +448,7 @@ export function LlmImportPageClient({
   const updateCount = duplicates.filter(
     (d) => (selectedFields.get(d.existingId)?.size ?? 0) > 0
   ).length
-  const replaceItems = mode === "replace" ? newItems : parsedItems
+  const previewItems = mode === "replace" ? newItems : parsedItems
 
   function handleCopyPrompt(
     value: string,
@@ -811,8 +811,8 @@ export function LlmImportPageClient({
                 />
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  {replaceItems.length}{" "}
-                  {replaceItems.length === 1 ? "produkt" : "produkter"}{" "}
+                  {previewItems.length}{" "}
+                  {previewItems.length === 1 ? "produkt" : "produkter"}{" "}
                   {mode === "replace"
                     ? "klare til å erstatte listen."
                     : "klare for import."}
@@ -909,9 +909,9 @@ export function LlmImportPageClient({
             }
             primaryLabel={
               mode === "replace"
-                ? replaceItems.length === 0
+                ? previewItems.length === 0
                   ? "Tøm listen"
-                  : `Erstatt med ${replaceItems.length} ${replaceItems.length === 1 ? "produkt" : "produkter"}`
+                  : `Erstatt med ${previewItems.length} ${previewItems.length === 1 ? "produkt" : "produkter"}`
                 : newItems.length > 0 && updateCount > 0
                   ? `Importer ${newItems.length} nye + oppdater ${updateCount}`
                   : newItems.length > 0
