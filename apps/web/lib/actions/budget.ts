@@ -206,10 +206,16 @@ export async function upsertBudgetTrip(input: UpsertBudgetTripInput) {
     name: input.name,
     transportType: input.transportType,
     annualTrips: input.annualTrips,
-    ticketPerTrip: input.transportType === "AIR_OR_PUBLIC" ? (input.ticketPerTrip ?? 0) : null,
-    tollPerTrip: input.transportType === "CAR" ? (input.tollPerTrip ?? 0) : null,
-    ferryPerTrip: input.transportType === "CAR" ? (input.ferryPerTrip ?? 0) : null,
-    fuelPerTrip: input.transportType === "CAR" ? (input.fuelPerTrip ?? 0) : null,
+    ticketPerTrip:
+      input.transportType === "AIR_OR_PUBLIC"
+        ? (input.ticketPerTrip ?? 0)
+        : null,
+    tollPerTrip:
+      input.transportType === "CAR" ? (input.tollPerTrip ?? 0) : null,
+    ferryPerTrip:
+      input.transportType === "CAR" ? (input.ferryPerTrip ?? 0) : null,
+    fuelPerTrip:
+      input.transportType === "CAR" ? (input.fuelPerTrip ?? 0) : null,
   }
 
   if (input.id) {
@@ -312,8 +318,7 @@ export async function deleteBudgetEntry(entryId: string) {
   if (!budget) throw new Error("Budget not found")
 
   const entry = await db.budgetEntry.findUnique({ where: { id: entryId } })
-  if (!entry || entry.budgetId !== budget.id)
-    throw new Error("Entry not found")
+  if (!entry || entry.budgetId !== budget.id) throw new Error("Entry not found")
 
   await db.budgetEntry.delete({ where: { id: entryId } })
 
@@ -373,8 +378,17 @@ export async function bulkImportBudget(input: BulkBudgetImportInput) {
   const validLoanTypes = new Set(["MORTGAGE", "OTHER"])
   const validTripTypes = new Set(["AIR_OR_PUBLIC", "CAR"])
   const validCategories = new Set([
-    "ELECTRICITY", "MUNICIPAL_FEES", "INSURANCE", "HOME_MAINTENANCE",
-    "TRANSPORT", "SUBSCRIPTIONS", "FOOD", "CHILDREN", "PERSONAL", "SAVINGS", "BUFFER",
+    "ELECTRICITY",
+    "MUNICIPAL_FEES",
+    "INSURANCE",
+    "HOME_MAINTENANCE",
+    "TRANSPORT",
+    "SUBSCRIPTIONS",
+    "FOOD",
+    "CHILDREN",
+    "PERSONAL",
+    "SAVINGS",
+    "BUFFER",
   ])
 
   let count = 0
@@ -411,7 +425,9 @@ export async function bulkImportBudget(input: BulkBudgetImportInput) {
             budgetId: budget.id,
             bankName: l.bankName,
             loanName: l.loanName,
-            loanType: validLoanTypes.has(loanType) ? (loanType as BudgetLoanType) : "MORTGAGE",
+            loanType: validLoanTypes.has(loanType)
+              ? (loanType as BudgetLoanType)
+              : "MORTGAGE",
             monthlyInterest: l.monthlyInterest,
             monthlyPrincipal: l.monthlyPrincipal,
             monthlyFees: l.monthlyFees ?? 0,
@@ -439,7 +455,8 @@ export async function bulkImportBudget(input: BulkBudgetImportInput) {
             name: t.name,
             transportType: tripType,
             annualTrips: Math.max(1, Math.round(t.annualTrips || 1)),
-            ticketPerTrip: tripType === "AIR_OR_PUBLIC" ? (t.ticketPerTrip ?? 0) : null,
+            ticketPerTrip:
+              tripType === "AIR_OR_PUBLIC" ? (t.ticketPerTrip ?? 0) : null,
             tollPerTrip: tripType === "CAR" ? (t.tollPerTrip ?? 0) : null,
             ferryPerTrip: tripType === "CAR" ? (t.ferryPerTrip ?? 0) : null,
             fuelPerTrip: tripType === "CAR" ? (t.fuelPerTrip ?? 0) : null,
@@ -477,6 +494,129 @@ export async function bulkImportBudget(input: BulkBudgetImportInput) {
     )
     count += validEntries.length
   }
+
+  revalidatePath("/budsjett")
+  return { count }
+}
+
+export async function replaceBudget(input: BulkBudgetImportInput) {
+  const { membership } = await requireHousehold()
+
+  const budget = await db.budget.findUnique({
+    where: { householdId: membership.householdId },
+  })
+  if (!budget) throw new Error("Budget not found")
+
+  const validEntryTypes = new Set(["INCOME", "EXPENSE", "DEDUCTION"])
+  const validLoanTypes = new Set(["MORTGAGE", "OTHER"])
+  const validTripTypes = new Set(["AIR_OR_PUBLIC", "CAR"])
+  const validCategories = new Set([
+    "ELECTRICITY",
+    "MUNICIPAL_FEES",
+    "INSURANCE",
+    "HOME_MAINTENANCE",
+    "TRANSPORT",
+    "SUBSCRIPTIONS",
+    "FOOD",
+    "CHILDREN",
+    "PERSONAL",
+    "SAVINGS",
+    "BUFFER",
+  ])
+
+  let count = 0
+
+  await db.$transaction(async (tx) => {
+    await tx.budgetMember.deleteMany({ where: { budgetId: budget.id } })
+    await tx.budgetLoan.deleteMany({ where: { budgetId: budget.id } })
+    await tx.budgetTrip.deleteMany({ where: { budgetId: budget.id } })
+    await tx.budgetEntry.deleteMany({ where: { budgetId: budget.id } })
+
+    if (input.members && input.members.length > 0) {
+      for (const [index, member] of input.members.entries()) {
+        await tx.budgetMember.create({
+          data: {
+            budgetId: budget.id,
+            name: member.name,
+            grossMonthlyIncome: member.grossMonthlyIncome,
+            taxPercent: member.taxPercent,
+            sortOrder: index,
+          },
+        })
+      }
+      count += input.members.length
+    }
+
+    if (input.loans && input.loans.length > 0) {
+      for (const [index, loan] of input.loans.entries()) {
+        const loanType = (loan.loanType ?? "MORTGAGE").toUpperCase()
+        await tx.budgetLoan.create({
+          data: {
+            budgetId: budget.id,
+            bankName: loan.bankName,
+            loanName: loan.loanName,
+            loanType: validLoanTypes.has(loanType)
+              ? (loanType as BudgetLoanType)
+              : "MORTGAGE",
+            monthlyInterest: loan.monthlyInterest,
+            monthlyPrincipal: loan.monthlyPrincipal,
+            monthlyFees: loan.monthlyFees ?? 0,
+            sortOrder: index,
+          },
+        })
+      }
+      count += input.loans.length
+    }
+
+    if (input.trips && input.trips.length > 0) {
+      const validTrips = input.trips.filter((trip) =>
+        validTripTypes.has(trip.transportType.toUpperCase())
+      )
+
+      for (const [index, trip] of validTrips.entries()) {
+        const tripType = trip.transportType.toUpperCase() as TripTransportType
+        await tx.budgetTrip.create({
+          data: {
+            budgetId: budget.id,
+            name: trip.name,
+            transportType: tripType,
+            annualTrips: Math.max(1, Math.round(trip.annualTrips || 1)),
+            ticketPerTrip:
+              tripType === "AIR_OR_PUBLIC" ? (trip.ticketPerTrip ?? 0) : null,
+            tollPerTrip: tripType === "CAR" ? (trip.tollPerTrip ?? 0) : null,
+            ferryPerTrip: tripType === "CAR" ? (trip.ferryPerTrip ?? 0) : null,
+            fuelPerTrip: tripType === "CAR" ? (trip.fuelPerTrip ?? 0) : null,
+            sortOrder: index,
+          },
+        })
+      }
+      count += validTrips.length
+    }
+
+    if (input.entries && input.entries.length > 0) {
+      const validEntries = input.entries.filter((entry) =>
+        validEntryTypes.has(entry.type.toUpperCase())
+      )
+
+      for (const [index, entry] of validEntries.entries()) {
+        await tx.budgetEntry.create({
+          data: {
+            budgetId: budget.id,
+            name: entry.name,
+            category:
+              entry.category &&
+              validCategories.has(entry.category.toUpperCase())
+                ? (entry.category.toUpperCase() as BudgetCategory)
+                : null,
+            type: entry.type.toUpperCase() as BudgetEntryType,
+            monthlyAmount: entry.monthlyAmount,
+            sortOrder: index,
+          },
+        })
+      }
+      count += validEntries.length
+    }
+  })
 
   revalidatePath("/budsjett")
   return { count }
@@ -630,7 +770,9 @@ interface BulkBudgetImportWithDuplicatesInput {
   entryUpdates?: BudgetEntryFieldUpdate[]
 }
 
-export async function bulkImportBudgetWithDuplicates(input: BulkBudgetImportWithDuplicatesInput) {
+export async function bulkImportBudgetWithDuplicates(
+  input: BulkBudgetImportWithDuplicatesInput
+) {
   const { membership } = await requireHousehold()
 
   const budget = await db.budget.findUnique({
@@ -642,15 +784,26 @@ export async function bulkImportBudgetWithDuplicates(input: BulkBudgetImportWith
   const validLoanTypes = new Set(["MORTGAGE", "OTHER"])
   const validTripTypes = new Set(["AIR_OR_PUBLIC", "CAR"])
   const validCategories = new Set([
-    "ELECTRICITY", "MUNICIPAL_FEES", "INSURANCE", "HOME_MAINTENANCE",
-    "TRANSPORT", "SUBSCRIPTIONS", "FOOD", "CHILDREN", "PERSONAL", "SAVINGS", "BUFFER",
+    "ELECTRICITY",
+    "MUNICIPAL_FEES",
+    "INSURANCE",
+    "HOME_MAINTENANCE",
+    "TRANSPORT",
+    "SUBSCRIPTIONS",
+    "FOOD",
+    "CHILDREN",
+    "PERSONAL",
+    "SAVINGS",
+    "BUFFER",
   ])
 
   let count = 0
 
   // Create new members
   if (input.newMembers && input.newMembers.length > 0) {
-    const memberCount = await db.budgetMember.count({ where: { budgetId: budget.id } })
+    const memberCount = await db.budgetMember.count({
+      where: { budgetId: budget.id },
+    })
     await db.$transaction(
       input.newMembers.map((m, i) =>
         db.budgetMember.create({
@@ -675,8 +828,10 @@ export async function bulkImportBudgetWithDuplicates(input: BulkBudgetImportWith
           grossMonthlyIncome?: number
           taxPercent?: number
         } = {}
-        if (update.fields.grossMonthlyIncome !== undefined) data.grossMonthlyIncome = update.fields.grossMonthlyIncome
-        if (update.fields.taxPercent !== undefined) data.taxPercent = update.fields.taxPercent
+        if (update.fields.grossMonthlyIncome !== undefined)
+          data.grossMonthlyIncome = update.fields.grossMonthlyIncome
+        if (update.fields.taxPercent !== undefined)
+          data.taxPercent = update.fields.taxPercent
         return db.budgetMember.update({ where: { id: update.id }, data })
       })
     )
@@ -685,7 +840,9 @@ export async function bulkImportBudgetWithDuplicates(input: BulkBudgetImportWith
 
   // Create new loans
   if (input.newLoans && input.newLoans.length > 0) {
-    const loanCount = await db.budgetLoan.count({ where: { budgetId: budget.id } })
+    const loanCount = await db.budgetLoan.count({
+      where: { budgetId: budget.id },
+    })
     await db.$transaction(
       input.newLoans.map((l, i) => {
         const loanType = (l.loanType ?? "MORTGAGE").toUpperCase()
@@ -694,7 +851,9 @@ export async function bulkImportBudgetWithDuplicates(input: BulkBudgetImportWith
             budgetId: budget.id,
             bankName: l.bankName,
             loanName: l.loanName,
-            loanType: validLoanTypes.has(loanType) ? (loanType as BudgetLoanType) : "MORTGAGE",
+            loanType: validLoanTypes.has(loanType)
+              ? (loanType as BudgetLoanType)
+              : "MORTGAGE",
             monthlyInterest: l.monthlyInterest,
             monthlyPrincipal: l.monthlyPrincipal,
             monthlyFees: l.monthlyFees ?? 0,
@@ -717,14 +876,18 @@ export async function bulkImportBudgetWithDuplicates(input: BulkBudgetImportWith
           monthlyPrincipal?: number
           monthlyFees?: number
         } = {}
-        if (update.fields.bankName !== undefined) data.bankName = update.fields.bankName
+        if (update.fields.bankName !== undefined)
+          data.bankName = update.fields.bankName
         if (update.fields.loanType !== undefined) {
           const lt = update.fields.loanType.toUpperCase()
           if (validLoanTypes.has(lt)) data.loanType = lt as BudgetLoanType
         }
-        if (update.fields.monthlyInterest !== undefined) data.monthlyInterest = update.fields.monthlyInterest
-        if (update.fields.monthlyPrincipal !== undefined) data.monthlyPrincipal = update.fields.monthlyPrincipal
-        if (update.fields.monthlyFees !== undefined) data.monthlyFees = update.fields.monthlyFees
+        if (update.fields.monthlyInterest !== undefined)
+          data.monthlyInterest = update.fields.monthlyInterest
+        if (update.fields.monthlyPrincipal !== undefined)
+          data.monthlyPrincipal = update.fields.monthlyPrincipal
+        if (update.fields.monthlyFees !== undefined)
+          data.monthlyFees = update.fields.monthlyFees
         return db.budgetLoan.update({ where: { id: update.id }, data })
       })
     )
@@ -733,7 +896,9 @@ export async function bulkImportBudgetWithDuplicates(input: BulkBudgetImportWith
 
   // Create new trips
   if (input.newTrips && input.newTrips.length > 0) {
-    const tripCount = await db.budgetTrip.count({ where: { budgetId: budget.id } })
+    const tripCount = await db.budgetTrip.count({
+      where: { budgetId: budget.id },
+    })
     const validTrips = input.newTrips.filter((t) =>
       validTripTypes.has(t.transportType.toUpperCase())
     )
@@ -746,7 +911,8 @@ export async function bulkImportBudgetWithDuplicates(input: BulkBudgetImportWith
             name: t.name,
             transportType: tripType,
             annualTrips: Math.max(1, Math.round(t.annualTrips || 1)),
-            ticketPerTrip: tripType === "AIR_OR_PUBLIC" ? (t.ticketPerTrip ?? 0) : null,
+            ticketPerTrip:
+              tripType === "AIR_OR_PUBLIC" ? (t.ticketPerTrip ?? 0) : null,
             tollPerTrip: tripType === "CAR" ? (t.tollPerTrip ?? 0) : null,
             ferryPerTrip: tripType === "CAR" ? (t.ferryPerTrip ?? 0) : null,
             fuelPerTrip: tripType === "CAR" ? (t.fuelPerTrip ?? 0) : null,
@@ -772,13 +938,19 @@ export async function bulkImportBudgetWithDuplicates(input: BulkBudgetImportWith
         } = {}
         if (update.fields.transportType !== undefined) {
           const tt = update.fields.transportType.toUpperCase()
-          if (validTripTypes.has(tt)) data.transportType = tt as TripTransportType
+          if (validTripTypes.has(tt))
+            data.transportType = tt as TripTransportType
         }
-        if (update.fields.annualTrips !== undefined) data.annualTrips = Math.max(1, Math.round(update.fields.annualTrips))
-        if (update.fields.ticketPerTrip !== undefined) data.ticketPerTrip = update.fields.ticketPerTrip
-        if (update.fields.tollPerTrip !== undefined) data.tollPerTrip = update.fields.tollPerTrip
-        if (update.fields.ferryPerTrip !== undefined) data.ferryPerTrip = update.fields.ferryPerTrip
-        if (update.fields.fuelPerTrip !== undefined) data.fuelPerTrip = update.fields.fuelPerTrip
+        if (update.fields.annualTrips !== undefined)
+          data.annualTrips = Math.max(1, Math.round(update.fields.annualTrips))
+        if (update.fields.ticketPerTrip !== undefined)
+          data.ticketPerTrip = update.fields.ticketPerTrip
+        if (update.fields.tollPerTrip !== undefined)
+          data.tollPerTrip = update.fields.tollPerTrip
+        if (update.fields.ferryPerTrip !== undefined)
+          data.ferryPerTrip = update.fields.ferryPerTrip
+        if (update.fields.fuelPerTrip !== undefined)
+          data.fuelPerTrip = update.fields.fuelPerTrip
         return db.budgetTrip.update({ where: { id: update.id }, data })
       })
     )
@@ -787,7 +959,9 @@ export async function bulkImportBudgetWithDuplicates(input: BulkBudgetImportWith
 
   // Create new entries
   if (input.newEntries && input.newEntries.length > 0) {
-    const entryCount = await db.budgetEntry.count({ where: { budgetId: budget.id } })
+    const entryCount = await db.budgetEntry.count({
+      where: { budgetId: budget.id },
+    })
     const validEntries = input.newEntries.filter((e) =>
       validEntryTypes.has(e.type.toUpperCase())
     )
@@ -820,13 +994,18 @@ export async function bulkImportBudgetWithDuplicates(input: BulkBudgetImportWith
           monthlyAmount?: number
         } = {}
         if (update.fields.category !== undefined) {
-          if (update.fields.category && validCategories.has(update.fields.category.toUpperCase())) {
-            data.category = update.fields.category.toUpperCase() as BudgetCategory
+          if (
+            update.fields.category &&
+            validCategories.has(update.fields.category.toUpperCase())
+          ) {
+            data.category =
+              update.fields.category.toUpperCase() as BudgetCategory
           } else {
             data.category = null
           }
         }
-        if (update.fields.monthlyAmount !== undefined) data.monthlyAmount = update.fields.monthlyAmount
+        if (update.fields.monthlyAmount !== undefined)
+          data.monthlyAmount = update.fields.monthlyAmount
         return db.budgetEntry.update({ where: { id: update.id }, data })
       })
     )

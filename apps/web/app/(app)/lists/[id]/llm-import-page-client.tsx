@@ -6,15 +6,12 @@ import { Button } from "@workspace/ui/components/button"
 import { Badge } from "@workspace/ui/components/badge"
 import { Separator } from "@workspace/ui/components/separator"
 import { cn } from "@workspace/ui/lib/utils"
-import {
-  X,
-  Sparkles,
-  WandSparkles,
-} from "lucide-react"
+import { X, Sparkles, WandSparkles } from "lucide-react"
 import {
   bulkCreateShoppingItems,
   findExistingShoppingItems,
   bulkImportShoppingItemsWithDuplicates,
+  replaceShoppingItems,
   type ExistingShoppingItem,
 } from "@/lib/actions/shopping-item"
 import { toast } from "sonner"
@@ -28,6 +25,8 @@ import {
 } from "@/components/duplicate-field-diff"
 import {
   LlmImportPageHeader,
+  LlmImportModeToggle,
+  LlmImportMultiPromptStep,
   LlmImportPasteStep,
   LlmImportPreviewHeader,
   LlmImportPromptStep,
@@ -38,6 +37,7 @@ interface LlmImportPageClientProps {
   listId: string
   listName: string
   categories: Array<{ id: string; name: string; icon: string | null }>
+  existingItems: ParsedItem[]
 }
 
 interface ParsedAlternative {
@@ -61,6 +61,8 @@ interface ParsedItem {
   storeName?: string
   alternatives?: ParsedAlternative[]
 }
+
+type ImportMode = "merge" | "replace"
 
 function buildPrompt(
   listName: string,
@@ -138,12 +140,53 @@ Eksempel på forventet svar:
 ]`
 }
 
+function buildContextPrompt(
+  listName: string,
+  categories: Array<{ name: string; icon: string | null }>,
+  existingItems: ParsedItem[]
+) {
+  const categoryNames = categories.map((category) => category.name).join(", ")
+
+  return `Jeg bruker en app for å holde oversikt over innkjøpslisten min "${listName}".
+
+Her er dagens liste i JSON-format:
+
+${JSON.stringify(existingItems, null, 2)}
+
+Jeg ønsker å sparre om denne listen i naturlig språk.
+
+Hjelp meg med å vurdere:
+- om produktene jeg har valgt er gode valg
+- om noe bør byttes ut, fjernes eller legges til
+- om det finnes bedre alternativer, bedre tilbud eller smartere kategorisering
+
+Viktig:
+- svar i naturlig språk
+- ikke returner JSON nå
+- bruk listen over som kontekst når du kommer med råd
+- tilgjengelige kategorier i appen er: ${categoryNames || "ingen kategorier ennå"}`
+}
+
+function buildReplacePrompt(
+  listName: string,
+  categories: Array<{ name: string; icon: string | null }>
+) {
+  return `Ta alt vi har diskutert om innkjøpslisten "${listName}" og skriv en oppdatert JSON-array som kan erstatte hele listen min.
+
+Hele svaret ditt vil overskrive det som allerede finnes i listen, så ta bare med det som faktisk skal være igjen.
+
+${buildPrompt(listName, categories)}`
+}
+
 function cleanMarkdownUrl(value: string): string {
   const match = value.match(/\[.*?\]\((.+)\)/)
   return match?.[1]?.trim() || value.trim()
 }
 
-function parseJsonInput(raw: string): { items: ParsedItem[]; error: string | null } {
+function parseJsonInput(
+  raw: string,
+  { allowEmpty = false }: { allowEmpty?: boolean } = {}
+): { items: ParsedItem[]; error: string | null } {
   const trimmed = raw.trim()
 
   let jsonStr = trimmed
@@ -156,10 +199,13 @@ function parseJsonInput(raw: string): { items: ParsedItem[]; error: string | nul
     const parsed = JSON.parse(jsonStr)
 
     if (!Array.isArray(parsed)) {
-      return { items: [], error: "Forventet en JSON-array, men fikk et annet format." }
+      return {
+        items: [],
+        error: "Forventet en JSON-array, men fikk et annet format.",
+      }
     }
 
-    if (parsed.length === 0) {
+    if (!allowEmpty && parsed.length === 0) {
       return { items: [], error: "JSON-arrayen er tom." }
     }
 
@@ -221,7 +267,12 @@ function parseJsonInput(raw: string): { items: ParsedItem[]; error: string | nul
         const alts: ParsedAlternative[] = []
         for (const altEntry of entry.alternatives) {
           if (!altEntry || typeof altEntry !== "object") continue
-          if (!altEntry.name || typeof altEntry.name !== "string" || !altEntry.name.trim()) continue
+          if (
+            !altEntry.name ||
+            typeof altEntry.name !== "string" ||
+            !altEntry.name.trim()
+          )
+            continue
 
           const alt: ParsedAlternative = {
             name: String(altEntry.name).trim(),
@@ -260,10 +311,16 @@ function parseJsonInput(raw: string): { items: ParsedItem[]; error: string | nul
 
     return {
       items,
-      error: errors.length > 0 ? `${items.length} produkter ble tolket. ${errors.length} ble hoppet over.` : null,
+      error:
+        errors.length > 0
+          ? `${items.length} produkter ble tolket. ${errors.length} ble hoppet over.`
+          : null,
     }
   } catch {
-    return { items: [], error: "Ugyldig JSON. Sjekk at du har limt inn et gyldig JSON-format." }
+    return {
+      items: [],
+      error: "Ugyldig JSON. Sjekk at du har limt inn et gyldig JSON-format.",
+    }
   }
 }
 
@@ -292,21 +349,64 @@ type ItemDuplicate = DuplicateItem<ParsedItem>
 function buildItemDiffs(
   imported: ParsedItem,
   existing: ExistingShoppingItem,
-  categoryIdToName: Record<string, string>,
+  categoryIdToName: Record<string, string>
 ): FieldDiff[] {
   const existingCategoryName = existing.categoryId
-    ? categoryIdToName[existing.categoryId] ?? null
+    ? (categoryIdToName[existing.categoryId] ?? null)
     : null
 
   return computeFieldDiffs([
-    { key: "description", label: "Beskrivelse", existingValue: existing.description, newValue: imported.description },
-    { key: "categoryName", label: "Kategori", existingValue: existingCategoryName, newValue: imported.categoryName },
-    { key: "priority", label: "Prioritet", existingValue: existing.priority, newValue: imported.priority, format: (v) => priorityLabel[String(v)] ?? String(v) },
-    { key: "phase", label: "Fase", existingValue: existing.phase, newValue: imported.phase, format: (v) => phaseLabel[String(v)] ?? String(v) },
-    { key: "estimatedPrice", label: "Pris", existingValue: existing.estimatedPrice, newValue: imported.estimatedPrice, format: (v) => formatPrice(Number(v)) },
-    { key: "url", label: "URL", existingValue: existing.url, newValue: imported.url },
-    { key: "imageUrl", label: "Bilde-URL", existingValue: existing.imageUrl, newValue: imported.imageUrl },
-    { key: "storeName", label: "Butikk", existingValue: existing.storeName, newValue: imported.storeName },
+    {
+      key: "description",
+      label: "Beskrivelse",
+      existingValue: existing.description,
+      newValue: imported.description,
+    },
+    {
+      key: "categoryName",
+      label: "Kategori",
+      existingValue: existingCategoryName,
+      newValue: imported.categoryName,
+    },
+    {
+      key: "priority",
+      label: "Prioritet",
+      existingValue: existing.priority,
+      newValue: imported.priority,
+      format: (v) => priorityLabel[String(v)] ?? String(v),
+    },
+    {
+      key: "phase",
+      label: "Fase",
+      existingValue: existing.phase,
+      newValue: imported.phase,
+      format: (v) => phaseLabel[String(v)] ?? String(v),
+    },
+    {
+      key: "estimatedPrice",
+      label: "Pris",
+      existingValue: existing.estimatedPrice,
+      newValue: imported.estimatedPrice,
+      format: (v) => formatPrice(Number(v)),
+    },
+    {
+      key: "url",
+      label: "URL",
+      existingValue: existing.url,
+      newValue: imported.url,
+    },
+    {
+      key: "imageUrl",
+      label: "Bilde-URL",
+      existingValue: existing.imageUrl,
+      newValue: imported.imageUrl,
+    },
+    {
+      key: "storeName",
+      label: "Butikk",
+      existingValue: existing.storeName,
+      newValue: imported.storeName,
+    },
   ])
 }
 
@@ -314,10 +414,14 @@ export function LlmImportPageClient({
   listId,
   listName,
   categories,
+  existingItems,
 }: LlmImportPageClientProps) {
   const router = useRouter()
+  const [mode, setMode] = useState<ImportMode>("merge")
   const [step, setStep] = useState<"prompt" | "paste" | "preview">("prompt")
-  const [copied, setCopied] = useState(false)
+  const [copiedPrompt, setCopiedPrompt] = useState<
+    "merge" | "context" | "replace" | null
+  >(null)
   const [jsonInput, setJsonInput] = useState("")
   const [parsedItems, setParsedItems] = useState<ParsedItem[]>([])
   const [parseError, setParseError] = useState<string | null>(null)
@@ -325,10 +429,14 @@ export function LlmImportPageClient({
   const [isPending, startTransition] = useTransition()
   const [newItems, setNewItems] = useState<ParsedItem[]>([])
   const [duplicates, setDuplicates] = useState<ItemDuplicate[]>([])
-  const [selectedFields, setSelectedFields] = useState<Map<string, Set<string>>>(new Map())
+  const [selectedFields, setSelectedFields] = useState<
+    Map<string, Set<string>>
+  >(new Map())
   const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false)
 
   const prompt = buildPrompt(listName, categories)
+  const contextPrompt = buildContextPrompt(listName, categories, existingItems)
+  const replacePrompt = buildReplacePrompt(listName, categories)
 
   const categoryMap: Record<string, string> = {}
   const categoryIdToName: Record<string, string> = {}
@@ -341,16 +449,46 @@ export function LlmImportPageClient({
     (d) => (selectedFields.get(d.existingId)?.size ?? 0) > 0
   ).length
 
-  function handleCopyPrompt() {
-    navigator.clipboard.writeText(prompt)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+  function handleCopyPrompt(
+    value: string,
+    target: "merge" | "context" | "replace"
+  ) {
+    navigator.clipboard.writeText(value)
+    setCopiedPrompt(target)
+    setTimeout(
+      () => setCopiedPrompt((current) => (current === target ? null : current)),
+      2000
+    )
+  }
+
+  function handleReset(nextMode: ImportMode = mode) {
+    setMode(nextMode)
+    setStep("prompt")
+    setCopiedPrompt(null)
+    setJsonInput("")
+    setParsedItems([])
+    setParseError(null)
+    setImportError(null)
+    setNewItems([])
+    setDuplicates([])
+    setSelectedFields(new Map())
+    setIsCheckingDuplicates(false)
   }
 
   async function handleParse() {
-    const { items, error } = parseJsonInput(jsonInput)
+    const { items, error } = parseJsonInput(jsonInput, {
+      allowEmpty: mode === "replace",
+    })
     setParsedItems(items)
     setParseError(error)
+
+    if (mode === "replace") {
+      setNewItems(items)
+      setDuplicates([])
+      setSelectedFields(new Map())
+      setStep("preview")
+      return
+    }
 
     if (items.length === 0) return
 
@@ -416,6 +554,22 @@ export function LlmImportPageClient({
     setImportError(null)
     startTransition(async () => {
       try {
+        if (mode === "replace") {
+          await replaceShoppingItems({
+            items: parsedItems,
+            listId,
+            categoryMap,
+          })
+          toast.success(
+            parsedItems.length === 0
+              ? "Listen ble tømt"
+              : `${parsedItems.length} ${parsedItems.length === 1 ? "produkt" : "produkter"} erstattet listen`
+          )
+          router.push(`/lists/${listId}`)
+          router.refresh()
+          return
+        }
+
         const hasDuplicateUpdates = duplicates.some(
           (d) => (selectedFields.get(d.existingId)?.size ?? 0) > 0
         )
@@ -445,13 +599,17 @@ export function LlmImportPageClient({
                 storeName?: string
               } = {}
 
-              if (selected.has("description")) fields.description = item.description
+              if (selected.has("description"))
+                fields.description = item.description
               if (selected.has("categoryName")) {
-                fields.categoryId = item.categoryName ? categoryMap[item.categoryName] ?? null : null
+                fields.categoryId = item.categoryName
+                  ? (categoryMap[item.categoryName] ?? null)
+                  : null
               }
               if (selected.has("priority")) fields.priority = item.priority
               if (selected.has("phase")) fields.phase = item.phase ?? null
-              if (selected.has("estimatedPrice")) fields.estimatedPrice = item.estimatedPrice
+              if (selected.has("estimatedPrice"))
+                fields.estimatedPrice = item.estimatedPrice
               if (selected.has("url")) fields.url = item.url
               if (selected.has("imageUrl")) fields.imageUrl = item.imageUrl
               if (selected.has("storeName")) fields.storeName = item.storeName
@@ -467,8 +625,11 @@ export function LlmImportPageClient({
           })
         }
 
-        const totalImported = newItems.length + (hasDuplicateUpdates ? updateCount : 0)
-        toast.success(`${totalImported} ${totalImported === 1 ? "produkt" : "produkter"} importert/oppdatert`)
+        const totalImported =
+          newItems.length + (hasDuplicateUpdates ? updateCount : 0)
+        toast.success(
+          `${totalImported} ${totalImported === 1 ? "produkt" : "produkter"} importert/oppdatert`
+        )
         router.push(`/lists/${listId}`)
         router.refresh()
       } catch (err) {
@@ -492,33 +653,62 @@ export function LlmImportPageClient({
         step={step}
       />
 
-      {step === "prompt" && (
+      <LlmImportModeToggle
+        value={mode}
+        onValueChange={(nextMode) => handleReset(nextMode)}
+        options={[
+          {
+            value: "merge",
+            label: "Vanlig import",
+            description:
+              "Behold dagens flyt: importer nye data og velg felt som skal oppdateres ved duplikater.",
+          },
+          {
+            value: "replace",
+            label: "Sparring + erstatt",
+            description:
+              "Kopier dagens data til LLM-en din, sparr i naturlig språk og lim inn et endelig JSON-svar som erstatter hele listen.",
+          },
+        ]}
+      />
+
+      {step === "prompt" && mode === "merge" && (
         <LlmImportPromptStep
           title="Kopier prompt til LLM"
           description="Bruk prompten under i ChatGPT, Claude eller annen LLM. Be modellen svare kun med JSON."
           prompt={prompt}
-          copied={copied}
-          onCopy={handleCopyPrompt}
+          copied={copiedPrompt === "merge"}
+          onCopy={() => handleCopyPrompt(prompt, "merge")}
           onNext={() => setStep("paste")}
           sidebar={
             <>
               <div className="rounded-lg border bg-muted/20 px-3 py-3">
-              <div className="flex items-start gap-3 text-sm text-muted-foreground">
-                <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                <p>Kategorien bør matche en eksisterende kategori nøyaktig for at importen skal plassere produktet riktig.</p>
-              </div>
+                <div className="flex items-start gap-3 text-sm text-muted-foreground">
+                  <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                  <p>
+                    Kategorien bør matche en eksisterende kategori nøyaktig for
+                    at importen skal plassere produktet riktig.
+                  </p>
+                </div>
               </div>
               <div className="rounded-lg border bg-muted/20 px-3 py-3">
-              <div className="flex items-start gap-3 text-sm text-muted-foreground">
-                <WandSparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                <p>Hvis et produkt finnes fra før, får du velge hvilke felt som skal oppdateres før noe skrives til listen.</p>
-              </div>
+                <div className="flex items-start gap-3 text-sm text-muted-foreground">
+                  <WandSparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                  <p>
+                    Hvis et produkt finnes fra før, får du velge hvilke felt som
+                    skal oppdateres før noe skrives til listen.
+                  </p>
+                </div>
               </div>
               <div className="space-y-2">
                 <p className="text-sm font-medium">Tilgjengelige kategorier</p>
                 <div className="flex flex-wrap gap-2">
                   {categories.map((category) => (
-                    <Badge key={category.id} variant="secondary" className="text-xs">
+                    <Badge
+                      key={category.id}
+                      variant="secondary"
+                      className="text-xs"
+                    >
                       {category.name}
                     </Badge>
                   ))}
@@ -529,9 +719,65 @@ export function LlmImportPageClient({
         />
       )}
 
+      {step === "prompt" && mode === "replace" && (
+        <LlmImportMultiPromptStep
+          title="Kopier sparringsgrunnlag"
+          description="Bruk først dagens data som kontekst i en naturlig samtale med LLM-en. Når dere er ferdige, bruk prompten under for å få tilbake et endelig JSON-svar som kan erstatte hele listen."
+          sections={[
+            {
+              id: "context",
+              title: "1. Prompt med dagens liste",
+              description:
+                "Send denne først for å gi LLM-en kontekst og be om sparring i naturlig språk.",
+              prompt: contextPrompt,
+              copied: copiedPrompt === "context",
+              onCopy: () => handleCopyPrompt(contextPrompt, "context"),
+              copyLabel: "Kopier sparringsprompt",
+            },
+            {
+              id: "replace",
+              title: "2. Prompt for endelig JSON",
+              description:
+                "Bruk denne når dere er ferdige med sparringen og du vil ha et ferdig JSON-svar tilbake.",
+              prompt: replacePrompt,
+              copied: copiedPrompt === "replace",
+              onCopy: () => handleCopyPrompt(replacePrompt, "replace"),
+              copyLabel: "Kopier JSON-prompt",
+            },
+          ]}
+          onNext={() => setStep("paste")}
+          sidebar={
+            <>
+              <div className="rounded-lg border bg-muted/20 px-3 py-3">
+                <div className="flex items-start gap-3 text-sm text-muted-foreground">
+                  <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                  <p>
+                    Hele JSON-svaret du limer inn senere vil erstatte alt som
+                    finnes i listen i dag.
+                  </p>
+                </div>
+              </div>
+              <div className="rounded-lg border bg-muted/20 px-3 py-3">
+                <div className="flex items-start gap-3 text-sm text-muted-foreground">
+                  <WandSparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                  <p>
+                    Tom JSON-array er lov i dette sporet hvis du ønsker å tømme
+                    listen helt.
+                  </p>
+                </div>
+              </div>
+            </>
+          }
+        />
+      )}
+
       {step === "paste" && (
         <LlmImportPasteStep
-          title="Lim inn JSON-svaret"
+          title={
+            mode === "replace"
+              ? "Lim inn oppdatert JSON"
+              : "Lim inn JSON-svaret"
+          }
           label="JSON fra LLM"
           inputId="llm-json-input"
           value={jsonInput}
@@ -539,12 +785,16 @@ export function LlmImportPageClient({
             setJsonInput(value)
             setParseError(null)
           }}
-          placeholder={'[\n  {\n    "name": "Produktnavn",\n    ...\n  }\n]'}
+          placeholder={
+            mode === "replace"
+              ? '[\n  {\n    "name": "Produktnavn",\n    ...\n  }\n]'
+              : '[\n  {\n    "name": "Produktnavn",\n    ...\n  }\n]'
+          }
           parseError={parseError}
           showError={parsedItems.length === 0}
           onBack={() => setStep("prompt")}
           onParse={handleParse}
-          isParsing={isCheckingDuplicates}
+          isParsing={mode === "merge" && isCheckingDuplicates}
         />
       )}
 
@@ -552,7 +802,7 @@ export function LlmImportPageClient({
         <>
           <LlmImportPreviewHeader
             summary={
-              duplicates.length > 0 ? (
+              mode === "merge" && duplicates.length > 0 ? (
                 <DuplicateSummary
                   newCount={newItems.length}
                   duplicateCount={duplicates.length}
@@ -560,28 +810,47 @@ export function LlmImportPageClient({
                 />
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  {parsedItems.length} {parsedItems.length === 1 ? "produkt" : "produkter"} klare for import.
+                  {parsedItems.length}{" "}
+                  {parsedItems.length === 1 ? "produkt" : "produkter"}{" "}
+                  {mode === "replace"
+                    ? "klare til å erstatte listen."
+                    : "klare for import."}
                 </p>
               )
             }
             parseError={parseError}
-            description="Gå gjennom nye produkter og velg hvilke duplikatfelt som skal oppdateres."
+            description={
+              mode === "replace"
+                ? "Se gjennom JSON-en før du erstatter hele listen."
+                : "Gå gjennom nye produkter og velg hvilke duplikatfelt som skal oppdateres."
+            }
           />
+
+          {mode === "replace" ? (
+            <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
+              Dette sporet overskriver alle eksisterende produkter i listen,
+              inkludert produkter du har fjernet i JSON-svaret.
+            </div>
+          ) : null}
 
           <div
             className={cn(
               "grid gap-6",
-              duplicates.length > 0 &&
+              mode === "merge" &&
+                duplicates.length > 0 &&
                 newItems.length > 0 &&
                 "xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
             )}
           >
-            {duplicates.length > 0 && (
+            {mode === "merge" && duplicates.length > 0 && (
               <section className="space-y-3">
                 <div className="flex items-center justify-between gap-3">
-                  <h3 className="font-heading text-lg font-medium">Duplikater</h3>
+                  <h3 className="font-heading text-lg font-medium">
+                    Duplikater
+                  </h3>
                   <span className="text-sm text-muted-foreground">
-                    {duplicates.length} {duplicates.length === 1 ? "treff" : "treff"}
+                    {duplicates.length}{" "}
+                    {duplicates.length === 1 ? "treff" : "treff"}
                   </span>
                 </div>
                 <div className="space-y-2">
@@ -590,8 +859,12 @@ export function LlmImportPageClient({
                       key={dup.existingId}
                       label={dup.existingLabel}
                       diffs={dup.diffs}
-                      selectedFields={selectedFields.get(dup.existingId) ?? new Set()}
-                      onToggleField={(field) => handleToggleField(dup.existingId, field)}
+                      selectedFields={
+                        selectedFields.get(dup.existingId) ?? new Set()
+                      }
+                      onToggleField={(field) =>
+                        handleToggleField(dup.existingId, field)
+                      }
                     />
                   ))}
                 </div>
@@ -601,9 +874,12 @@ export function LlmImportPageClient({
             {newItems.length > 0 && (
               <section className="space-y-3">
                 <div className="flex items-center justify-between gap-3">
-                  <h3 className="font-heading text-lg font-medium">Nye produkter</h3>
+                  <h3 className="font-heading text-lg font-medium">
+                    Nye produkter
+                  </h3>
                   <span className="text-sm text-muted-foreground">
-                    {newItems.length} {newItems.length === 1 ? "produkt" : "produkter"}
+                    {newItems.length}{" "}
+                    {newItems.length === 1 ? "produkt" : "produkter"}
                   </span>
                 </div>
                 <div className="grid gap-3 lg:grid-cols-2">
@@ -625,13 +901,20 @@ export function LlmImportPageClient({
             cancelHref={`/lists/${listId}`}
             onPrimary={handleImport}
             isPending={isPending}
-            primaryDisabled={isPending || (newItems.length === 0 && updateCount === 0)}
+            primaryDisabled={
+              isPending ||
+              (mode === "merge" && newItems.length === 0 && updateCount === 0)
+            }
             primaryLabel={
-              newItems.length > 0 && updateCount > 0
-                ? `Importer ${newItems.length} nye + oppdater ${updateCount}`
-                : newItems.length > 0
-                  ? `Importer ${newItems.length} ${newItems.length === 1 ? "produkt" : "produkter"}`
-                  : `Oppdater ${updateCount} ${updateCount === 1 ? "produkt" : "produkter"}`
+              mode === "replace"
+                ? parsedItems.length === 0
+                  ? "Tøm listen"
+                  : `Erstatt med ${parsedItems.length} ${parsedItems.length === 1 ? "produkt" : "produkter"}`
+                : newItems.length > 0 && updateCount > 0
+                  ? `Importer ${newItems.length} nye + oppdater ${updateCount}`
+                  : newItems.length > 0
+                    ? `Importer ${newItems.length} ${newItems.length === 1 ? "produkt" : "produkter"}`
+                    : `Oppdater ${updateCount} ${updateCount === 1 ? "produkt" : "produkter"}`
             }
           />
         </>
@@ -663,22 +946,20 @@ function ImportItemPreviewCard({
       <div className="flex min-w-0 flex-1 flex-col gap-2">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="break-words font-medium">{item.name}</p>
+            <p className="font-medium break-words">{item.name}</p>
             {item.description && (
-              <p className="mt-1 text-sm text-muted-foreground">{item.description}</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {item.description}
+              </p>
             )}
           </div>
           <div className="flex items-center gap-2">
             {item.estimatedPrice != null && (
-              <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
+              <span className="shrink-0 text-sm text-muted-foreground tabular-nums">
                 {formatPrice(item.estimatedPrice)}
               </span>
             )}
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={onRemove}
-            >
+            <Button variant="ghost" size="icon-sm" onClick={onRemove}>
               <X className="h-3.5 w-3.5" />
               <span className="sr-only">Fjern {item.name}</span>
             </Button>
@@ -708,7 +989,8 @@ function ImportItemPreviewCard({
           )}
           {item.alternatives && item.alternatives.length > 0 && (
             <Badge variant="secondary" className="text-xs">
-              {item.alternatives.length} {item.alternatives.length === 1 ? "alternativ" : "alternativer"}
+              {item.alternatives.length}{" "}
+              {item.alternatives.length === 1 ? "alternativ" : "alternativer"}
             </Badge>
           )}
         </div>
@@ -718,7 +1000,10 @@ function ImportItemPreviewCard({
             <Separator />
             <div className="space-y-2">
               {item.alternatives.map((alt, index) => (
-                <div key={`${item.name}-${index}`} className="flex items-start gap-2">
+                <div
+                  key={`${item.name}-${index}`}
+                  className="flex items-start gap-2"
+                >
                   {alt.imageUrl && (
                     <img
                       src={alt.imageUrl}
@@ -731,14 +1016,20 @@ function ImportItemPreviewCard({
                   )}
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <span className="text-xs text-muted-foreground">{index + 1}.</span>
-                      <span className="min-w-0 break-words text-sm">{alt.name}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {index + 1}.
+                      </span>
+                      <span className="min-w-0 text-sm break-words">
+                        {alt.name}
+                      </span>
                       {alt.storeName && (
-                        <span className="text-xs text-muted-foreground">{alt.storeName}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {alt.storeName}
+                        </span>
                       )}
                     </div>
                     {alt.price != null && (
-                      <span className="text-xs tabular-nums text-muted-foreground">
+                      <span className="text-xs text-muted-foreground tabular-nums">
                         {formatPrice(alt.price)}
                       </span>
                     )}

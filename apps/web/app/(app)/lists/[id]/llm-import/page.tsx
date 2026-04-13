@@ -30,6 +30,27 @@ export default async function ListLlmImportPage({
       listId={list.id}
       listName={list.name}
       categories={categories}
+      existingItems={list.items.map((item) => ({
+        name: item.name,
+        description: item.description ?? undefined,
+        categoryName: item.category?.name ?? undefined,
+        priority: item.priority,
+        phase: item.phase ?? undefined,
+        estimatedPrice:
+          item.estimatedPrice != null ? Number(item.estimatedPrice) : undefined,
+        url: item.url ?? undefined,
+        imageUrl: item.imageUrl ?? undefined,
+        storeName: item.storeName ?? undefined,
+        alternatives: item.alternatives.map((alternative) => ({
+          name: alternative.name,
+          price:
+            alternative.price != null ? Number(alternative.price) : undefined,
+          url: alternative.url ?? undefined,
+          imageUrl: alternative.imageUrl ?? undefined,
+          storeName: alternative.storeName ?? undefined,
+          notes: alternative.notes ?? undefined,
+        })),
+      }))}
     />
   )
 }

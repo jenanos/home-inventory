@@ -9,6 +9,7 @@ import {
   bulkImportMaintenanceTasks,
   findExistingMaintenanceTasks,
   bulkImportMaintenanceTasksWithDuplicates,
+  replaceMaintenanceTasks,
   type ExistingMaintenanceTask,
 } from "@/lib/actions/maintenance-task"
 import {
@@ -20,6 +21,8 @@ import {
 } from "@/components/duplicate-field-diff"
 import {
   LlmImportPageHeader,
+  LlmImportModeToggle,
+  LlmImportMultiPromptStep,
   LlmImportPasteStep,
   LlmImportPreviewHeader,
   LlmImportPromptStep,
@@ -29,6 +32,7 @@ import { toast } from "sonner"
 
 interface LlmImportPageClientProps {
   householdName?: string
+  existingTasks: ParsedTask[]
 }
 
 interface ParsedVendor {
@@ -56,6 +60,8 @@ interface ParsedTask {
   vendors: ParsedVendor[]
   progressEntries: ParsedProgressEntry[]
 }
+
+type ImportMode = "merge" | "replace"
 
 function buildPrompt() {
   return `Hjelp meg med å lage en oversikt over vedlikeholdsoppgaver for boligen min. Ta informasjonen jeg gir deg og formater det som JSON.
@@ -133,6 +139,37 @@ Eksempel:
 ]`
 }
 
+function buildContextPrompt(
+  existingTasks: ParsedTask[],
+  householdName?: string
+) {
+  return `Jeg bruker en app for å holde oversikt over vedlikeholdsoppgaver${householdName ? ` for ${householdName}` : ""}.
+
+Her er dagens oppgaver i JSON-format:
+
+${JSON.stringify(existingTasks, null, 2)}
+
+Jeg ønsker å sparre om vedlikeholdsplanen i naturlig språk.
+
+Hjelp meg med å vurdere:
+- om oppgavene og prioriteringene gir mening
+- om noe bør fjernes, legges til eller slås sammen
+- om det finnes bedre leverandører, mer realistiske priser eller smartere fremdriftsplaner
+
+Viktig:
+- svar i naturlig språk
+- ikke returner JSON nå
+- bruk JSON-en over som kontekst når du kommer med råd`
+}
+
+function buildReplacePrompt() {
+  return `Ta alt vi har diskutert om vedlikeholdsoppgavene mine og skriv en oppdatert JSON-array som kan erstatte hele oversikten i appen.
+
+Hele svaret ditt vil overskrive dagens vedlikeholdsoppgaver, så ta bare med det som faktisk skal være igjen.
+
+${buildPrompt()}`
+}
+
 function cleanMarkdownUrl(value: string): string {
   const match = value.match(/\[.*?\]\((.+)\)/)
   return match?.[1]?.trim() || value.trim()
@@ -154,7 +191,10 @@ function isValidCalendarDate(value: string): boolean {
   )
 }
 
-function parseJsonInput(raw: string): { tasks: ParsedTask[]; error: string | null } {
+function parseJsonInput(
+  raw: string,
+  { allowEmpty = false }: { allowEmpty?: boolean } = {}
+): { tasks: ParsedTask[]; error: string | null } {
   const trimmed = raw.trim()
 
   let jsonStr = trimmed
@@ -167,10 +207,13 @@ function parseJsonInput(raw: string): { tasks: ParsedTask[]; error: string | nul
     const parsed = JSON.parse(jsonStr)
 
     if (!Array.isArray(parsed)) {
-      return { tasks: [], error: "Forventet en JSON-array, men fikk et annet format." }
+      return {
+        tasks: [],
+        error: "Forventet en JSON-array, men fikk et annet format.",
+      }
     }
 
-    if (parsed.length === 0) {
+    if (!allowEmpty && parsed.length === 0) {
       return { tasks: [], error: "JSON-arrayen er tom." }
     }
 
@@ -185,7 +228,11 @@ function parseJsonInput(raw: string): { tasks: ParsedTask[]; error: string | nul
         continue
       }
 
-      if (!entry.title || typeof entry.title !== "string" || !entry.title.trim()) {
+      if (
+        !entry.title ||
+        typeof entry.title !== "string" ||
+        !entry.title.trim()
+      ) {
         errors.push(`Element ${i + 1}: Mangler obligatorisk felt "title".`)
         continue
       }
@@ -196,12 +243,16 @@ function parseJsonInput(raw: string): { tasks: ParsedTask[]; error: string | nul
         progressEntries: [],
       }
 
-      if (entry.description && typeof entry.description === "string") task.description = entry.description.trim()
+      if (entry.description && typeof entry.description === "string")
+        task.description = entry.description.trim()
       if (entry.priority && typeof entry.priority === "string") {
         const p = entry.priority.toUpperCase()
         if (["HIGH", "MEDIUM", "LOW"].includes(p)) task.priority = p
       }
-      if (entry.estimatedDuration && typeof entry.estimatedDuration === "string") {
+      if (
+        entry.estimatedDuration &&
+        typeof entry.estimatedDuration === "string"
+      ) {
         task.estimatedDuration = entry.estimatedDuration.trim()
       }
       if (entry.estimatedPrice != null) {
@@ -219,15 +270,20 @@ function parseJsonInput(raw: string): { tasks: ParsedTask[]; error: string | nul
           if (!v.name || typeof v.name !== "string" || !v.name.trim()) continue
 
           const vendor: ParsedVendor = { name: String(v.name).trim() }
-          if (v.description && typeof v.description === "string") vendor.description = v.description.trim()
-          if (v.phone && typeof v.phone === "string") vendor.phone = v.phone.trim()
-          if (v.email && typeof v.email === "string") vendor.email = v.email.trim()
-          if (v.website && typeof v.website === "string") vendor.website = cleanMarkdownUrl(v.website)
+          if (v.description && typeof v.description === "string")
+            vendor.description = v.description.trim()
+          if (v.phone && typeof v.phone === "string")
+            vendor.phone = v.phone.trim()
+          if (v.email && typeof v.email === "string")
+            vendor.email = v.email.trim()
+          if (v.website && typeof v.website === "string")
+            vendor.website = cleanMarkdownUrl(v.website)
           if (v.estimatedPrice != null) {
             const vp = Number(v.estimatedPrice)
             if (!isNaN(vp) && vp >= 0) vendor.estimatedPrice = vp
           }
-          if (v.notes && typeof v.notes === "string") vendor.notes = v.notes.trim()
+          if (v.notes && typeof v.notes === "string")
+            vendor.notes = v.notes.trim()
           task.vendors.push(vendor)
         }
       }
@@ -235,9 +291,12 @@ function parseJsonInput(raw: string): { tasks: ParsedTask[]; error: string | nul
       if (Array.isArray(entry.progressEntries)) {
         for (const pe of entry.progressEntries) {
           if (!pe || typeof pe !== "object") continue
-          if (!pe.title || typeof pe.title !== "string" || !pe.title.trim()) continue
+          if (!pe.title || typeof pe.title !== "string" || !pe.title.trim())
+            continue
 
-          const progressEntry: ParsedProgressEntry = { title: String(pe.title).trim() }
+          const progressEntry: ParsedProgressEntry = {
+            title: String(pe.title).trim(),
+          }
           if (pe.description && typeof pe.description === "string") {
             progressEntry.description = pe.description.trim()
           }
@@ -254,10 +313,16 @@ function parseJsonInput(raw: string): { tasks: ParsedTask[]; error: string | nul
 
     return {
       tasks,
-      error: errors.length > 0 ? `${tasks.length} oppgaver ble tolket. ${errors.length} ble hoppet over.` : null,
+      error:
+        errors.length > 0
+          ? `${tasks.length} oppgaver ble tolket. ${errors.length} ble hoppet over.`
+          : null,
     }
   } catch {
-    return { tasks: [], error: "Ugyldig JSON. Sjekk at du har limt inn et gyldig JSON-format." }
+    return {
+      tasks: [],
+      error: "Ugyldig JSON. Sjekk at du har limt inn et gyldig JSON-format.",
+    }
   }
 }
 
@@ -276,22 +341,57 @@ const formatPrice = (price: number) =>
 
 type TaskDuplicate = DuplicateItem<ParsedTask>
 
-function buildTaskDiffs(imported: ParsedTask, existing: ExistingMaintenanceTask): FieldDiff[] {
+function buildTaskDiffs(
+  imported: ParsedTask,
+  existing: ExistingMaintenanceTask
+): FieldDiff[] {
   return computeFieldDiffs([
-    { key: "description", label: "Beskrivelse", existingValue: existing.description, newValue: imported.description },
-    { key: "priority", label: "Prioritet", existingValue: existing.priority, newValue: imported.priority, format: (v) => priorityLabel[String(v)] ?? String(v) },
-    { key: "estimatedDuration", label: "Varighet", existingValue: existing.estimatedDuration, newValue: imported.estimatedDuration },
-    { key: "estimatedPrice", label: "Pris", existingValue: existing.estimatedPrice, newValue: imported.estimatedPrice, format: (v) => formatPrice(Number(v)) },
-    { key: "dueDate", label: "Frist", existingValue: existing.dueDate, newValue: imported.dueDate, format: (v) => new Date(String(v)).toLocaleDateString("nb-NO") },
+    {
+      key: "description",
+      label: "Beskrivelse",
+      existingValue: existing.description,
+      newValue: imported.description,
+    },
+    {
+      key: "priority",
+      label: "Prioritet",
+      existingValue: existing.priority,
+      newValue: imported.priority,
+      format: (v) => priorityLabel[String(v)] ?? String(v),
+    },
+    {
+      key: "estimatedDuration",
+      label: "Varighet",
+      existingValue: existing.estimatedDuration,
+      newValue: imported.estimatedDuration,
+    },
+    {
+      key: "estimatedPrice",
+      label: "Pris",
+      existingValue: existing.estimatedPrice,
+      newValue: imported.estimatedPrice,
+      format: (v) => formatPrice(Number(v)),
+    },
+    {
+      key: "dueDate",
+      label: "Frist",
+      existingValue: existing.dueDate,
+      newValue: imported.dueDate,
+      format: (v) => new Date(String(v)).toLocaleDateString("nb-NO"),
+    },
   ])
 }
 
 export function MaintenanceLlmImportPageClient({
   householdName,
+  existingTasks,
 }: LlmImportPageClientProps) {
   const router = useRouter()
+  const [mode, setMode] = useState<ImportMode>("merge")
   const [step, setStep] = useState<"prompt" | "paste" | "preview">("prompt")
-  const [copied, setCopied] = useState(false)
+  const [copiedPrompt, setCopiedPrompt] = useState<
+    "merge" | "context" | "replace" | null
+  >(null)
   const [jsonInput, setJsonInput] = useState("")
   const [parsedTasks, setParsedTasks] = useState<ParsedTask[]>([])
   const [parseError, setParseError] = useState<string | null>(null)
@@ -299,23 +399,58 @@ export function MaintenanceLlmImportPageClient({
   const [isPending, startTransition] = useTransition()
   const [newTasks, setNewTasks] = useState<ParsedTask[]>([])
   const [duplicates, setDuplicates] = useState<TaskDuplicate[]>([])
-  const [selectedFields, setSelectedFields] = useState<Map<string, Set<string>>>(new Map())
+  const [selectedFields, setSelectedFields] = useState<
+    Map<string, Set<string>>
+  >(new Map())
   const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false)
 
   const prompt = buildPrompt()
-  const updateCount = duplicates.filter((d) => (selectedFields.get(d.existingId)?.size ?? 0) > 0).length
+  const contextPrompt = buildContextPrompt(existingTasks, householdName)
+  const replacePrompt = buildReplacePrompt()
+  const updateCount = duplicates.filter(
+    (d) => (selectedFields.get(d.existingId)?.size ?? 0) > 0
+  ).length
   const totalItems = parsedTasks.length
 
-  function handleCopyPrompt() {
-    navigator.clipboard.writeText(prompt)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+  function handleCopyPrompt(
+    value: string,
+    target: "merge" | "context" | "replace"
+  ) {
+    navigator.clipboard.writeText(value)
+    setCopiedPrompt(target)
+    setTimeout(() => {
+      setCopiedPrompt((current) => (current === target ? null : current))
+    }, 2000)
+  }
+
+  function handleReset(nextMode: ImportMode = mode) {
+    setMode(nextMode)
+    setStep("prompt")
+    setCopiedPrompt(null)
+    setJsonInput("")
+    setParsedTasks([])
+    setParseError(null)
+    setImportError(null)
+    setNewTasks([])
+    setDuplicates([])
+    setSelectedFields(new Map())
+    setIsCheckingDuplicates(false)
   }
 
   async function handleParse() {
-    const { tasks, error } = parseJsonInput(jsonInput)
+    const { tasks, error } = parseJsonInput(jsonInput, {
+      allowEmpty: mode === "replace",
+    })
     setParsedTasks(tasks)
     setParseError(error)
+
+    if (mode === "replace") {
+      setNewTasks(tasks)
+      setDuplicates([])
+      setSelectedFields(new Map())
+      setStep("preview")
+      return
+    }
 
     if (tasks.length === 0) return
 
@@ -379,7 +514,22 @@ export function MaintenanceLlmImportPageClient({
     setImportError(null)
     startTransition(async () => {
       try {
-        const hasDuplicateUpdates = duplicates.some((d) => (selectedFields.get(d.existingId)?.size ?? 0) > 0)
+        if (mode === "replace") {
+          await replaceMaintenanceTasks({ tasks: parsedTasks })
+          handleReset()
+          router.push("/vedlikehold")
+          router.refresh()
+          toast.success(
+            parsedTasks.length === 0
+              ? "Vedlikeholdsoversikten ble tømt"
+              : "Vedlikeholdsoppgavene ble erstattet"
+          )
+          return
+        }
+
+        const hasDuplicateUpdates = duplicates.some(
+          (d) => (selectedFields.get(d.existingId)?.size ?? 0) > 0
+        )
 
         if (duplicates.length === 0 || !hasDuplicateUpdates) {
           if (newTasks.length > 0) {
@@ -399,10 +549,13 @@ export function MaintenanceLlmImportPageClient({
                 dueDate?: string
               } = {}
 
-              if (selected.has("description")) fields.description = item.description
+              if (selected.has("description"))
+                fields.description = item.description
               if (selected.has("priority")) fields.priority = item.priority
-              if (selected.has("estimatedDuration")) fields.estimatedDuration = item.estimatedDuration
-              if (selected.has("estimatedPrice")) fields.estimatedPrice = item.estimatedPrice
+              if (selected.has("estimatedDuration"))
+                fields.estimatedDuration = item.estimatedDuration
+              if (selected.has("estimatedPrice"))
+                fields.estimatedPrice = item.estimatedPrice
               if (selected.has("dueDate")) fields.dueDate = item.dueDate
               return { id: d.existingId, fields }
             })
@@ -424,18 +577,6 @@ export function MaintenanceLlmImportPageClient({
     })
   }
 
-  function handleReset() {
-    setStep("prompt")
-    setCopied(false)
-    setJsonInput("")
-    setParsedTasks([])
-    setParseError(null)
-    setImportError(null)
-    setNewTasks([])
-    setDuplicates([])
-    setSelectedFields(new Map())
-  }
-
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
       <LlmImportPageHeader
@@ -446,26 +587,104 @@ export function MaintenanceLlmImportPageClient({
         step={step}
       />
 
-      {step === "prompt" && (
+      <LlmImportModeToggle
+        value={mode}
+        onValueChange={(nextMode) => handleReset(nextMode)}
+        options={[
+          {
+            value: "merge",
+            label: "Vanlig import",
+            description:
+              "Behold dagens flyt: importer nye oppgaver og velg felt som skal oppdateres ved duplikater.",
+          },
+          {
+            value: "replace",
+            label: "Sparring + erstatt",
+            description:
+              "Kopier dagens vedlikeholdsdata til LLM-en din, sparr i naturlig språk og lim inn et endelig JSON-svar som erstatter hele oversikten.",
+          },
+        ]}
+      />
+
+      {step === "prompt" && mode === "merge" && (
         <LlmImportPromptStep
           title="Kopier prompt til LLM"
           description="Bruk prompten under i ChatGPT, Claude eller annen LLM. Be modellen svare kun med JSON."
           prompt={prompt}
-          copied={copied}
-          onCopy={handleCopyPrompt}
+          copied={copiedPrompt === "merge"}
+          onCopy={() => handleCopyPrompt(prompt, "merge")}
           onNext={() => setStep("paste")}
           sidebar={
             <>
               <div className="rounded-lg border bg-muted/20 px-3 py-3">
                 <div className="flex items-start gap-3 text-sm text-muted-foreground">
                   <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                  <p>Oppgaver med samme tittel blir behandlet som duplikater, så du kan velge hvilke felt som skal oppdateres.</p>
+                  <p>
+                    Oppgaver med samme tittel blir behandlet som duplikater, så
+                    du kan velge hvilke felt som skal oppdateres.
+                  </p>
                 </div>
               </div>
               <div className="rounded-lg border bg-muted/20 px-3 py-3">
                 <div className="flex items-start gap-3 text-sm text-muted-foreground">
                   <WandSparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                  <p>Vendors og fremdriftspunkter kan være detaljerte, men modellen bør fortsatt kun svare med ren JSON.</p>
+                  <p>
+                    Vendors og fremdriftspunkter kan være detaljerte, men
+                    modellen bør fortsatt kun svare med ren JSON.
+                  </p>
+                </div>
+              </div>
+            </>
+          }
+        />
+      )}
+
+      {step === "prompt" && mode === "replace" && (
+        <LlmImportMultiPromptStep
+          title="Kopier sparringsgrunnlag"
+          description="Bruk først dagens vedlikeholdsoppgaver som kontekst i en naturlig samtale med LLM-en. Når dere er ferdige, bruk prompten under for å få tilbake et endelig JSON-svar som kan erstatte hele oversikten."
+          sections={[
+            {
+              id: "context",
+              title: "1. Prompt med dagens vedlikeholdsoppgaver",
+              description:
+                "Send denne først for å gi LLM-en kontekst og be om sparring i naturlig språk.",
+              prompt: contextPrompt,
+              copied: copiedPrompt === "context",
+              onCopy: () => handleCopyPrompt(contextPrompt, "context"),
+              copyLabel: "Kopier sparringsprompt",
+            },
+            {
+              id: "replace",
+              title: "2. Prompt for endelig JSON",
+              description:
+                "Bruk denne når dere er ferdige med sparringen og du vil ha et ferdig JSON-svar tilbake.",
+              prompt: replacePrompt,
+              copied: copiedPrompt === "replace",
+              onCopy: () => handleCopyPrompt(replacePrompt, "replace"),
+              copyLabel: "Kopier JSON-prompt",
+            },
+          ]}
+          onNext={() => setStep("paste")}
+          sidebar={
+            <>
+              <div className="rounded-lg border bg-muted/20 px-3 py-3">
+                <div className="flex items-start gap-3 text-sm text-muted-foreground">
+                  <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                  <p>
+                    Hele JSON-svaret du limer inn senere vil erstatte alle
+                    vedlikeholdsoppgavene, inkludert leverandører og
+                    fremdriftspunkter.
+                  </p>
+                </div>
+              </div>
+              <div className="rounded-lg border bg-muted/20 px-3 py-3">
+                <div className="flex items-start gap-3 text-sm text-muted-foreground">
+                  <WandSparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                  <p>
+                    Tom JSON-array er lov i dette sporet hvis du ønsker å tømme
+                    oversikten helt.
+                  </p>
                 </div>
               </div>
             </>
@@ -475,7 +694,11 @@ export function MaintenanceLlmImportPageClient({
 
       {step === "paste" && (
         <LlmImportPasteStep
-          title="Lim inn JSON-svaret"
+          title={
+            mode === "replace"
+              ? "Lim inn oppdatert JSON"
+              : "Lim inn JSON-svaret"
+          }
           label="JSON fra LLM"
           inputId="maintenance-json-input"
           value={jsonInput}
@@ -488,7 +711,7 @@ export function MaintenanceLlmImportPageClient({
           showError={parsedTasks.length === 0}
           onBack={() => setStep("prompt")}
           onParse={handleParse}
-          isParsing={isCheckingDuplicates}
+          isParsing={mode === "merge" && isCheckingDuplicates}
         />
       )}
 
@@ -496,7 +719,7 @@ export function MaintenanceLlmImportPageClient({
         <>
           <LlmImportPreviewHeader
             summary={
-              duplicates.length > 0 ? (
+              mode === "merge" && duplicates.length > 0 ? (
                 <DuplicateSummary
                   newCount={newTasks.length}
                   duplicateCount={duplicates.length}
@@ -504,28 +727,46 @@ export function MaintenanceLlmImportPageClient({
                 />
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  {totalItems} {totalItems === 1 ? "oppgave" : "oppgaver"} klare for import.
+                  {totalItems} {totalItems === 1 ? "oppgave" : "oppgaver"}{" "}
+                  {mode === "replace"
+                    ? "klare til å erstatte oversikten."
+                    : "klare for import."}
                 </p>
               )
             }
             parseError={parseError}
-            description="Gå gjennom nye oppgaver og velg hvilke duplikatfelt som skal oppdateres."
+            description={
+              mode === "replace"
+                ? "Se gjennom JSON-en før du erstatter hele vedlikeholdsoversikten."
+                : "Gå gjennom nye oppgaver og velg hvilke duplikatfelt som skal oppdateres."
+            }
           />
+
+          {mode === "replace" ? (
+            <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
+              Dette sporet overskriver alle eksisterende vedlikeholdsoppgaver.
+              Oppgaver du har fjernet i JSON-svaret blir også fjernet i appen.
+            </div>
+          ) : null}
 
           <div
             className={cn(
               "grid gap-6",
-              duplicates.length > 0 &&
+              mode === "merge" &&
+                duplicates.length > 0 &&
                 newTasks.length > 0 &&
                 "xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
             )}
           >
-            {duplicates.length > 0 && (
+            {mode === "merge" && duplicates.length > 0 && (
               <section className="space-y-3">
                 <div className="flex items-center justify-between gap-3">
-                  <h3 className="font-heading text-lg font-medium">Duplikater</h3>
+                  <h3 className="font-heading text-lg font-medium">
+                    Duplikater
+                  </h3>
                   <span className="text-sm text-muted-foreground">
-                    {duplicates.length} {duplicates.length === 1 ? "treff" : "treff"}
+                    {duplicates.length}{" "}
+                    {duplicates.length === 1 ? "treff" : "treff"}
                   </span>
                 </div>
                 <div className="space-y-2">
@@ -534,8 +775,12 @@ export function MaintenanceLlmImportPageClient({
                       key={dup.existingId}
                       label={dup.existingLabel}
                       diffs={dup.diffs}
-                      selectedFields={selectedFields.get(dup.existingId) ?? new Set()}
-                      onToggleField={(field) => handleToggleField(dup.existingId, field)}
+                      selectedFields={
+                        selectedFields.get(dup.existingId) ?? new Set()
+                      }
+                      onToggleField={(field) =>
+                        handleToggleField(dup.existingId, field)
+                      }
                     />
                   ))}
                 </div>
@@ -545,26 +790,32 @@ export function MaintenanceLlmImportPageClient({
             {newTasks.length > 0 && (
               <section className="space-y-3">
                 <div className="flex items-center justify-between gap-3">
-                  <h3 className="font-heading text-lg font-medium">Nye oppgaver</h3>
+                  <h3 className="font-heading text-lg font-medium">
+                    Nye oppgaver
+                  </h3>
                   <span className="text-sm text-muted-foreground">
-                    {newTasks.length} {newTasks.length === 1 ? "oppgave" : "oppgaver"}
+                    {newTasks.length}{" "}
+                    {newTasks.length === 1 ? "oppgave" : "oppgaver"}
                   </span>
                 </div>
                 <div className="space-y-3">
                   {newTasks.map((task, i) => (
-                    <div key={`new-${i}`} className="rounded-lg border bg-card p-3 ring-1 ring-foreground/5">
+                    <div
+                      key={`new-${i}`}
+                      className="rounded-lg border bg-card p-3 ring-1 ring-foreground/5"
+                    >
                       <div className="flex items-start justify-between gap-2">
-                        <span className="min-w-0 flex-1 break-words font-medium text-sm">
+                        <span className="min-w-0 flex-1 text-sm font-medium break-words">
                           {task.title}
                         </span>
                         {task.estimatedPrice != null && (
-                          <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
+                          <span className="shrink-0 text-sm text-muted-foreground tabular-nums">
                             {formatPrice(task.estimatedPrice)}
                           </span>
                         )}
                       </div>
                       {task.description && (
-                        <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
+                        <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
                           {task.description}
                         </p>
                       )}
@@ -586,7 +837,8 @@ export function MaintenanceLlmImportPageClient({
                         )}
                         {task.vendors.length > 0 && (
                           <Badge variant="secondary" className="text-xs">
-                            {task.vendors.length} {task.vendors.length === 1 ? "aktør" : "aktører"}
+                            {task.vendors.length}{" "}
+                            {task.vendors.length === 1 ? "aktør" : "aktører"}
                           </Badge>
                         )}
                         {task.progressEntries.length > 0 && (
@@ -598,15 +850,20 @@ export function MaintenanceLlmImportPageClient({
                       {task.vendors.length > 0 && (
                         <div className="mt-2 space-y-1 border-l-2 border-muted pl-2">
                           {task.vendors.map((vendor, j) => (
-                            <div key={j} className="flex items-start justify-between gap-2">
+                            <div
+                              key={j}
+                              className="flex items-start justify-between gap-2"
+                            >
                               <div className="flex min-w-0 items-start gap-1.5">
                                 <span className="shrink-0 text-xs font-medium text-muted-foreground">
                                   {j + 1}.
                                 </span>
-                                <span className="break-words text-xs">{vendor.name}</span>
+                                <span className="text-xs break-words">
+                                  {vendor.name}
+                                </span>
                               </div>
                               {vendor.estimatedPrice != null && (
-                                <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                                <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
                                   {formatPrice(vendor.estimatedPrice)}
                                 </span>
                               )}
@@ -618,8 +875,12 @@ export function MaintenanceLlmImportPageClient({
                         <div className="mt-2 space-y-0.5 border-l-2 border-muted pl-2">
                           {task.progressEntries.map((entry, j) => (
                             <div key={j} className="flex items-start gap-1.5">
-                              <span className="shrink-0 text-xs text-muted-foreground">☐</span>
-                              <span className="break-words text-xs">{entry.title}</span>
+                              <span className="shrink-0 text-xs text-muted-foreground">
+                                ☐
+                              </span>
+                              <span className="text-xs break-words">
+                                {entry.title}
+                              </span>
                             </div>
                           ))}
                         </div>
@@ -637,13 +898,20 @@ export function MaintenanceLlmImportPageClient({
             cancelHref="/vedlikehold"
             onPrimary={handleImport}
             isPending={isPending}
-            primaryDisabled={isPending || (newTasks.length === 0 && updateCount === 0)}
+            primaryDisabled={
+              isPending ||
+              (mode === "merge" && newTasks.length === 0 && updateCount === 0)
+            }
             primaryLabel={
-              newTasks.length > 0 && updateCount > 0
-                ? `Importer ${newTasks.length} nye + oppdater ${updateCount}`
-                : newTasks.length > 0
-                  ? `Importer ${newTasks.length} ${newTasks.length === 1 ? "oppgave" : "oppgaver"}`
-                  : `Oppdater ${updateCount} ${updateCount === 1 ? "oppgave" : "oppgaver"}`
+              mode === "replace"
+                ? totalItems === 0
+                  ? "Tøm vedlikeholdsoversikten"
+                  : `Erstatt med ${totalItems} ${totalItems === 1 ? "oppgave" : "oppgaver"}`
+                : newTasks.length > 0 && updateCount > 0
+                  ? `Importer ${newTasks.length} nye + oppdater ${updateCount}`
+                  : newTasks.length > 0
+                    ? `Importer ${newTasks.length} ${newTasks.length === 1 ? "oppgave" : "oppgaver"}`
+                    : `Oppdater ${updateCount} ${updateCount === 1 ? "oppgave" : "oppgaver"}`
             }
           />
         </>

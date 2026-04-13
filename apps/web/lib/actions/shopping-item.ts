@@ -69,7 +69,10 @@ export async function createShoppingItem(input: CreateItemInput) {
   })
 
   revalidatePath(`/lists/${input.listId}`)
-  return { ...item, estimatedPrice: item.estimatedPrice ? Number(item.estimatedPrice) : null }
+  return {
+    ...item,
+    estimatedPrice: item.estimatedPrice ? Number(item.estimatedPrice) : null,
+  }
 }
 
 interface UpdateItemInput {
@@ -113,7 +116,12 @@ export async function updateShoppingItem(input: UpdateItemInput) {
   })
 
   revalidatePath(`/lists/${item.listId}`)
-  return { ...updated, estimatedPrice: updated.estimatedPrice ? Number(updated.estimatedPrice) : null }
+  return {
+    ...updated,
+    estimatedPrice: updated.estimatedPrice
+      ? Number(updated.estimatedPrice)
+      : null,
+  }
 }
 
 export async function deleteShoppingItem(itemId: string) {
@@ -171,7 +179,12 @@ export async function bulkCreateShoppingItems(input: BulkCreateInput) {
   }
 
   const validPriorities = new Set(["HIGH", "MEDIUM", "LOW"])
-  const validPhases = new Set(["BEFORE_MOVE", "FIRST_WEEK", "CAN_WAIT", "NO_RUSH"])
+  const validPhases = new Set([
+    "BEFORE_MOVE",
+    "FIRST_WEEK",
+    "CAN_WAIT",
+    "NO_RUSH",
+  ])
 
   const results = await db.$transaction(
     input.items.map((item) =>
@@ -179,27 +192,34 @@ export async function bulkCreateShoppingItems(input: BulkCreateInput) {
         data: {
           name: item.name,
           description: item.description || undefined,
-          categoryId: item.categoryName ? input.categoryMap[item.categoryName] ?? undefined : undefined,
-          priority: (item.priority && validPriorities.has(item.priority) ? item.priority : "MEDIUM") as Priority,
-          phase: (item.phase && validPhases.has(item.phase) ? item.phase : undefined) as Phase | undefined,
+          categoryId: item.categoryName
+            ? (input.categoryMap[item.categoryName] ?? undefined)
+            : undefined,
+          priority: (item.priority && validPriorities.has(item.priority)
+            ? item.priority
+            : "MEDIUM") as Priority,
+          phase: (item.phase && validPhases.has(item.phase)
+            ? item.phase
+            : undefined) as Phase | undefined,
           estimatedPrice: item.estimatedPrice ?? undefined,
           url: item.url || undefined,
           imageUrl: item.imageUrl || undefined,
           storeName: item.storeName || undefined,
           listId: input.listId,
-          alternatives: item.alternatives && item.alternatives.length > 0
-            ? {
-                create: item.alternatives.map((alt, index) => ({
-                  name: alt.name,
-                  price: alt.price ?? undefined,
-                  url: alt.url || undefined,
-                  imageUrl: alt.imageUrl || undefined,
-                  storeName: alt.storeName || undefined,
-                  notes: alt.notes || undefined,
-                  rank: index,
-                })),
-              }
-            : undefined,
+          alternatives:
+            item.alternatives && item.alternatives.length > 0
+              ? {
+                  create: item.alternatives.map((alt, index) => ({
+                    name: alt.name,
+                    price: alt.price ?? undefined,
+                    url: alt.url || undefined,
+                    imageUrl: alt.imageUrl || undefined,
+                    storeName: alt.storeName || undefined,
+                    notes: alt.notes || undefined,
+                    rank: index,
+                  })),
+                }
+              : undefined,
         },
       })
     )
@@ -207,6 +227,71 @@ export async function bulkCreateShoppingItems(input: BulkCreateInput) {
 
   revalidatePath(`/lists/${input.listId}`)
   return { count: results.length }
+}
+
+export async function replaceShoppingItems(input: BulkCreateInput) {
+  const { membership } = await requireHousehold()
+
+  const list = await db.shoppingList.findUnique({
+    where: { id: input.listId },
+  })
+  if (!list || list.householdId !== membership.householdId) {
+    throw new Error("List not found")
+  }
+
+  const validPriorities = new Set(["HIGH", "MEDIUM", "LOW"])
+  const validPhases = new Set([
+    "BEFORE_MOVE",
+    "FIRST_WEEK",
+    "CAN_WAIT",
+    "NO_RUSH",
+  ])
+
+  await db.$transaction(async (tx) => {
+    await tx.shoppingItem.deleteMany({
+      where: { listId: input.listId },
+    })
+
+    for (const item of input.items) {
+      await tx.shoppingItem.create({
+        data: {
+          name: item.name,
+          description: item.description || undefined,
+          categoryId: item.categoryName
+            ? (input.categoryMap[item.categoryName] ?? undefined)
+            : undefined,
+          priority: (item.priority && validPriorities.has(item.priority)
+            ? item.priority
+            : "MEDIUM") as Priority,
+          phase: (item.phase && validPhases.has(item.phase)
+            ? item.phase
+            : undefined) as Phase | undefined,
+          estimatedPrice: item.estimatedPrice ?? undefined,
+          url: item.url || undefined,
+          imageUrl: item.imageUrl || undefined,
+          storeName: item.storeName || undefined,
+          listId: input.listId,
+          alternatives:
+            item.alternatives && item.alternatives.length > 0
+              ? {
+                  create: item.alternatives.map((alt, index) => ({
+                    name: alt.name,
+                    price: alt.price ?? undefined,
+                    url: alt.url || undefined,
+                    imageUrl: alt.imageUrl || undefined,
+                    storeName: alt.storeName || undefined,
+                    notes: alt.notes || undefined,
+                    rank: index,
+                  })),
+                }
+              : undefined,
+        },
+      })
+    }
+  })
+
+  revalidatePath(`/lists/${input.listId}`)
+  return { count: input.items.length }
 }
 
 // ─── Duplicate Detection ────────────────────────────────────────
@@ -300,7 +385,12 @@ export async function bulkImportShoppingItemsWithDuplicates(
   }
 
   const validPriorities = new Set(["HIGH", "MEDIUM", "LOW"])
-  const validPhases = new Set(["BEFORE_MOVE", "FIRST_WEEK", "CAN_WAIT", "NO_RUSH"])
+  const validPhases = new Set([
+    "BEFORE_MOVE",
+    "FIRST_WEEK",
+    "CAN_WAIT",
+    "NO_RUSH",
+  ])
   let count = 0
 
   // Create new items
@@ -311,27 +401,34 @@ export async function bulkImportShoppingItemsWithDuplicates(
           data: {
             name: item.name,
             description: item.description || undefined,
-            categoryId: item.categoryName ? input.categoryMap[item.categoryName] ?? undefined : undefined,
-            priority: (item.priority && validPriorities.has(item.priority) ? item.priority : "MEDIUM") as Priority,
-            phase: (item.phase && validPhases.has(item.phase) ? item.phase : undefined) as Phase | undefined,
+            categoryId: item.categoryName
+              ? (input.categoryMap[item.categoryName] ?? undefined)
+              : undefined,
+            priority: (item.priority && validPriorities.has(item.priority)
+              ? item.priority
+              : "MEDIUM") as Priority,
+            phase: (item.phase && validPhases.has(item.phase)
+              ? item.phase
+              : undefined) as Phase | undefined,
             estimatedPrice: item.estimatedPrice ?? undefined,
             url: item.url || undefined,
             imageUrl: item.imageUrl || undefined,
             storeName: item.storeName || undefined,
             listId: input.listId,
-            alternatives: item.alternatives && item.alternatives.length > 0
-              ? {
-                  create: item.alternatives.map((alt, index) => ({
-                    name: alt.name,
-                    price: alt.price ?? undefined,
-                    url: alt.url || undefined,
-                    imageUrl: alt.imageUrl || undefined,
-                    storeName: alt.storeName || undefined,
-                    notes: alt.notes || undefined,
-                    rank: index,
-                  })),
-                }
-              : undefined,
+            alternatives:
+              item.alternatives && item.alternatives.length > 0
+                ? {
+                    create: item.alternatives.map((alt, index) => ({
+                      name: alt.name,
+                      price: alt.price ?? undefined,
+                      url: alt.url || undefined,
+                      imageUrl: alt.imageUrl || undefined,
+                      storeName: alt.storeName || undefined,
+                      notes: alt.notes || undefined,
+                      rank: index,
+                    })),
+                  }
+                : undefined,
           },
         })
       )
@@ -352,18 +449,29 @@ export async function bulkImportShoppingItemsWithDuplicates(
         imageUrl?: string
         storeName?: string
       } = {}
-      if (update.fields.description !== undefined) data.description = update.fields.description ?? undefined
-      if (update.fields.categoryId !== undefined) data.categoryId = update.fields.categoryId
+      if (update.fields.description !== undefined)
+        data.description = update.fields.description ?? undefined
+      if (update.fields.categoryId !== undefined)
+        data.categoryId = update.fields.categoryId
       if (update.fields.priority !== undefined) {
-        if (validPriorities.has(update.fields.priority)) data.priority = update.fields.priority
+        if (validPriorities.has(update.fields.priority))
+          data.priority = update.fields.priority
       }
       if (update.fields.phase !== undefined) {
-        if (update.fields.phase === null || validPhases.has(update.fields.phase)) data.phase = update.fields.phase
+        if (
+          update.fields.phase === null ||
+          validPhases.has(update.fields.phase)
+        )
+          data.phase = update.fields.phase
       }
-      if (update.fields.estimatedPrice !== undefined) data.estimatedPrice = update.fields.estimatedPrice
-      if (update.fields.url !== undefined) data.url = update.fields.url || undefined
-      if (update.fields.imageUrl !== undefined) data.imageUrl = update.fields.imageUrl || undefined
-      if (update.fields.storeName !== undefined) data.storeName = update.fields.storeName || undefined
+      if (update.fields.estimatedPrice !== undefined)
+        data.estimatedPrice = update.fields.estimatedPrice
+      if (update.fields.url !== undefined)
+        data.url = update.fields.url || undefined
+      if (update.fields.imageUrl !== undefined)
+        data.imageUrl = update.fields.imageUrl || undefined
+      if (update.fields.storeName !== undefined)
+        data.storeName = update.fields.storeName || undefined
 
       return db.shoppingItem.update({
         where: { id: update.id },

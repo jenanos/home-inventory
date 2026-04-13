@@ -4,7 +4,9 @@ import { db, type Priority, type TaskStatus } from "@workspace/db"
 import { requireHousehold } from "@/lib/session"
 import { revalidatePath } from "next/cache"
 
-function sanitizeUrl(url: string | undefined | null): string | undefined | null {
+function sanitizeUrl(
+  url: string | undefined | null
+): string | undefined | null {
   if (!url) return url
   try {
     const parsed = new URL(url)
@@ -48,7 +50,10 @@ export async function createMaintenanceTask(input: CreateMaintenanceTaskInput) {
   })
 
   revalidatePath("/vedlikehold")
-  return { ...task, estimatedPrice: task.estimatedPrice ? Number(task.estimatedPrice) : null }
+  return {
+    ...task,
+    estimatedPrice: task.estimatedPrice ? Number(task.estimatedPrice) : null,
+  }
 }
 
 interface UpdateMaintenanceTaskInput {
@@ -80,7 +85,12 @@ export async function updateMaintenanceTask(input: UpdateMaintenanceTaskInput) {
 
   revalidatePath("/vedlikehold")
   revalidatePath(`/vedlikehold/${id}`)
-  return { ...updated, estimatedPrice: updated.estimatedPrice ? Number(updated.estimatedPrice) : null }
+  return {
+    ...updated,
+    estimatedPrice: updated.estimatedPrice
+      ? Number(updated.estimatedPrice)
+      : null,
+  }
 }
 
 export async function deleteMaintenanceTask(taskId: string) {
@@ -135,7 +145,12 @@ export async function createTaskVendor(input: CreateTaskVendorInput) {
   })
 
   revalidatePath(`/vedlikehold/${input.taskId}`)
-  return { ...vendor, estimatedPrice: vendor.estimatedPrice ? Number(vendor.estimatedPrice) : null }
+  return {
+    ...vendor,
+    estimatedPrice: vendor.estimatedPrice
+      ? Number(vendor.estimatedPrice)
+      : null,
+  }
 }
 
 interface UpdateTaskVendorInput {
@@ -171,7 +186,12 @@ export async function updateTaskVendor(input: UpdateTaskVendorInput) {
   })
 
   revalidatePath(`/vedlikehold/${vendor.taskId}`)
-  return { ...updated, estimatedPrice: updated.estimatedPrice ? Number(updated.estimatedPrice) : null }
+  return {
+    ...updated,
+    estimatedPrice: updated.estimatedPrice
+      ? Number(updated.estimatedPrice)
+      : null,
+  }
 }
 
 export async function deleteTaskVendor(vendorId: string) {
@@ -329,7 +349,9 @@ interface BulkMaintenanceImportInput {
   tasks: BulkMaintenanceTaskInput[]
 }
 
-export async function bulkImportMaintenanceTasks(input: BulkMaintenanceImportInput) {
+export async function bulkImportMaintenanceTasks(
+  input: BulkMaintenanceImportInput
+) {
   const { membership } = await requireHousehold()
 
   const validPriorities = new Set(["HIGH", "MEDIUM", "LOW"])
@@ -340,7 +362,8 @@ export async function bulkImportMaintenanceTasks(input: BulkMaintenanceImportInp
         data: {
           title: task.title,
           description: task.description || undefined,
-          priority: (task.priority && validPriorities.has(task.priority.toUpperCase())
+          priority: (task.priority &&
+          validPriorities.has(task.priority.toUpperCase())
             ? task.priority.toUpperCase()
             : "MEDIUM") as Priority,
           estimatedDuration: task.estimatedDuration || undefined,
@@ -380,6 +403,64 @@ export async function bulkImportMaintenanceTasks(input: BulkMaintenanceImportInp
   return { count: results.length }
 }
 
+export async function replaceMaintenanceTasks(
+  input: BulkMaintenanceImportInput
+) {
+  const { membership } = await requireHousehold()
+
+  const validPriorities = new Set(["HIGH", "MEDIUM", "LOW"])
+
+  await db.$transaction(async (tx) => {
+    await tx.maintenanceTask.deleteMany({
+      where: { householdId: membership.householdId },
+    })
+
+    for (const task of input.tasks) {
+      await tx.maintenanceTask.create({
+        data: {
+          title: task.title,
+          description: task.description || undefined,
+          priority: (task.priority &&
+          validPriorities.has(task.priority.toUpperCase())
+            ? task.priority.toUpperCase()
+            : "MEDIUM") as Priority,
+          estimatedDuration: task.estimatedDuration || undefined,
+          estimatedPrice: task.estimatedPrice ?? undefined,
+          dueDate: task.dueDate ? new Date(task.dueDate) : undefined,
+          householdId: membership.householdId,
+          vendors:
+            task.vendors && task.vendors.length > 0
+              ? {
+                  create: task.vendors.map((vendor) => ({
+                    name: vendor.name,
+                    description: vendor.description || undefined,
+                    phone: vendor.phone || undefined,
+                    email: vendor.email || undefined,
+                    website: sanitizeUrl(vendor.website),
+                    estimatedPrice: vendor.estimatedPrice ?? undefined,
+                    notes: vendor.notes || undefined,
+                  })),
+                }
+              : undefined,
+          progressEntries:
+            task.progressEntries && task.progressEntries.length > 0
+              ? {
+                  create: task.progressEntries.map((entry, index) => ({
+                    title: entry.title,
+                    description: entry.description || undefined,
+                    sortOrder: index,
+                  })),
+                }
+              : undefined,
+        },
+      })
+    }
+  })
+
+  revalidatePath("/vedlikehold")
+  return { count: input.tasks.length }
+}
+
 // ─── Duplicate Detection ────────────────────────────────────────
 
 export interface ExistingMaintenanceTask {
@@ -394,7 +475,9 @@ export interface ExistingMaintenanceTask {
   progressEntryCount: number
 }
 
-export async function findExistingMaintenanceTasks(titles: string[]): Promise<ExistingMaintenanceTask[]> {
+export async function findExistingMaintenanceTasks(
+  titles: string[]
+): Promise<ExistingMaintenanceTask[]> {
   const { membership } = await requireHousehold()
 
   const lowerTitles = titles.map((t) => t.toLowerCase())
@@ -457,7 +540,8 @@ export async function bulkImportMaintenanceTasksWithDuplicates(
           data: {
             title: task.title,
             description: task.description || undefined,
-            priority: (task.priority && validPriorities.has(task.priority.toUpperCase())
+            priority: (task.priority &&
+            validPriorities.has(task.priority.toUpperCase())
               ? task.priority.toUpperCase()
               : "MEDIUM") as Priority,
             estimatedDuration: task.estimatedDuration || undefined,
@@ -519,7 +603,9 @@ export async function bulkImportMaintenanceTasksWithDuplicates(
         data.estimatedPrice = update.fields.estimatedPrice
       }
       if (update.fields.dueDate !== undefined) {
-        data.dueDate = update.fields.dueDate ? new Date(update.fields.dueDate) : null
+        data.dueDate = update.fields.dueDate
+          ? new Date(update.fields.dueDate)
+          : null
       }
 
       return db.maintenanceTask.update({
