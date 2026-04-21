@@ -8,11 +8,19 @@ import {
 } from "@workspace/ui/components/card"
 import { OtpForm } from "./otp-form"
 
-export default function OtpLoginPage({
+export default async function OtpLoginPage({
   searchParams,
 }: {
   searchParams: Promise<{ callbackUrl?: string | string[] }>
 }) {
+  const { callbackUrl: rawCallbackUrl } = await searchParams
+  const callbackUrl = Array.isArray(rawCallbackUrl)
+    ? rawCallbackUrl[0]
+    : rawCallbackUrl
+  const loginHref = callbackUrl
+    ? `/login?callbackUrl=${encodeURIComponent(callbackUrl)}`
+    : "/login"
+
   return (
     <div className="flex min-h-svh items-center justify-center bg-background p-4">
       <div className="w-full max-w-sm">
@@ -36,7 +44,7 @@ export default function OtpLoginPage({
             <OtpForm searchParams={searchParams} />
             <div className="mt-4 text-center text-sm">
               <Link
-                href="/login"
+                href={loginHref}
                 className="text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
               >
                 Bruk magisk lenke i stedet

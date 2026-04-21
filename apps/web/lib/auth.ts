@@ -37,29 +37,14 @@ const adapter: typeof prismaAdapter = {
     }
   },
   async useVerificationToken(params) {
-    if (params.identifier) {
-      if (!baseUseVerificationToken) {
-        throw new Error("Prisma adapter mangler useVerificationToken")
-      }
-      return baseUseVerificationToken(params)
+    // Require identifier (email) for the compound lookup. A token-only
+    // fallback would let a caller redeem a 6-digit OTP without knowing
+    // whose code it is, so we refuse to look up by token alone.
+    if (!params.identifier) return null
+    if (!baseUseVerificationToken) {
+      throw new Error("Prisma adapter mangler useVerificationToken")
     }
-
-    // @auth/core may omit identifier from the callback URL query params.
-    // The Prisma adapter requires both fields for the compound unique lookup,
-    // so we fall back to finding by token alone when identifier is missing.
-    const existing = await db.verificationToken.findFirst({
-      where: { token: params.token },
-    })
-    if (!existing) return null
-
-    return db.verificationToken.delete({
-      where: {
-        identifier_token: {
-          identifier: existing.identifier,
-          token: existing.token,
-        },
-      },
-    })
+    return baseUseVerificationToken(params)
   },
 }
 
