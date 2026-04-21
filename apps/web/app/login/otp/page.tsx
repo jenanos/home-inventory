@@ -6,9 +6,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
-import { LoginForm } from "./login-form"
+import { OtpForm } from "./otp-form"
 
-export default async function LoginPage({
+export default async function OtpLoginPage({
   searchParams,
 }: {
   searchParams: Promise<{ callbackUrl?: string | string[] }>
@@ -17,9 +17,9 @@ export default async function LoginPage({
   const callbackUrl = Array.isArray(rawCallbackUrl)
     ? rawCallbackUrl[0]
     : rawCallbackUrl
-  const otpHref = callbackUrl
-    ? `/login/otp?callbackUrl=${encodeURIComponent(callbackUrl)}`
-    : "/login/otp"
+  const loginHref = callbackUrl
+    ? `/login?callbackUrl=${encodeURIComponent(callbackUrl)}`
+    : "/login"
 
   return (
     <div className="flex min-h-svh items-center justify-center bg-background p-4">
@@ -35,28 +35,26 @@ export default async function LoginPage({
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-xl">Logg inn</CardTitle>
+            <CardTitle className="text-xl">Logg inn med kode</CardTitle>
             <CardDescription>
-              Skriv inn e-postadressen din, s&aring; sender vi deg en magisk
-              innloggingslenke.
+              Vi sender en 6-sifret engangskode til e-posten din.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <LoginForm searchParams={searchParams} />
+            <OtpForm searchParams={searchParams} />
             <div className="mt-4 text-center text-sm">
               <Link
-                href={otpHref}
+                href={loginHref}
                 className="text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
               >
-                Bruk engangskode i stedet
+                Bruk magisk lenke i stedet
               </Link>
             </div>
           </CardContent>
         </Card>
 
         <p className="mt-6 text-center text-xs text-muted-foreground">
-          Kun for inviterte brukere. Ingen passord n&oslash;dvendig &mdash; vi
-          sender en sikker lenke til e-posten din.
+          Kun for inviterte brukere. Koden er gyldig i 10 minutter.
         </p>
       </div>
     </div>
