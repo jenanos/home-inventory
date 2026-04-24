@@ -6,6 +6,12 @@ import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
 import { Mail, KeyRound, Loader2, ArrowLeft } from "lucide-react"
+import {
+  buildOtpCallbackUrl,
+  getSafeCallbackUrl,
+  isValidOtpCode,
+  normalizeOtpCode,
+} from "./otp-utils"
 
 type Step = "email" | "code"
 
@@ -15,13 +21,7 @@ export function OtpForm({
   searchParams: Promise<{ callbackUrl?: string | string[] }>
 }) {
   const { callbackUrl: rawCallbackUrl } = use(searchParams)
-  const callbackUrl = Array.isArray(rawCallbackUrl)
-    ? rawCallbackUrl[0]
-    : rawCallbackUrl
-  const safeCallbackUrl =
-    callbackUrl && callbackUrl.startsWith("/") && !callbackUrl.startsWith("//")
-      ? callbackUrl
-      : "/"
+  const safeCallbackUrl = getSafeCallbackUrl(rawCallbackUrl)
 
   const [step, setStep] = useState<Step>("email")
   const [email, setEmail] = useState("")
@@ -67,17 +67,18 @@ export function OtpForm({
     setError(null)
 
     const trimmed = code.trim()
-    if (!/^\d{6}$/.test(trimmed)) {
+    if (!isValidOtpCode(trimmed)) {
       setError("Koden må være 6 sifre.")
       setIsLoading(false)
       return
     }
 
-    const url = new URL("/api/auth/callback/otp", window.location.origin)
-    url.searchParams.set("token", trimmed)
-    url.searchParams.set("email", email)
-    url.searchParams.set("callbackUrl", safeCallbackUrl)
-    window.location.href = url.toString()
+    window.location.href = buildOtpCallbackUrl({
+      origin: window.location.origin,
+      token: trimmed,
+      email,
+      callbackUrl: safeCallbackUrl,
+    })
   }
 
   if (step === "code") {
@@ -98,12 +99,10 @@ export function OtpForm({
               pattern="[0-9]*"
               autoComplete="one-time-code"
               maxLength={6}
-              placeholder="123456"
-              value={code}
-              onChange={(e) =>
-                setCode(e.target.value.replace(/\D/g, "").slice(0, 6))
-              }
-              required
+               placeholder="123456"
+               value={code}
+               onChange={(e) => setCode(normalizeOtpCode(e.target.value))}
+               required
               autoFocus
               disabled={isLoading}
               className="pl-9 tracking-[0.4em]"
