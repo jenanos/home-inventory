@@ -9,11 +9,11 @@ import {
   Settings,
   LogOut,
   Plus,
-  Home,
   Wrench,
   Wallet,
   Shield,
 } from "lucide-react"
+import { Logo } from "@/components/logo"
 import {
   Sidebar,
   SidebarContent,
@@ -61,7 +61,7 @@ export function AppSidebar({ user, householdName, lists, isAdmin }: AppSidebarPr
     <Sidebar className="hidden md:flex">
       <SidebarHeader className="p-4">
         <Link href="/" className="flex items-center gap-2">
-          <Home className="text-primary h-5 w-5" />
+          <Logo className="h-6 w-6" />
           <span className="font-heading text-lg">{householdName}</span>
         </Link>
       </SidebarHeader>

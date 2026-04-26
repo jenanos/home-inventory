@@ -53,8 +53,11 @@ COPY --from=builder /app/packages/db/prisma ./packages/db/prisma
 # it still needs the generated Prisma client available via Node resolution.
 COPY --from=builder /app/.prisma-runtime/node_modules ./node_modules
 
-# Install prisma CLI for runtime migrations
-RUN npm install -g prisma@6
+# Install prisma CLI for runtime migrations.
+# Pinned to the same version as @prisma/client in pnpm-lock.yaml so the
+# CLI and runtime client stay in lockstep, and to avoid picking up new
+# 6.x releases that may regress the arm64 binary under QEMU emulation.
+RUN npm install -g prisma@6.19.2
 
 # Copy start script
 COPY start.sh ./start.sh
