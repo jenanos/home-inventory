@@ -12,6 +12,10 @@ export const metadata: Metadata = {
   },
   description: "Personlig app for å holde styr på hjem, prosjekter og økonomi.",
   applicationName: "Home Overview",
+  icons: {
+    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
+    apple: [{ url: "/icon.svg", type: "image/svg+xml" }],
+  },
   appleWebApp: {
     capable: true,
     title: "Home Overview",
