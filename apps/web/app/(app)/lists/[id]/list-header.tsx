@@ -31,7 +31,7 @@ import {
 } from "lucide-react"
 import { createShareLink } from "@/lib/actions/share-link"
 import { setShoppingListPrivacy } from "@/lib/actions/shopping-list"
-import { RenameListDialog } from "../rename-list-dialog"
+import { RenameListDialog } from "@/app/(app)/lists/rename-list-dialog"
 
 const formatCurrency = (amount: number) =>
   new Intl.NumberFormat("nb-NO", {
