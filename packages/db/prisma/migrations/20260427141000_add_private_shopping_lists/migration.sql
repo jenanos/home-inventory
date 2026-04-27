@@ -13,3 +13,8 @@ ADD CONSTRAINT "ShoppingList_createdById_fkey"
 FOREIGN KEY ("createdById") REFERENCES "User"("id")
 ON DELETE SET NULL
 ON UPDATE CASCADE;
+
+-- AddCheckConstraint
+ALTER TABLE "ShoppingList"
+ADD CONSTRAINT "ShoppingList_private_lists_require_creator"
+CHECK (NOT "isPrivate" OR "createdById" IS NOT NULL);

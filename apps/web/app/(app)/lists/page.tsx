@@ -2,6 +2,7 @@ import Link from "next/link"
 import { requireHousehold } from "@/lib/session"
 import { getShoppingLists } from "@/lib/queries/shopping-list"
 import { PrivateShoppingListsOverview } from "@/components/private-shopping-lists-overview"
+import { getShoppingListItemEffectivePrice } from "@/lib/shopping-list-pricing"
 import {
   ShoppingCart,
   Wallet,
@@ -29,16 +30,6 @@ const formatCurrency = (amount: number) =>
     maximumFractionDigits: 0,
   }).format(amount)
 
-function getEffectivePrice(item: {
-  estimatedPrice: { toNumber(): number } | null
-  alternatives: { price: { toNumber(): number } | null }[]
-}) {
-  const altPrice = item.alternatives[0]?.price
-  if (altPrice != null) return altPrice.toNumber()
-  if (item.estimatedPrice != null) return item.estimatedPrice.toNumber()
-  return 0
-}
-
 export default async function ListsPage() {
   const { session, membership } = await requireHousehold()
   const lists = await getShoppingLists(membership.householdId, session.user.id)
@@ -47,12 +38,12 @@ export default async function ListsPage() {
 
   const allItems = householdLists.flatMap((l) => l.items)
   const totalEstimated = allItems.reduce(
-    (sum, item) => sum + getEffectivePrice(item),
+    (sum, item) => sum + getShoppingListItemEffectivePrice(item),
     0
   )
   const purchasedItems = allItems.filter((i) => i.status === "PURCHASED")
   const purchasedTotal = purchasedItems.reduce(
-    (sum, item) => sum + getEffectivePrice(item),
+    (sum, item) => sum + getShoppingListItemEffectivePrice(item),
     0
   )
   const pendingCount = allItems.filter((i) => i.status === "PENDING").length
@@ -161,7 +152,7 @@ export default async function ListsPage() {
               (i) => i.status === "PURCHASED"
             ).length
             const listTotal = list.items.reduce(
-              (sum, item) => sum + getEffectivePrice(item),
+              (sum, item) => sum + getShoppingListItemEffectivePrice(item),
               0
             )
             const progress =

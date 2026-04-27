@@ -7,12 +7,14 @@ import {
 } from "@workspace/ui/components/card"
 import { Badge } from "@workspace/ui/components/badge"
 import { Lock, ArrowRight } from "lucide-react"
+import {
+  getShoppingListItemEffectivePrice,
+  type ShoppingListPricingItem,
+} from "@/lib/shopping-list-pricing"
 
-type ShoppingListSummaryItem = {
+type ShoppingListSummaryItem = ShoppingListPricingItem & {
   id: string
   status: string
-  estimatedPrice: { toNumber(): number } | null
-  alternatives: { price: { toNumber(): number } | null }[]
 }
 
 type PrivateShoppingList = {
@@ -34,13 +36,6 @@ const formatCurrency = (amount: number) =>
     maximumFractionDigits: 0,
   }).format(amount)
 
-function getEffectivePrice(item: ShoppingListSummaryItem) {
-  const altPrice = item.alternatives[0]?.price
-  if (altPrice != null) return altPrice.toNumber()
-  if (item.estimatedPrice != null) return item.estimatedPrice.toNumber()
-  return 0
-}
-
 export function PrivateShoppingListsOverview({
   lists,
   title = "Private lister",
@@ -55,7 +50,7 @@ export function PrivateShoppingListsOverview({
   ).length
   const totalCost = items
     .filter((item) => item.status !== "SKIPPED")
-    .reduce((sum, item) => sum + getEffectivePrice(item), 0)
+    .reduce((sum, item) => sum + getShoppingListItemEffectivePrice(item), 0)
 
   return (
     <Card className="shadow-sm">
@@ -97,7 +92,10 @@ export function PrivateShoppingListsOverview({
             ).length
             const total = list.items
               .filter((item) => item.status !== "SKIPPED")
-              .reduce((sum, item) => sum + getEffectivePrice(item), 0)
+              .reduce(
+                (sum, item) => sum + getShoppingListItemEffectivePrice(item),
+                0
+              )
             const progress =
               itemCount > 0 ? Math.round((purchased / itemCount) * 100) : 0
 

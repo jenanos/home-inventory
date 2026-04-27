@@ -29,8 +29,8 @@ export function isShoppingListAccessible(
 }
 
 export function canManageShoppingListPrivacy(
-  list: Pick<AccessibleShoppingList, "createdById">,
+  list: Pick<AccessibleShoppingList, "createdById" | "isPrivate">,
   userId: string
 ) {
-  return list.createdById === null || list.createdById === userId
+  return list.createdById === userId || (!list.isPrivate && list.createdById === null)
 }

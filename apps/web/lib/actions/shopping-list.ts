@@ -91,23 +91,38 @@ export async function setShoppingListPrivacy(
     throw new Error("You do not have access to change privacy for this list")
   }
 
-  await db.$transaction([
-    db.shoppingList.update({
-      where: { id: listId },
-      data: {
-        isPrivate,
-        createdById: list.createdById ?? session.user.id,
-      },
-    }),
-    ...(isPrivate
-      ? [
-          db.shareLink.updateMany({
-            where: { listId, isActive: true },
-            data: { isActive: false },
-          }),
-        ]
-      : []),
-  ])
+  await db.$transaction(async (tx) => {
+    if (list.createdById === null && !list.isPrivate && isPrivate) {
+      const claimed = await tx.shoppingList.updateMany({
+        where: {
+          id: listId,
+          householdId: membership.householdId,
+          isPrivate: false,
+          createdById: null,
+        },
+        data: {
+          isPrivate: true,
+          createdById: session.user.id,
+        },
+      })
+
+      if (claimed.count !== 1) {
+        throw new Error("Could not claim this list for private use")
+      }
+    } else {
+      await tx.shoppingList.update({
+        where: { id: listId },
+        data: { isPrivate },
+      })
+    }
+
+    if (isPrivate) {
+      await tx.shareLink.updateMany({
+        where: { listId, isActive: true },
+        data: { isActive: false },
+      })
+    }
+  })
 
   revalidatePath(`/lists/${listId}`)
   revalidatePath("/lists")
