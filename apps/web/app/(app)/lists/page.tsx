@@ -43,9 +43,7 @@ export default async function ListsPage() {
   const { session, membership } = await requireHousehold()
   const lists = await getShoppingLists(membership.householdId, session.user.id)
   const householdLists = lists.filter((list) => !list.isPrivate)
-  const privateLists = lists.filter(
-    (list) => list.isPrivate && list.createdById === session.user.id
-  )
+  const privateLists = lists.filter((list) => list.isPrivate)
 
   const allItems = householdLists.flatMap((l) => l.items)
   const totalEstimated = allItems.reduce(

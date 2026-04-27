@@ -79,7 +79,12 @@ export async function setShoppingListPrivacy(
   const { session, membership } = await requireHousehold()
 
   const list = await db.shoppingList.findUnique({ where: { id: listId } })
-  if (!list || list.householdId !== membership.householdId) {
+  if (!list) {
+    throw new Error("List not found")
+  }
+  if (
+    !isShoppingListAccessible(list, membership.householdId, session.user.id)
+  ) {
     throw new Error("List not found")
   }
   if (!canManageShoppingListPrivacy(list, session.user.id)) {

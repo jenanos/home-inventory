@@ -4,8 +4,8 @@ ADD COLUMN "createdById" UUID,
 ADD COLUMN "isPrivate" BOOLEAN NOT NULL DEFAULT false;
 
 -- CreateIndex
-CREATE INDEX "ShoppingList_householdId_isPrivate_createdById_idx"
-ON "ShoppingList"("householdId", "isPrivate", "createdById");
+CREATE INDEX "ShoppingList_householdId_isPrivate_idx"
+ON "ShoppingList"("householdId", "isPrivate");
 
 -- AddForeignKey
 ALTER TABLE "ShoppingList"

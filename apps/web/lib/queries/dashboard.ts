@@ -50,9 +50,7 @@ export async function getDashboardData(householdId: string, userId: string) {
   ])
 
   const householdLists = lists.filter((list) => !list.isPrivate)
-  const privateLists = lists.filter(
-    (list) => list.isPrivate && list.createdById === userId
-  )
+  const privateLists = lists.filter((list) => list.isPrivate)
   const householdStats = calculateShoppingStats(
     householdLists.flatMap((list) => list.items)
   )

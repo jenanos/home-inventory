@@ -133,7 +133,7 @@ model ShoppingList {
   items      ShoppingItem[]
   shareLinks ShareLink[]
 
-  @@index([householdId, isPrivate, createdById])
+  @@index([householdId, isPrivate])
 }
 
 model ShoppingItem {
