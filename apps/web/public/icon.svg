@@ -1,11 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
   <defs>
     <linearGradient id="house-gradient" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="oklch(0.55 0.17 28)" />
-      <stop offset="0.25" stop-color="oklch(0.65 0.12 35)" />
-      <stop offset="0.5" stop-color="oklch(0.62 0.10 148)" />
-      <stop offset="0.75" stop-color="oklch(0.50 0.09 200)" />
-      <stop offset="1" stop-color="oklch(0.42 0.12 260)" />
+      <stop offset="0" stop-color="#c13d34" />
+      <stop offset="0.25" stop-color="#cd725c" />
+      <stop offset="0.5" stop-color="#5a9763" />
+      <stop offset="0.75" stop-color="#007277" />
+      <stop offset="1" stop-color="#224a8d" />
     </linearGradient>
   </defs>
   <g stroke="url(#house-gradient)">
