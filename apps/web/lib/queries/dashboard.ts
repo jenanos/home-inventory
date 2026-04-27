@@ -4,11 +4,12 @@ import {
   calculateMaintenanceStats,
   calculateShoppingStats,
 } from "../dashboard-stats"
+import { getVisibleShoppingListsWhere } from "../shopping-list-access"
 
-export async function getDashboardData(householdId: string) {
+export async function getDashboardData(householdId: string, userId: string) {
   const [lists, categories, budget, maintenanceTasks] = await Promise.all([
     db.shoppingList.findMany({
-      where: { householdId },
+      where: getVisibleShoppingListsWhere(householdId, userId),
       include: {
         items: {
           include: {
@@ -48,15 +49,23 @@ export async function getDashboardData(householdId: string) {
     }),
   ])
 
-  const allItems = lists.flatMap((l) => l.items)
-  const stats = calculateShoppingStats(allItems)
+  const householdLists = lists.filter((list) => !list.isPrivate)
+  const privateLists = lists.filter((list) => list.isPrivate)
+  const householdStats = calculateShoppingStats(
+    householdLists.flatMap((list) => list.items)
+  )
+  const privateStats = calculateShoppingStats(
+    privateLists.flatMap((list) => list.items)
+  )
   const budgetStats = calculateBudgetStats(budget)
   const maintenanceStats = calculateMaintenanceStats(maintenanceTasks)
 
   return {
-    lists,
+    householdLists,
+    privateLists,
     categories,
-    stats,
+    householdStats,
+    privateStats,
     budgetStats,
     maintenanceStats,
     maintenanceTasks,

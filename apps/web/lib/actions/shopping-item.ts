@@ -2,6 +2,7 @@
 
 import { db, type Priority, type Phase, type ItemStatus } from "@workspace/db"
 import { requireHousehold } from "@/lib/session"
+import { isShoppingListAccessible } from "@/lib/shopping-list-access"
 import { revalidatePath } from "next/cache"
 
 interface CreateAlternativeInput {
@@ -29,12 +30,14 @@ interface CreateItemInput {
 }
 
 export async function createShoppingItem(input: CreateItemInput) {
-  const { membership } = await requireHousehold()
+  const { session, membership } = await requireHousehold()
 
   const list = await db.shoppingList.findUnique({
     where: { id: input.listId },
   })
-  if (!list || list.householdId !== membership.householdId) {
+  if (
+    !isShoppingListAccessible(list, membership.householdId, session.user.id)
+  ) {
     throw new Error("List not found")
   }
 
@@ -91,13 +94,20 @@ interface UpdateItemInput {
 }
 
 export async function updateShoppingItem(input: UpdateItemInput) {
-  const { membership } = await requireHousehold()
+  const { session, membership } = await requireHousehold()
 
   const item = await db.shoppingItem.findUnique({
     where: { id: input.id },
     include: { list: true },
   })
-  if (!item || item.list.householdId !== membership.householdId) {
+  if (
+    !item ||
+    !isShoppingListAccessible(
+      item.list,
+      membership.householdId,
+      session.user.id
+    )
+  ) {
     throw new Error("Item not found")
   }
 
@@ -125,13 +135,20 @@ export async function updateShoppingItem(input: UpdateItemInput) {
 }
 
 export async function deleteShoppingItem(itemId: string) {
-  const { membership } = await requireHousehold()
+  const { session, membership } = await requireHousehold()
 
   const item = await db.shoppingItem.findUnique({
     where: { id: itemId },
     include: { list: true },
   })
-  if (!item || item.list.householdId !== membership.householdId) {
+  if (
+    !item ||
+    !isShoppingListAccessible(
+      item.list,
+      membership.householdId,
+      session.user.id
+    )
+  ) {
     throw new Error("Item not found")
   }
 
@@ -169,12 +186,14 @@ interface BulkCreateInput {
 }
 
 export async function bulkCreateShoppingItems(input: BulkCreateInput) {
-  const { membership } = await requireHousehold()
+  const { session, membership } = await requireHousehold()
 
   const list = await db.shoppingList.findUnique({
     where: { id: input.listId },
   })
-  if (!list || list.householdId !== membership.householdId) {
+  if (
+    !isShoppingListAccessible(list, membership.householdId, session.user.id)
+  ) {
     throw new Error("List not found")
   }
 
@@ -230,12 +249,14 @@ export async function bulkCreateShoppingItems(input: BulkCreateInput) {
 }
 
 export async function replaceShoppingItems(input: BulkCreateInput) {
-  const { membership } = await requireHousehold()
+  const { session, membership } = await requireHousehold()
 
   const list = await db.shoppingList.findUnique({
     where: { id: input.listId },
   })
-  if (!list || list.householdId !== membership.householdId) {
+  if (
+    !isShoppingListAccessible(list, membership.householdId, session.user.id)
+  ) {
     throw new Error("List not found")
   }
 
@@ -314,12 +335,14 @@ export async function findExistingShoppingItems(
   listId: string,
   names: string[]
 ): Promise<ExistingShoppingItem[]> {
-  const { membership } = await requireHousehold()
+  const { session, membership } = await requireHousehold()
 
   const list = await db.shoppingList.findUnique({
     where: { id: listId },
   })
-  if (!list || list.householdId !== membership.householdId) {
+  if (
+    !isShoppingListAccessible(list, membership.householdId, session.user.id)
+  ) {
     throw new Error("List not found")
   }
 
@@ -375,12 +398,14 @@ interface BulkImportShoppingItemsWithDuplicatesInput {
 export async function bulkImportShoppingItemsWithDuplicates(
   input: BulkImportShoppingItemsWithDuplicatesInput
 ) {
-  const { membership } = await requireHousehold()
+  const { session, membership } = await requireHousehold()
 
   const list = await db.shoppingList.findUnique({
     where: { id: input.listId },
   })
-  if (!list || list.householdId !== membership.householdId) {
+  if (
+    !isShoppingListAccessible(list, membership.householdId, session.user.id)
+  ) {
     throw new Error("List not found")
   }
 
@@ -488,13 +513,20 @@ export async function bulkImportShoppingItemsWithDuplicates(
 }
 
 export async function toggleItemPurchased(itemId: string) {
-  const { membership } = await requireHousehold()
+  const { session, membership } = await requireHousehold()
 
   const item = await db.shoppingItem.findUnique({
     where: { id: itemId },
     include: { list: true },
   })
-  if (!item || item.list.householdId !== membership.householdId) {
+  if (
+    !item ||
+    !isShoppingListAccessible(
+      item.list,
+      membership.householdId,
+      session.user.id
+    )
+  ) {
     throw new Error("Item not found")
   }
 

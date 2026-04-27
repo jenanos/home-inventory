@@ -1,6 +1,8 @@
 import Link from "next/link"
 import { requireHousehold } from "@/lib/session"
 import { getShoppingLists } from "@/lib/queries/shopping-list"
+import { PrivateShoppingListsOverview } from "@/components/private-shopping-lists-overview"
+import { getShoppingListItemEffectivePrice } from "@/lib/shopping-list-pricing"
 import {
   ShoppingCart,
   Wallet,
@@ -8,6 +10,7 @@ import {
   CheckCircle2,
   ArrowRight,
   ListChecks,
+  Lock,
 } from "lucide-react"
 import {
   Card,
@@ -27,28 +30,20 @@ const formatCurrency = (amount: number) =>
     maximumFractionDigits: 0,
   }).format(amount)
 
-function getEffectivePrice(item: {
-  estimatedPrice: { toNumber(): number } | null
-  alternatives: { price: { toNumber(): number } | null }[]
-}) {
-  const altPrice = item.alternatives[0]?.price
-  if (altPrice != null) return altPrice.toNumber()
-  if (item.estimatedPrice != null) return item.estimatedPrice.toNumber()
-  return 0
-}
-
 export default async function ListsPage() {
-  const { membership } = await requireHousehold()
-  const lists = await getShoppingLists(membership.householdId)
+  const { session, membership } = await requireHousehold()
+  const lists = await getShoppingLists(membership.householdId, session.user.id)
+  const householdLists = lists.filter((list) => !list.isPrivate)
+  const privateLists = lists.filter((list) => list.isPrivate)
 
-  const allItems = lists.flatMap((l) => l.items)
+  const allItems = householdLists.flatMap((l) => l.items)
   const totalEstimated = allItems.reduce(
-    (sum, item) => sum + getEffectivePrice(item),
+    (sum, item) => sum + getShoppingListItemEffectivePrice(item),
     0
   )
   const purchasedItems = allItems.filter((i) => i.status === "PURCHASED")
   const purchasedTotal = purchasedItems.reduce(
-    (sum, item) => sum + getEffectivePrice(item),
+    (sum, item) => sum + getShoppingListItemEffectivePrice(item),
     0
   )
   const pendingCount = allItems.filter((i) => i.status === "PENDING").length
@@ -61,8 +56,8 @@ export default async function ListsPage() {
           <h1 className="font-heading text-2xl font-bold tracking-tight">
             Innkjøp
           </h1>
-          <p className="text-muted-foreground text-sm">
-            Oversikt over alle handlelister
+          <p className="text-sm text-muted-foreground">
+            Felles lister for husholdningen og dine egne private innkjøp
           </p>
         </div>
         <CreateListDialog />
@@ -75,15 +70,15 @@ export default async function ListsPage() {
               <CardTitle className="text-sm font-medium">
                 Totalt estimert
               </CardTitle>
-              <Wallet className="text-muted-foreground h-4 w-4" />
+              <Wallet className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-xl font-bold tabular-nums sm:text-2xl">
                 {totalEstimated > 0 ? formatCurrency(totalEstimated) : "—"}
               </div>
-              <p className="text-muted-foreground text-xs">
-                {allItems.length}{" "}
-                {allItems.length === 1 ? "ting" : "ting"} totalt
+              <p className="text-xs text-muted-foreground">
+                {allItems.length} {allItems.length === 1 ? "ting" : "ting"}{" "}
+                totalt
               </p>
             </CardContent>
           </Card>
@@ -91,7 +86,7 @@ export default async function ListsPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Kjøpt</CardTitle>
-              <ShoppingCart className="text-muted-foreground h-4 w-4" />
+              <ShoppingCart className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-xl font-bold tabular-nums sm:text-2xl">
@@ -99,9 +94,7 @@ export default async function ListsPage() {
               </div>
               {totalEstimated > 0 && (
                 <Progress
-                  value={Math.round(
-                    (purchasedTotal / totalEstimated) * 100
-                  )}
+                  value={Math.round((purchasedTotal / totalEstimated) * 100)}
                   className="mt-2"
                 />
               )}
@@ -110,23 +103,21 @@ export default async function ListsPage() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                Gjenstående
-              </CardTitle>
-              <Clock className="text-muted-foreground h-4 w-4" />
+              <CardTitle className="text-sm font-medium">Gjenstående</CardTitle>
+              <Clock className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-xl font-bold sm:text-2xl">
                 {pendingCount}
               </div>
-              <p className="text-muted-foreground text-xs">ting igjen</p>
+              <p className="text-xs text-muted-foreground">ting igjen</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Kjøpt</CardTitle>
-              <CheckCircle2 className="text-muted-foreground h-4 w-4" />
+              <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-xl font-bold sm:text-2xl">
@@ -134,9 +125,7 @@ export default async function ListsPage() {
               </div>
               {allItems.length > 0 && (
                 <Progress
-                  value={Math.round(
-                    (purchasedCount / allItems.length) * 100
-                  )}
+                  value={Math.round((purchasedCount / allItems.length) * 100)}
                   className="mt-2"
                 />
               )}
@@ -145,25 +134,25 @@ export default async function ListsPage() {
         </div>
       )}
 
-      {lists.length === 0 ? (
+      {householdLists.length === 0 ? (
         <Card className="flex flex-col items-center justify-center py-12">
-          <ListChecks className="text-muted-foreground mb-4 h-12 w-12" />
+          <ListChecks className="mb-4 h-12 w-12 text-muted-foreground" />
           <h3 className="font-heading text-lg font-medium">
-            Ingen handlelister ennå
+            Ingen felles handlelister ennå
           </h3>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Opprett din første liste for å komme i gang
+          <p className="mt-1 text-sm text-muted-foreground">
+            Opprett en delt liste for å komme i gang med husholdningsinnkjøp
           </p>
         </Card>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {lists.map((list) => {
+          {householdLists.map((list) => {
             const itemCount = list.items.length
             const listPurchasedCount = list.items.filter(
               (i) => i.status === "PURCHASED"
             ).length
             const listTotal = list.items.reduce(
-              (sum, item) => sum + getEffectivePrice(item),
+              (sum, item) => sum + getShoppingListItemEffectivePrice(item),
               0
             )
             const progress =
@@ -184,7 +173,7 @@ export default async function ListsPage() {
                 </Link>
                 <CardHeader className="pb-2">
                   <div className="flex items-center justify-between gap-2">
-                    <CardTitle className="font-heading text-lg truncate">
+                    <CardTitle className="truncate font-heading text-lg">
                       {list.name}
                     </CardTitle>
                     <div className="relative z-10 flex items-center gap-1">
@@ -223,6 +212,23 @@ export default async function ListsPage() {
             )
           })}
         </div>
+      )}
+
+      {privateLists.length > 0 && (
+        <PrivateShoppingListsOverview
+          lists={privateLists}
+          title="Dine private lister"
+          description="Disse listene vises bare for deg og påvirker ikke husholdningens summer."
+        />
+      )}
+
+      {lists.length === 0 && (
+        <Card className="border-dashed">
+          <CardContent className="flex items-center gap-3 py-6 text-sm text-muted-foreground">
+            <Lock className="h-4 w-4" />
+            Private lister kan brukes til hobbyer og personlige innkjøp.
+          </CardContent>
+        </Card>
       )}
     </div>
   )
