@@ -10,6 +10,9 @@ export async function createShareLink(listId: string, expiresInDays?: number) {
   const { session, membership } = await requireHousehold()
 
   const list = await db.shoppingList.findUnique({ where: { id: listId } })
+  if (!list) {
+    throw new Error("List not found")
+  }
   if (
     !isShoppingListAccessible(list, membership.householdId, session.user.id)
   ) {
