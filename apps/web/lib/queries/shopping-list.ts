@@ -1,8 +1,9 @@
 import { db } from "@workspace/db"
+import { getVisibleShoppingListsWhere } from "@/lib/shopping-list-access"
 
-export async function getShoppingLists(householdId: string) {
+export async function getShoppingLists(householdId: string, userId: string) {
   const lists = await db.shoppingList.findMany({
-    where: { householdId },
+    where: getVisibleShoppingListsWhere(householdId, userId),
     include: {
       items: {
         select: {
@@ -23,9 +24,16 @@ export async function getShoppingLists(householdId: string) {
   return lists
 }
 
-export async function getShoppingList(listId: string, householdId: string) {
-  const list = await db.shoppingList.findUnique({
-    where: { id: listId },
+export async function getShoppingList(
+  listId: string,
+  householdId: string,
+  userId: string
+) {
+  const list = await db.shoppingList.findFirst({
+    where: {
+      id: listId,
+      ...getVisibleShoppingListsWhere(householdId, userId),
+    },
     include: {
       items: {
         include: {
@@ -35,7 +43,11 @@ export async function getShoppingList(listId: string, householdId: string) {
             orderBy: { rank: "asc" },
           },
         },
-        orderBy: [{ status: "asc" }, { priority: "asc" }, { createdAt: "desc" }],
+        orderBy: [
+          { status: "asc" },
+          { priority: "asc" },
+          { createdAt: "desc" },
+        ],
       },
       shareLinks: {
         where: { isActive: true },
@@ -53,11 +65,7 @@ export async function getShoppingList(listId: string, householdId: string) {
     },
   })
 
-  if (!list || list.householdId !== householdId) {
-    return null
-  }
-
-  return list
+  return list ?? null
 }
 
 export async function getSharedList(token: string) {
@@ -88,6 +96,8 @@ export async function getSharedList(token: string) {
 
   if (!shareLink || !shareLink.isActive) return null
   if (shareLink.expiresAt && shareLink.expiresAt < new Date()) return null
+
+  if (shareLink.list.isPrivate) return null
 
   return shareLink.list
 }

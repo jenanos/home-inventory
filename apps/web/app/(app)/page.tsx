@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { PrivateShoppingListsOverview } from "@/components/private-shopping-lists-overview"
 import { requireHousehold } from "@/lib/session"
 import { getDashboardData } from "@/lib/queries/dashboard"
 import {
@@ -36,8 +37,7 @@ const formatNOK = (amount: number) =>
 const phaseConfig = {
   BEFORE_MOVE: {
     label: "Før innflytting",
-    className:
-      "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
+    className: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
   },
   FIRST_WEEK: {
     label: "Første uke",
@@ -63,8 +63,7 @@ const phaseConfig = {
 const priorityConfig = {
   HIGH: {
     label: "Høy",
-    className:
-      "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
+    className: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
   },
   MEDIUM: {
     label: "Medium",
@@ -102,23 +101,30 @@ const statusConfig = {
 }
 
 export default async function DashboardPage() {
-  const { membership } = await requireHousehold()
-  const { lists, stats, budgetStats, maintenanceStats, maintenanceTasks } =
-    await getDashboardData(membership.householdId)
+  const { session, membership } = await requireHousehold()
+  const {
+    householdLists,
+    privateLists,
+    householdStats,
+    budgetStats,
+    maintenanceStats,
+    maintenanceTasks,
+  } = await getDashboardData(membership.householdId, session.user.id)
 
   const shoppingProgress =
-    stats.totalEstimated > 0
-      ? Math.round((stats.purchasedTotal / stats.totalEstimated) * 100)
+    householdStats.totalEstimated > 0
+      ? Math.round(
+          (householdStats.purchasedTotal / householdStats.totalEstimated) * 100
+        )
       : 0
 
   // Budget calculations
-  const cashFlow =
-    budgetStats.hasBudget
-      ? budgetStats.totalNetIncome -
-        budgetStats.totalLoanPayments -
-        budgetStats.totalExpenses +
-        budgetStats.totalDeductions
-      : 0
+  const cashFlow = budgetStats.hasBudget
+    ? budgetStats.totalNetIncome -
+      budgetStats.totalLoanPayments -
+      budgetStats.totalExpenses +
+      budgetStats.totalDeductions
+    : 0
 
   return (
     <div className="flex flex-col gap-6 sm:gap-10">
@@ -135,7 +141,7 @@ export default async function DashboardPage() {
           <h2 className="font-heading text-xl tracking-tight">Budsjett</h2>
           <Link
             href="/budsjett"
-            className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm transition-colors"
+            className="flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
             Se detaljer
             <ArrowRight className="h-3.5 w-3.5" />
@@ -228,7 +234,7 @@ export default async function DashboardPage() {
               </p>
               <Link
                 href="/budsjett"
-                className="text-primary mt-2 text-sm font-medium hover:underline"
+                className="mt-2 text-sm font-medium text-primary hover:underline"
               >
                 Sett opp budsjett
               </Link>
@@ -243,7 +249,7 @@ export default async function DashboardPage() {
           <h2 className="font-heading text-xl tracking-tight">Innkjøp</h2>
           <Link
             href="/lists"
-            className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm transition-colors"
+            className="flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
             Se alle
             <ArrowRight className="h-3.5 w-3.5" />
@@ -251,7 +257,7 @@ export default async function DashboardPage() {
         </div>
 
         {/* Shopping Stats */}
-        {stats.totalItems > 0 && (
+        {householdStats.totalItems > 0 && (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Card className="shadow-sm">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -262,7 +268,7 @@ export default async function DashboardPage() {
               </CardHeader>
               <CardContent>
                 <div className="font-heading text-2xl font-semibold text-primary">
-                  {formatNOK(stats.totalEstimated)}
+                  {formatNOK(householdStats.totalEstimated)}
                 </div>
               </CardContent>
             </Card>
@@ -276,7 +282,7 @@ export default async function DashboardPage() {
               </CardHeader>
               <CardContent>
                 <div className="font-heading text-2xl font-semibold">
-                  {formatNOK(stats.purchasedTotal)}
+                  {formatNOK(householdStats.purchasedTotal)}
                 </div>
                 <div className="mt-2 flex items-center gap-2">
                   <div className="h-2 flex-1 rounded-full bg-muted">
@@ -287,7 +293,7 @@ export default async function DashboardPage() {
                       }}
                     />
                   </div>
-                  <span className="text-xs tabular-nums text-muted-foreground">
+                  <span className="text-xs text-muted-foreground tabular-nums">
                     {shoppingProgress}%
                   </span>
                 </div>
@@ -303,7 +309,7 @@ export default async function DashboardPage() {
               </CardHeader>
               <CardContent>
                 <div className="font-heading text-2xl font-semibold">
-                  {stats.pendingCount}
+                  {householdStats.pendingCount}
                 </div>
                 <p className="text-xs text-muted-foreground">ting igjen</p>
               </CardContent>
@@ -318,10 +324,10 @@ export default async function DashboardPage() {
               </CardHeader>
               <CardContent>
                 <div className="font-heading text-2xl font-semibold text-emerald-600 dark:text-emerald-400">
-                  {stats.purchasedCount}
+                  {householdStats.purchasedCount}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  av {stats.totalItems} totalt
+                  av {householdStats.totalItems} totalt
                 </p>
               </CardContent>
             </Card>
@@ -329,7 +335,7 @@ export default async function DashboardPage() {
         )}
 
         {/* Phase Breakdown */}
-        {stats.pendingCount > 0 && (
+        {householdStats.pendingCount > 0 && (
           <Card className="shadow-sm">
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -345,8 +351,8 @@ export default async function DashboardPage() {
                   ][]
                 ).map(([phase, config]) => {
                   const count =
-                    stats.itemsByPhase[
-                      phase as keyof typeof stats.itemsByPhase
+                    householdStats.itemsByPhase[
+                      phase as keyof typeof householdStats.itemsByPhase
                     ] ?? 0
                   if (count === 0) return null
                   return (
@@ -372,19 +378,19 @@ export default async function DashboardPage() {
         )}
 
         {/* Shopping Lists Grid */}
-        {lists.length === 0 ? (
+        {householdLists.length === 0 ? (
           <Card className="shadow-sm">
             <CardContent className="flex flex-col items-center justify-center py-10 text-center">
               <ListChecks className="mb-3 h-10 w-10 text-muted-foreground/50" />
               <p className="text-sm text-muted-foreground">
-                Ingen handlelister ennå. Opprett din første liste for å komme i
-                gang!
+                Ingen felles handlelister ennå. Opprett en delt liste for å
+                komme i gang!
               </p>
             </CardContent>
           </Card>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {lists.map((list) => {
+            {householdLists.map((list) => {
               const itemCount = list.items.length
               const purchasedCount = list.items.filter(
                 (i) => i.status === "PURCHASED"
@@ -431,6 +437,14 @@ export default async function DashboardPage() {
             })}
           </div>
         )}
+
+        {privateLists.length > 0 && (
+          <PrivateShoppingListsOverview
+            lists={privateLists}
+            title="Dine private innkjøp"
+            description="Vises bare for deg og er skilt fra husholdningens fremdrift og kostnader."
+          />
+        )}
       </section>
 
       {/* ── MAINTENANCE SECTION ── */}
@@ -439,7 +453,7 @@ export default async function DashboardPage() {
           <h2 className="font-heading text-xl tracking-tight">Vedlikehold</h2>
           <Link
             href="/vedlikehold"
-            className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm transition-colors"
+            className="flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
             Se alle
             <ArrowRight className="h-3.5 w-3.5" />
@@ -465,9 +479,7 @@ export default async function DashboardPage() {
                   </div>
                   <p className="text-xs text-muted-foreground">
                     {maintenanceStats.totalTasks}{" "}
-                    {maintenanceStats.totalTasks === 1
-                      ? "oppgave"
-                      : "oppgaver"}{" "}
+                    {maintenanceStats.totalTasks === 1 ? "oppgave" : "oppgaver"}{" "}
                     totalt
                   </p>
                 </CardContent>
@@ -578,19 +590,14 @@ export default async function DashboardPage() {
                     ).length
                     const progressPercent =
                       totalEntries > 0
-                        ? Math.round(
-                            (completedEntries / totalEntries) * 100
-                          )
+                        ? Math.round((completedEntries / totalEntries) * 100)
                         : 0
                     const selectedVendor = task.vendors.find(
                       (v) => v.isSelected
                     )
 
                     return (
-                      <Link
-                        key={task.id}
-                        href={`/vedlikehold/${task.id}`}
-                      >
+                      <Link key={task.id} href={`/vedlikehold/${task.id}`}>
                         <Card className="h-full shadow-sm transition-colors hover:bg-muted/50">
                           <CardHeader className="pb-3">
                             <div className="flex items-start justify-between gap-2">
@@ -599,9 +606,7 @@ export default async function DashboardPage() {
                               </CardTitle>
                               <Badge
                                 variant="secondary"
-                                className={
-                                  statusConfig[task.status].className
-                                }
+                                className={statusConfig[task.status].className}
                               >
                                 {statusConfig[task.status].label}
                               </Badge>
@@ -619,9 +624,9 @@ export default async function DashboardPage() {
                               </Badge>
                               {task.dueDate && (
                                 <Badge variant="outline">
-                                  {new Date(
-                                    task.dueDate
-                                  ).toLocaleDateString("nb-NO")}
+                                  {new Date(task.dueDate).toLocaleDateString(
+                                    "nb-NO"
+                                  )}
                                 </Badge>
                               )}
                             </div>
@@ -635,7 +640,7 @@ export default async function DashboardPage() {
                             {selectedVendor && (
                               <p className="text-xs text-muted-foreground">
                                 Valgt aktør:{" "}
-                                <span className="text-foreground font-medium">
+                                <span className="font-medium text-foreground">
                                   {selectedVendor.name}
                                 </span>
                               </p>
@@ -672,7 +677,7 @@ export default async function DashboardPage() {
               </p>
               <Link
                 href="/vedlikehold"
-                className="text-primary mt-2 text-sm font-medium hover:underline"
+                className="mt-2 text-sm font-medium text-primary hover:underline"
               >
                 Legg til oppgaver
               </Link>

@@ -11,9 +11,13 @@ export default async function ListLlmImportPage({
   params,
 }: ListLlmImportPageProps) {
   const { id } = await params
-  const { membership } = await requireHousehold()
+  const { session, membership } = await requireHousehold()
 
-  const list = await getShoppingList(id, membership.householdId)
+  const list = await getShoppingList(
+    id,
+    membership.householdId,
+    session.user.id
+  )
 
   if (!list) {
     notFound()

@@ -4,6 +4,7 @@ import { useState, useTransition } from "react"
 import Link from "next/link"
 import { Button } from "@workspace/ui/components/button"
 import { Badge } from "@workspace/ui/components/badge"
+import { Switch } from "@workspace/ui/components/switch"
 import {
   Popover,
   PopoverContent,
@@ -26,8 +27,11 @@ import {
   Link as LinkIcon,
   Loader2,
   ShoppingCart,
+  Lock,
 } from "lucide-react"
 import { createShareLink } from "@/lib/actions/share-link"
+import { setShoppingListPrivacy } from "@/lib/actions/shopping-list"
+import { RenameListDialog } from "../rename-list-dialog"
 
 const formatCurrency = (amount: number) =>
   new Intl.NumberFormat("nb-NO", {
@@ -43,6 +47,8 @@ interface ListHeaderProps {
   purchasedSum: number
   itemCount: number
   purchasedCount: number
+  isPrivate: boolean
+  canManagePrivacy: boolean
   shareLinks: Array<{ id: string; token: string; isActive: boolean }>
 }
 
@@ -53,12 +59,15 @@ export function ListHeader({
   purchasedSum,
   itemCount,
   purchasedCount,
+  isPrivate,
+  canManagePrivacy,
   shareLinks,
 }: ListHeaderProps) {
   const [copied, setCopied] = useState(false)
   const [isPending, startTransition] = useTransition()
   const [links, setLinks] = useState(shareLinks)
   const [expiryDays, setExpiryDays] = useState("7")
+  const [isPrivateList, setIsPrivateList] = useState(isPrivate)
 
   const activeLink = links.find((l) => l.isActive)
 
@@ -84,6 +93,16 @@ export function ListHeader({
     })
   }
 
+  function handlePrivacyChange(checked: boolean) {
+    startTransition(async () => {
+      await setShoppingListPrivacy(listId, checked)
+      setIsPrivateList(checked)
+      if (checked) {
+        setLinks([])
+      }
+    })
+  }
+
   const pendingCount = itemCount - purchasedCount
 
   return (
@@ -95,99 +114,111 @@ export function ListHeader({
             <span className="sr-only">Tilbake</span>
           </Link>
         </Button>
-        <h1 className="font-heading text-2xl font-medium flex-1 truncate">
+        <h1 className="flex-1 truncate font-heading text-2xl font-medium">
           {listName}
         </h1>
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="outline" size="sm">
-              <Share2 className="h-4 w-4" data-icon="inline-start" />
-              Del
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-[calc(100vw-2rem)] sm:w-80" align="end">
-            <div className="grid gap-4">
-              <div className="grid gap-1">
-                <h4 className="font-heading font-medium">Del listen</h4>
-                <p className="text-xs text-muted-foreground">
-                  Opprett en delingslenke slik at andre kan se listen.
-                </p>
-              </div>
+        <RenameListDialog listId={listId} currentName={listName} />
+        {!isPrivateList && (
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm">
+                <Share2 className="h-4 w-4" data-icon="inline-start" />
+                Del
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent
+              className="w-[calc(100vw-2rem)] sm:w-80"
+              align="end"
+            >
+              <div className="grid gap-4">
+                <div className="grid gap-1">
+                  <h4 className="font-heading font-medium">Del listen</h4>
+                  <p className="text-xs text-muted-foreground">
+                    Opprett en delingslenke slik at andre kan se listen.
+                  </p>
+                </div>
 
-              {activeLink ? (
-                <div className="grid gap-2">
-                  <Label className="text-xs text-muted-foreground">
-                    Delingslenke
-                  </Label>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      readOnly
-                      value={getShareUrl(activeLink.token)}
-                      className="h-8 text-xs"
-                    />
+                {activeLink ? (
+                  <div className="grid gap-2">
+                    <Label className="text-xs text-muted-foreground">
+                      Delingslenke
+                    </Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        readOnly
+                        value={getShareUrl(activeLink.token)}
+                        className="h-8 text-xs"
+                      />
+                      <Button
+                        variant="outline"
+                        size="icon-sm"
+                        onClick={() => handleCopy(activeLink.token)}
+                      >
+                        {copied ? (
+                          <Check className="h-3.5 w-3.5 text-green-600" />
+                        ) : (
+                          <Copy className="h-3.5 w-3.5" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid gap-3">
+                    <div className="grid gap-1.5">
+                      <Label htmlFor="expiry" className="text-xs">
+                        Utloper etter
+                      </Label>
+                      <Select value={expiryDays} onValueChange={setExpiryDays}>
+                        <SelectTrigger className="h-8 w-full text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="1">1 dag</SelectItem>
+                          <SelectItem value="7">7 dager</SelectItem>
+                          <SelectItem value="30">30 dager</SelectItem>
+                          <SelectItem value="never">Aldri</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                     <Button
-                      variant="outline"
-                      size="icon-sm"
-                      onClick={() => handleCopy(activeLink.token)}
+                      size="sm"
+                      onClick={handleCreateLink}
+                      disabled={isPending}
+                      className="w-full"
                     >
-                      {copied ? (
-                        <Check className="h-3.5 w-3.5 text-green-600" />
+                      {isPending ? (
+                        <>
+                          <Loader2
+                            className="h-3.5 w-3.5 animate-spin"
+                            data-icon="inline-start"
+                          />
+                          Oppretter...
+                        </>
                       ) : (
-                        <Copy className="h-3.5 w-3.5" />
+                        <>
+                          <LinkIcon
+                            className="h-3.5 w-3.5"
+                            data-icon="inline-start"
+                          />
+                          Opprett lenke
+                        </>
                       )}
                     </Button>
                   </div>
-                </div>
-              ) : (
-                <div className="grid gap-3">
-                  <div className="grid gap-1.5">
-                    <Label htmlFor="expiry" className="text-xs">
-                      Utloper etter
-                    </Label>
-                    <Select value={expiryDays} onValueChange={setExpiryDays}>
-                      <SelectTrigger className="h-8 w-full text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="1">1 dag</SelectItem>
-                        <SelectItem value="7">7 dager</SelectItem>
-                        <SelectItem value="30">30 dager</SelectItem>
-                        <SelectItem value="never">Aldri</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <Button
-                    size="sm"
-                    onClick={handleCreateLink}
-                    disabled={isPending}
-                    className="w-full"
-                  >
-                    {isPending ? (
-                      <>
-                        <Loader2
-                          className="h-3.5 w-3.5 animate-spin"
-                          data-icon="inline-start"
-                        />
-                        Oppretter...
-                      </>
-                    ) : (
-                      <>
-                        <LinkIcon
-                          className="h-3.5 w-3.5"
-                          data-icon="inline-start"
-                        />
-                        Opprett lenke
-                      </>
-                    )}
-                  </Button>
-                </div>
-              )}
-            </div>
-          </PopoverContent>
-        </Popover>
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+        {isPrivateList && (
+          <Badge variant="secondary" className="gap-1 text-xs">
+            <Lock className="h-3.5 w-3.5" />
+            Privat
+          </Badge>
+        )}
         <div className="flex items-center gap-2 rounded-lg bg-muted/60 px-3 py-1.5">
           <ShoppingCart className="h-4 w-4 text-muted-foreground" />
           <span className="text-sm">
@@ -220,6 +251,18 @@ export function ListHeader({
           <Badge variant="secondary" className="text-xs">
             {pendingCount} gjenstaar
           </Badge>
+        )}
+        {canManagePrivacy && (
+          <div className="flex items-center gap-2 rounded-lg border px-3 py-1.5">
+            <Lock className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm">Privat liste</span>
+            <Switch
+              checked={isPrivateList}
+              onCheckedChange={handlePrivacyChange}
+              disabled={isPending}
+              aria-label="Gjør listen privat"
+            />
+          </div>
         )}
       </div>
     </div>

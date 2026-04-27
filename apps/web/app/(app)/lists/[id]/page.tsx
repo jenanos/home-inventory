@@ -3,6 +3,7 @@ import { notFound } from "next/navigation"
 import { BotMessageSquare } from "lucide-react"
 import { Button } from "@workspace/ui/components/button"
 import { CategoryIcon } from "@/components/category-icon"
+import { canManageShoppingListPrivacy } from "@/lib/shopping-list-access"
 import { requireHousehold } from "@/lib/session"
 import { getShoppingList } from "@/lib/queries/shopping-list"
 import { ListHeader } from "./list-header"
@@ -16,9 +17,13 @@ interface ListPageProps {
 
 export default async function ListPage({ params }: ListPageProps) {
   const { id } = await params
-  const { membership } = await requireHousehold()
+  const { session, membership } = await requireHousehold()
 
-  const list = await getShoppingList(id, membership.householdId)
+  const list = await getShoppingList(
+    id,
+    membership.householdId,
+    session.user.id
+  )
 
   if (!list) {
     notFound()
@@ -51,11 +56,12 @@ export default async function ListPage({ params }: ListPageProps) {
 
     // Preferred alternative (rank 0) takes precedence for price, url, store, image
     const topAlternative = alternatives[0] ?? null
-    const effectivePrice = topAlternative?.price != null
-      ? topAlternative.price
-      : item.estimatedPrice
-        ? Number(item.estimatedPrice)
-        : null
+    const effectivePrice =
+      topAlternative?.price != null
+        ? topAlternative.price
+        : item.estimatedPrice
+          ? Number(item.estimatedPrice)
+          : null
 
     return {
       id: item.id,
@@ -125,7 +131,12 @@ export default async function ListPage({ params }: ListPageProps) {
       },
       {} as Record<
         string,
-        { total: number; count: number; color: string | null; icon: string | null }
+        {
+          total: number
+          count: number
+          color: string | null
+          icon: string | null
+        }
       >
     )
 
@@ -138,6 +149,8 @@ export default async function ListPage({ params }: ListPageProps) {
         purchasedSum={purchasedSum}
         itemCount={items.length}
         purchasedCount={items.filter((i) => i.status === "PURCHASED").length}
+        isPrivate={list.isPrivate}
+        canManagePrivacy={canManageShoppingListPrivacy(list, session.user.id)}
         shareLinks={list.shareLinks.map((sl) => ({
           id: sl.id,
           token: sl.token,
@@ -146,10 +159,7 @@ export default async function ListPage({ params }: ListPageProps) {
       />
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <ListFilters
-          categories={categories}
-          members={members}
-        />
+        <ListFilters categories={categories} members={members} />
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" asChild>
             <Link href={`/lists/${list.id}/llm-import`}>
@@ -173,8 +183,8 @@ export default async function ListPage({ params }: ListPageProps) {
       />
 
       {Object.keys(categoryTotals).length > 0 && (
-        <div className="rounded-xl border bg-card p-4 ring-1 ring-foreground/10 shadow-xs">
-          <h3 className="font-heading text-base font-medium mb-3">
+        <div className="rounded-xl border bg-card p-4 shadow-xs ring-1 ring-foreground/10">
+          <h3 className="mb-3 font-heading text-base font-medium">
             Oppsummering per kategori
           </h3>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -187,7 +197,10 @@ export default async function ListPage({ params }: ListPageProps) {
                 >
                   <div className="flex min-w-0 items-center gap-2">
                     {data.icon && (
-                      <CategoryIcon name={data.icon} className="h-4 w-4 shrink-0" />
+                      <CategoryIcon
+                        name={data.icon}
+                        className="h-4 w-4 shrink-0"
+                      />
                     )}
                     <span className="truncate text-sm font-medium">{name}</span>
                     <span className="shrink-0 text-xs text-muted-foreground">

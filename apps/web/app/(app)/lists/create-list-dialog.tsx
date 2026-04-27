@@ -12,12 +12,14 @@ import {
 } from "@workspace/ui/components/dialog"
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
+import { Checkbox } from "@workspace/ui/components/checkbox"
 import { Plus, Loader2 } from "lucide-react"
 import { createShoppingList } from "@/lib/actions/shopping-list"
 
 export function CreateListDialog() {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState("")
+  const [isPrivate, setIsPrivate] = useState(false)
   const [isPending, startTransition] = useTransition()
   const router = useRouter()
 
@@ -26,8 +28,12 @@ export function CreateListDialog() {
     if (!name.trim()) return
 
     startTransition(async () => {
-      const list = await createShoppingList(name.trim())
+      const list = await createShoppingList({
+        name: name.trim(),
+        isPrivate,
+      })
       setName("")
+      setIsPrivate(false)
       setOpen(false)
       router.push(`/lists/${list.id}`)
     })
@@ -59,6 +65,23 @@ export function CreateListDialog() {
               disabled={isPending}
             />
           </div>
+          <label
+            htmlFor="private-list"
+            className="flex items-start gap-3 rounded-lg border p-3"
+          >
+            <Checkbox
+              id="private-list"
+              checked={isPrivate}
+              onCheckedChange={(checked) => setIsPrivate(checked === true)}
+              disabled={isPending}
+            />
+            <div className="space-y-1">
+              <div className="text-sm font-medium">Privat liste</div>
+              <p className="text-sm text-muted-foreground">
+                Vises bare for deg og holdes utenfor husholdningens oversikter.
+              </p>
+            </div>
+          </label>
           <div className="flex justify-end gap-2">
             <Button
               type="button"
