@@ -75,8 +75,8 @@ function buildPrompt(
 Svar KUN med en gyldig JSON-array, uten noe annet tekst rundt. Hvert produkt skal være et objekt med følgende felter:
 
 {
-  "name": "Produktnavn (obligatorisk)",
-  "description": "Kort beskrivelse av produktet, f.eks. modell, farge, størrelse",
+  "name": "Kort, generell gjenstandsbeskrivelse (obligatorisk), f.eks. Vaskemaskin eller Tørketrommel",
+  "description": "Kort beskrivelse av behovet eller ønskede egenskaper, f.eks. 8kg, energiklasse A",
   "categoryName": "En av kategoriene: ${categoryNames}",
   "priority": "HIGH | MEDIUM | LOW",
   "phase": "BEFORE_MOVE | FIRST_WEEK | CAN_WAIT | NO_RUSH",
@@ -98,14 +98,18 @@ Svar KUN med en gyldig JSON-array, uten noe annet tekst rundt. Hvert produkt ska
 
 Regler:
 - "name" er obligatorisk, alle andre felter er valgfrie
+- "name" skal beskrive selve gjenstanden eller kjøpsbehovet, ikke et spesifikt produkt, modellnavn eller merke
+- Opprett bare ett listeelement per kjøpsbehov. Hvis du har flere konkrete produkter som passer samme behov, skal disse ligge under "alternatives" i stedet for som egne listeelementer
+- Listeelementene er gjensidig utelukkende valg. Eksempel: "Vaskemaskin" skal være ett listeelement med flere produktalternativer, ikke flere separate listeelementer
 - "estimatedPrice" og "price" skal være tall i NOK uten valutategn
 - "priority": HIGH = må ha, MEDIUM = bør ha, LOW = kjekt å ha
 - "phase": BEFORE_MOVE = før innflytting, FIRST_WEEK = første uke, CAN_WAIT = kan vente, NO_RUSH = ingen hast
 - "categoryName" bør matche en av de tilgjengelige kategoriene nøyaktig
 - "url" og "imageUrl" skal være rene URL-er (f.eks. https://...), IKKE markdown-lenker som [tekst](url)
 - "imageUrl" skal være en direkte lenke til et produktbilde (JPG/PNG/WebP)
+- Husk å fylle ut "imageUrl" både på listeelementet og på alternativene når du finner et relevant produktbilde. La det bare stå tomt hvis du faktisk ikke finner en brukbar bilde-URL
 - "alternatives" er en liste med alternative produkter i prioritert rekkefølge (beste først). Bruk denne når du har researchet flere varianter/merker av samme type produkt
-- Hvert alternativ i listen skal ha minst "name", og gjerne pris, lenke og bilde
+- Hvert alternativ i listen skal ha minst "name", og bør så langt som mulig ha pris, lenke, bilde og butikk
 - Svar BARE med JSON-arrayen, ingen ekstra tekst
 
 Eksempel på forventet svar:
