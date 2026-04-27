@@ -42,9 +42,6 @@ export async function updateShoppingList(listId: string, name: string) {
   ) {
     throw new Error("List not found")
   }
-  if (list.isPrivate && list.createdById !== session.user.id) {
-    throw new Error("You do not have access to update this list")
-  }
 
   await db.shoppingList.update({
     where: { id: listId },
@@ -67,9 +64,6 @@ export async function deleteShoppingList(listId: string) {
     !isShoppingListAccessible(list, membership.householdId, session.user.id)
   ) {
     throw new Error("List not found")
-  }
-  if (list.isPrivate && list.createdById !== session.user.id) {
-    throw new Error("You do not have access to delete this list")
   }
 
   await db.shoppingList.delete({ where: { id: listId } })

@@ -31,7 +31,6 @@ import {
 } from "lucide-react"
 import { createShareLink } from "@/lib/actions/share-link"
 import { setShoppingListPrivacy } from "@/lib/actions/shopping-list"
-import { RenameListDialog } from "@/app/(app)/lists/rename-list-dialog"
 
 const formatCurrency = (amount: number) =>
   new Intl.NumberFormat("nb-NO", {
@@ -117,7 +116,6 @@ export function ListHeader({
         <h1 className="flex-1 truncate font-heading text-2xl font-medium">
           {listName}
         </h1>
-        <RenameListDialog listId={listId} currentName={listName} />
         {!isPrivateList && (
           <Popover>
             <PopoverTrigger asChild>
