@@ -2,11 +2,16 @@ import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 
 const publicPaths = ["/login", "/login/verify", "/shared", "/api/auth"]
+const publicAssetPrefixes = ["/icon", "/apple-icon"]
+const publicAssetPaths = ["/favicon.ico", "/manifest.webmanifest", "/sw.js"]
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
 
-  const isPublic = publicPaths.some((path) => pathname.startsWith(path))
+  const isPublic =
+    publicPaths.some((path) => pathname.startsWith(path)) ||
+    publicAssetPrefixes.some((path) => pathname.startsWith(path)) ||
+    publicAssetPaths.includes(pathname)
 
   // Only check for session cookie presence here (edge-compatible).
   // Full session validation happens server-side via auth() in pages/actions.
