@@ -2,16 +2,9 @@ import Link from "next/link"
 import { requireHousehold } from "@/lib/session"
 import { getShoppingLists } from "@/lib/queries/shopping-list"
 import { PrivateShoppingListsOverview } from "@/components/private-shopping-lists-overview"
+import { ShoppingStatsSummary } from "@/components/shopping-stats-summary"
 import { getShoppingListItemEffectivePrice } from "@/lib/shopping-list-pricing"
-import {
-  ShoppingCart,
-  Wallet,
-  Clock,
-  CheckCircle2,
-  ArrowRight,
-  ListChecks,
-  Lock,
-} from "lucide-react"
+import { ArrowRight, ListChecks, Lock } from "lucide-react"
 import {
   Card,
   CardContent,
@@ -19,7 +12,6 @@ import {
   CardTitle,
 } from "@workspace/ui/components/card"
 import { Badge } from "@workspace/ui/components/badge"
-import { Progress } from "@workspace/ui/components/progress"
 import { CreateListDialog } from "./create-list-dialog"
 import { RenameListDialog } from "./rename-list-dialog"
 
@@ -64,74 +56,13 @@ export default async function ListsPage() {
       </div>
 
       {allItems.length > 0 && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                Totalt estimert
-              </CardTitle>
-              <Wallet className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-xl font-bold tabular-nums sm:text-2xl">
-                {totalEstimated > 0 ? formatCurrency(totalEstimated) : "—"}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {allItems.length} {allItems.length === 1 ? "ting" : "ting"}{" "}
-                totalt
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Kjøpt</CardTitle>
-              <ShoppingCart className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-xl font-bold tabular-nums sm:text-2xl">
-                {formatCurrency(purchasedTotal)}
-              </div>
-              {totalEstimated > 0 && (
-                <Progress
-                  value={Math.round((purchasedTotal / totalEstimated) * 100)}
-                  className="mt-2"
-                />
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Gjenstående</CardTitle>
-              <Clock className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-xl font-bold sm:text-2xl">
-                {pendingCount}
-              </div>
-              <p className="text-xs text-muted-foreground">ting igjen</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Kjøpt</CardTitle>
-              <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-xl font-bold sm:text-2xl">
-                {purchasedCount}
-              </div>
-              {allItems.length > 0 && (
-                <Progress
-                  value={Math.round((purchasedCount / allItems.length) * 100)}
-                  className="mt-2"
-                />
-              )}
-            </CardContent>
-          </Card>
-        </div>
+        <ShoppingStatsSummary
+          totalEstimated={totalEstimated}
+          purchasedTotal={purchasedTotal}
+          totalCount={allItems.length}
+          purchasedCount={purchasedCount}
+          pendingCount={pendingCount}
+        />
       )}
 
       {householdLists.length === 0 ? (
