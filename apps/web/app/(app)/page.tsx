@@ -1,8 +1,10 @@
 import Link from "next/link"
 import { PrivateShoppingListsOverview } from "@/components/private-shopping-lists-overview"
 import { ShoppingStatsSummary } from "@/components/shopping-stats-summary"
+import { ShoppingListCard } from "@/components/shopping-list-card"
 import { MaintenanceStatsSummary } from "@/components/maintenance-stats-summary"
 import { BudgetStatsSummary } from "@/components/budget-stats-summary"
+import { getShoppingListItemEffectivePrice } from "@/lib/shopping-list-pricing"
 import { requireHousehold } from "@/lib/session"
 import { getDashboardData } from "@/lib/queries/dashboard"
 import {
@@ -258,50 +260,27 @@ export default async function DashboardPage() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
             {householdLists.map((list) => {
               const itemCount = list.items.length
               const purchasedCount = list.items.filter(
                 (i) => i.status === "PURCHASED"
               ).length
-              const progress =
-                itemCount > 0
-                  ? Math.round((purchasedCount / itemCount) * 100)
-                  : 0
+              const totalCost = list.items.reduce(
+                (sum, item) => sum + getShoppingListItemEffectivePrice(item),
+                0
+              )
 
               return (
-                <Link key={list.id} href={`/lists/${list.id}`}>
-                  <Card className="group shadow-sm transition-shadow hover:shadow-md">
-                    <CardHeader className="pb-2">
-                      <div className="flex items-center justify-between">
-                        <CardTitle className="font-heading text-lg">
-                          {list.name}
-                        </CardTitle>
-                        <ArrowRight className="h-4 w-4 text-muted-foreground transition-opacity sm:opacity-0 sm:group-hover:opacity-100" />
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex items-center justify-between text-sm text-muted-foreground">
-                        <span>
-                          {purchasedCount} av {itemCount} ting kjøpt
-                        </span>
-                        <Badge variant="secondary" className="tabular-nums">
-                          {progress}%
-                        </Badge>
-                      </div>
-                      {itemCount > 0 && (
-                        <div className="mt-3 h-1.5 rounded-full bg-muted">
-                          <div
-                            className="h-1.5 rounded-full bg-primary transition-all"
-                            style={{
-                              width: `${progress}%`,
-                            }}
-                          />
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                </Link>
+                <ShoppingListCard
+                  key={list.id}
+                  href={`/lists/${list.id}`}
+                  name={list.name}
+                  color={list.color}
+                  itemCount={itemCount}
+                  purchasedCount={purchasedCount}
+                  totalCost={totalCost}
+                />
               )
             })}
           </div>

@@ -1,26 +1,13 @@
-import Link from "next/link"
 import { requireHousehold } from "@/lib/session"
 import { getShoppingLists } from "@/lib/queries/shopping-list"
 import { PrivateShoppingListsOverview } from "@/components/private-shopping-lists-overview"
 import { ShoppingStatsSummary } from "@/components/shopping-stats-summary"
+import { ShoppingListCard } from "@/components/shopping-list-card"
 import { getShoppingListItemEffectivePrice } from "@/lib/shopping-list-pricing"
-import { ArrowRight, ListChecks, Lock } from "lucide-react"
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@workspace/ui/components/card"
-import { Badge } from "@workspace/ui/components/badge"
+import { ListChecks, Lock } from "lucide-react"
+import { Card, CardContent } from "@workspace/ui/components/card"
 import { CreateListDialog } from "./create-list-dialog"
-import { RenameListDialog } from "./rename-list-dialog"
-
-const formatCurrency = (amount: number) =>
-  new Intl.NumberFormat("nb-NO", {
-    style: "currency",
-    currency: "NOK",
-    maximumFractionDigits: 0,
-  }).format(amount)
+import { EditListDialog } from "./edit-list-dialog"
 
 export default async function ListsPage() {
   const { session, membership } = await requireHousehold()
@@ -76,7 +63,7 @@ export default async function ListsPage() {
           </p>
         </Card>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
           {householdLists.map((list) => {
             const itemCount = list.items.length
             const listPurchasedCount = list.items.filter(
@@ -86,60 +73,24 @@ export default async function ListsPage() {
               (sum, item) => sum + getShoppingListItemEffectivePrice(item),
               0
             )
-            const progress =
-              itemCount > 0
-                ? Math.round((listPurchasedCount / itemCount) * 100)
-                : 0
 
             return (
-              <Card
+              <ShoppingListCard
                 key={list.id}
-                className="group relative transition-colors hover:bg-muted/50"
-              >
-                <Link
-                  href={`/lists/${list.id}`}
-                  className="absolute inset-0 z-0"
-                >
-                  <span className="sr-only">Åpne {list.name}</span>
-                </Link>
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <CardTitle className="truncate font-heading text-lg">
-                      {list.name}
-                    </CardTitle>
-                    <div className="relative z-10 flex items-center gap-1">
-                      <RenameListDialog
-                        listId={list.id}
-                        currentName={list.name}
-                      />
-                      <ArrowRight className="h-4 w-4 text-muted-foreground transition-opacity sm:opacity-0 sm:group-hover:opacity-100" />
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center justify-between text-sm text-muted-foreground">
-                    <span>
-                      {listPurchasedCount} av {itemCount} ting kjøpt
-                    </span>
-                    <Badge variant="secondary" className="tabular-nums">
-                      {progress}%
-                    </Badge>
-                  </div>
-                  {listTotal > 0 && (
-                    <p className="mt-2 text-sm font-medium tabular-nums">
-                      {formatCurrency(listTotal)}
-                    </p>
-                  )}
-                  {itemCount > 0 && (
-                    <div className="mt-3 h-1.5 rounded-full bg-muted">
-                      <div
-                        className="h-1.5 rounded-full bg-primary transition-all"
-                        style={{ width: `${progress}%` }}
-                      />
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+                href={`/lists/${list.id}`}
+                name={list.name}
+                color={list.color}
+                itemCount={itemCount}
+                purchasedCount={listPurchasedCount}
+                totalCost={listTotal}
+                editAction={
+                  <EditListDialog
+                    listId={list.id}
+                    currentName={list.name}
+                    currentColor={list.color}
+                  />
+                }
+              />
             )
           })}
         </div>

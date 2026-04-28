@@ -6,6 +6,7 @@ import {
   canManageShoppingListPrivacy,
   isShoppingListAccessible,
 } from "@/lib/shopping-list-access"
+import { isListColorId } from "@/lib/list-colors"
 import { revalidatePath } from "next/cache"
 
 interface CreateShoppingListInput {
@@ -30,7 +31,16 @@ export async function createShoppingList(input: CreateShoppingListInput) {
   return list
 }
 
-export async function updateShoppingList(listId: string, name: string) {
+interface UpdateShoppingListInput {
+  name?: string
+  /** Color preset id, or null to clear back to default. */
+  color?: string | null
+}
+
+export async function updateShoppingList(
+  listId: string,
+  input: UpdateShoppingListInput
+) {
   const { session, membership } = await requireHousehold()
 
   const list = await db.shoppingList.findUnique({ where: { id: listId } })
@@ -43,9 +53,27 @@ export async function updateShoppingList(listId: string, name: string) {
     throw new Error("List not found")
   }
 
+  const data: { name?: string; color?: string | null } = {}
+  if (typeof input.name === "string") {
+    const trimmed = input.name.trim()
+    if (!trimmed) throw new Error("Name cannot be empty")
+    data.name = trimmed
+  }
+  if (input.color !== undefined) {
+    if (input.color === null || input.color === "default") {
+      data.color = null
+    } else if (isListColorId(input.color)) {
+      data.color = input.color
+    } else {
+      throw new Error("Invalid color")
+    }
+  }
+
+  if (Object.keys(data).length === 0) return
+
   await db.shoppingList.update({
     where: { id: listId },
-    data: { name },
+    data,
   })
 
   revalidatePath(`/lists/${listId}`)
