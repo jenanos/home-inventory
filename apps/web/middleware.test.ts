@@ -13,6 +13,7 @@ describe("isPublicPathname", () => {
   it("allows PWA assets without a session", () => {
     expect(isPublicPathname("/manifest.webmanifest")).toBe(true)
     expect(isPublicPathname("/sw.js")).toBe(true)
+    expect(isPublicPathname("/apple-icon-180.png")).toBe(true)
     expect(isPublicPathname("/icon-192.png")).toBe(true)
     expect(isPublicPathname("/icon-512.png")).toBe(true)
     expect(isPublicPathname("/icon.svg")).toBe(true)
