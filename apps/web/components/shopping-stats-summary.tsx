@@ -27,23 +27,44 @@ export function ShoppingStatsSummary({
   pendingCount,
   className,
 }: ShoppingStatsSummaryProps) {
-  const progress =
-    totalEstimated > 0
-      ? Math.min(Math.round((purchasedTotal / totalEstimated) * 100), 100)
+  const hasEstimate = totalEstimated > 0
+  const moneyProgress = hasEstimate
+    ? Math.min(Math.round((purchasedTotal / totalEstimated) * 100), 100)
+    : 0
+  const countProgress =
+    totalCount > 0
+      ? Math.min(Math.round((purchasedCount / totalCount) * 100), 100)
       : 0
+  // Fall back to count-based progress when prices are missing so we don't
+  // show a misleading 0% / 0 kr state.
+  const progress = hasEstimate ? moneyProgress : countProgress
 
   return (
     <Card size="sm" className={cn("shadow-sm", className)}>
       <CardContent className="flex flex-col gap-3">
         <div className="flex items-end justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-xs text-muted-foreground">Kjøpt av estimert</p>
-            <p className="font-heading text-xl font-semibold tabular-nums sm:text-2xl">
-              {formatNOK(purchasedTotal)}
-              <span className="ml-1 text-sm font-normal text-muted-foreground">
-                / {formatNOK(totalEstimated)}
-              </span>
+            <p className="text-xs text-muted-foreground">
+              {hasEstimate ? "Kjøpt av estimert" : "Kjøpt av totalt"}
             </p>
+            {hasEstimate ? (
+              <p className="font-heading text-xl font-semibold tabular-nums sm:text-2xl">
+                {formatNOK(purchasedTotal)}
+                <span className="ml-1 text-sm font-normal text-muted-foreground">
+                  / {formatNOK(totalEstimated)}
+                </span>
+              </p>
+            ) : (
+              <p className="font-heading text-xl font-semibold tabular-nums sm:text-2xl">
+                {purchasedCount}
+                <span className="ml-1 text-sm font-normal text-muted-foreground">
+                  / {totalCount}
+                </span>
+                <span className="ml-2 text-sm font-normal text-muted-foreground">
+                  — uten estimat
+                </span>
+              </p>
+            )}
           </div>
           <span className="shrink-0 text-sm font-medium text-muted-foreground tabular-nums">
             {progress}%
