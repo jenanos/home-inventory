@@ -1,11 +1,12 @@
 import { requireHousehold } from "@/lib/session"
 import { getMaintenanceTasks } from "@/lib/queries/maintenance"
-import { Wrench, AlertTriangle, Clock, CheckCircle2 } from "lucide-react"
+import { Wrench, Clock } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@workspace/ui/components/button"
 import { Badge } from "@workspace/ui/components/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@workspace/ui/components/card"
 import { Progress } from "@workspace/ui/components/progress"
+import { MaintenanceStatsSummary } from "@/components/maintenance-stats-summary"
 import { CreateTaskDialog } from "./create-task-dialog"
 import { BotMessageSquare } from "lucide-react"
 
@@ -65,64 +66,13 @@ export default async function VedlikeholdPage() {
       </div>
 
       {tasks.length > 0 && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Totalt estimert</CardTitle>
-              <Wrench className="text-muted-foreground h-4 w-4" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-xl sm:text-2xl font-bold tabular-nums">
-                {totalEstimate > 0 ? formatCurrency(totalEstimate) : "—"}
-              </div>
-              <p className="text-muted-foreground text-xs">
-                {tasks.length} {tasks.length === 1 ? "oppgave" : "oppgaver"} totalt
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Ikke startet</CardTitle>
-              <AlertTriangle className="text-muted-foreground h-4 w-4" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-xl sm:text-2xl font-bold">{notStartedCount}</div>
-              <p className="text-muted-foreground text-xs">
-                Oppgaver som venter
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pågår</CardTitle>
-              <Clock className="text-muted-foreground h-4 w-4" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-xl sm:text-2xl font-bold">{inProgressCount}</div>
-              <p className="text-muted-foreground text-xs">
-                Under arbeid
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Fullført</CardTitle>
-              <CheckCircle2 className="text-muted-foreground h-4 w-4" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-xl sm:text-2xl font-bold">{completedCount}</div>
-              {tasks.length > 0 && (
-                <Progress
-                  value={(completedCount / tasks.length) * 100}
-                  className="mt-2"
-                />
-              )}
-            </CardContent>
-          </Card>
-        </div>
+        <MaintenanceStatsSummary
+          totalEstimatedCost={totalEstimate}
+          totalTasks={tasks.length}
+          notStartedCount={notStartedCount}
+          inProgressCount={inProgressCount}
+          completedCount={completedCount}
+        />
       )}
 
       {tasks.length === 0 ? (

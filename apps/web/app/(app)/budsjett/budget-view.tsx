@@ -10,9 +10,6 @@ import {
   Pencil,
   Trash2,
   Users,
-  TrendingUp,
-  TrendingDown,
-  PiggyBank,
   Plane,
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@workspace/ui/components/card"
@@ -20,6 +17,7 @@ import { Button } from "@workspace/ui/components/button"
 import { Badge } from "@workspace/ui/components/badge"
 import { Separator } from "@workspace/ui/components/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@workspace/ui/components/tabs"
+import { BudgetStatsSummary } from "@/components/budget-stats-summary"
 import {
   upsertBudgetMember,
   deleteBudgetMember,
@@ -345,78 +343,32 @@ export function BudgetView({ budget }: BudgetViewProps) {
         </Tabs>
       </div>
 
-      {/* Summary cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Netto inntekt</CardTitle>
-            <TrendingUp className="text-muted-foreground h-4 w-4" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl sm:text-2xl font-bold tabular-nums text-green-600 dark:text-green-400">
-              {formatCurrency(calculations.totalIncome * multiplier)}
-            </div>
-            <p className="text-muted-foreground text-xs">
-              Brutto: {formatCurrency(calculations.totalGrossIncome * multiplier)}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Totale kostnader
-            </CardTitle>
-            <TrendingDown className="text-muted-foreground h-4 w-4" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl sm:text-2xl font-bold tabular-nums text-red-600 dark:text-red-400">
-              {formatCurrency(calculations.totalExpenses * multiplier)}
-            </div>
-            <p className="text-muted-foreground text-xs">
-              Fradrag: {formatCurrency(calculations.totalDeductions * multiplier)}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Rentefradrag</CardTitle>
-            <Receipt className="text-muted-foreground h-4 w-4" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl sm:text-2xl font-bold tabular-nums text-blue-600 dark:text-blue-400">
-              {formatCurrency(
-                calculations.monthlyTaxDeduction * multiplier
-              )}
-            </div>
-            <p className="text-muted-foreground text-xs">
-              {budget.taxDeductionPercent}% av rentekostnader
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Disponibelt</CardTitle>
-            <PiggyBank className="text-muted-foreground h-4 w-4" />
-          </CardHeader>
-          <CardContent>
-            <div
-              className={`text-xl sm:text-2xl font-bold tabular-nums ${
-                calculations.disposable >= 0
-                  ? "text-green-600 dark:text-green-400"
-                  : "text-red-600 dark:text-red-400"
-              }`}
-            >
-              {formatCurrency(calculations.disposable * multiplier)}
-            </div>
-            <p className="text-muted-foreground text-xs">
-              Etter alle kostnader og fradrag
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+      {/* Summary card */}
+      <BudgetStatsSummary
+        disposable={calculations.disposable * multiplier}
+        disposableSubtitle={
+          period === "year"
+            ? "per år, etter alle kostnader og fradrag"
+            : "per måned, etter alle kostnader og fradrag"
+        }
+        items={[
+          {
+            label: "Netto inntekt",
+            value: calculations.totalIncome * multiplier,
+            tone: "income",
+          },
+          {
+            label: "Kostnader",
+            value: calculations.totalExpenses * multiplier,
+            tone: "expense",
+          },
+          {
+            label: "Rentefradrag",
+            value: calculations.monthlyTaxDeduction * multiplier,
+            tone: "info",
+          },
+        ]}
+      />
 
       {/* Income section */}
       <BudgetSection
