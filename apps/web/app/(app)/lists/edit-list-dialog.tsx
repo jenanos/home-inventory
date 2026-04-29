@@ -71,11 +71,7 @@ export function EditListDialog({
       }}
     >
       <DialogTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          onClick={(e) => e.preventDefault()}
-        >
+        <Button variant="ghost" size="icon-sm">
           <Pencil className="h-3.5 w-3.5" />
           <span className="sr-only">Endre liste</span>
         </Button>
