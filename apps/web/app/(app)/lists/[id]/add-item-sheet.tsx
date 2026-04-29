@@ -603,11 +603,11 @@ export function AddItemSheet({ listId, categories, members }: AddItemSheetProps)
   return (
     <Drawer open={open} onOpenChange={handleOpenChange}>
       <DrawerTrigger asChild>{trigger}</DrawerTrigger>
-      <DrawerContent>
+      <DrawerContent className="h-[90dvh]">
         <DrawerHeader>
           <DrawerTitle>Legg til ny ting</DrawerTitle>
         </DrawerHeader>
-        <div className="overflow-y-auto max-h-[70vh]">
+        <div className="flex-1 overflow-y-auto">
           {formContent}
         </div>
       </DrawerContent>
