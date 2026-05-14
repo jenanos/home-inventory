@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useTransition } from "react"
+import { useState, useTransition } from "react"
 import {
   Sheet,
   SheetContent,
@@ -45,35 +45,75 @@ export function EntryDialog({
   categories,
   defaults,
 }: EntryDialogProps) {
-  const [name, setName] = useState("")
-  const [categoryId, setCategoryId] = useState<string>("none")
-  const [type, setType] = useState<BudgetEntryType>("EXPENSE")
-  const [monthlyAmount, setMonthlyAmount] = useState("")
-  const [isPending, startTransition] = useTransition()
   const isDesktop = useMediaQuery("(min-width: 768px)")
+  const title = entry ? "Rediger budsjettpost" : "Legg til budsjettpost"
+  const initialCategoryId =
+    entry?.category?.id ??
+    (defaults.categoryId &&
+    categories.some((category) => category.id === defaults.categoryId)
+      ? defaults.categoryId
+      : null)
+  const formKey = entry?.id ?? `${initialCategoryId ?? "none"}-${defaults.type ?? "EXPENSE"}-${open ? "open" : "closed"}`
+  const formContent = open ? (
+    <EntryDialogForm
+      key={formKey}
+      entry={entry}
+      categories={categories}
+      initialCategoryId={initialCategoryId}
+      initialType={entry?.type ?? defaults.type ?? "EXPENSE"}
+      onOpenChange={onOpenChange}
+    />
+  ) : null
 
-  useEffect(() => {
-    if (!open) return
+  if (isDesktop) {
+    return (
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>{title}</SheetTitle>
+          </SheetHeader>
+          {formContent}
+        </SheetContent>
+      </Sheet>
+    )
+  }
 
-    if (entry) {
-      setName(entry.name)
-      setCategoryId(entry.category?.id ?? "none")
-      setType(entry.type)
-      setMonthlyAmount(String(entry.monthlyAmount))
-      return
-    }
+  return (
+    <Drawer open={open} onOpenChange={onOpenChange}>
+      <DrawerContent>
+        <DrawerHeader>
+          <DrawerTitle>{title}</DrawerTitle>
+        </DrawerHeader>
+        <ScrollArea className="max-h-[70vh] overflow-x-hidden">
+          <div className="min-w-0 px-4 pb-6">{formContent}</div>
+        </ScrollArea>
+      </DrawerContent>
+    </Drawer>
+  )
+}
 
-    const defaultCategory =
-      defaults.categoryId &&
-      categories.some((category) => category.id === defaults.categoryId)
-        ? defaults.categoryId
-        : "none"
-
-    setName("")
-    setCategoryId(defaultCategory)
-    setType(defaults.type ?? "EXPENSE")
-    setMonthlyAmount("")
-  }, [categories, defaults, entry, open])
+function EntryDialogForm({
+  entry,
+  categories,
+  initialCategoryId,
+  initialType,
+  onOpenChange,
+}: {
+  entry: BudgetEntryData | null
+  categories: BudgetCategoryData[]
+  initialCategoryId: string | null
+  initialType: BudgetEntryType
+  onOpenChange: (open: boolean) => void
+}) {
+  const [name, setName] = useState(entry?.name ?? "")
+  const [categoryId, setCategoryId] = useState<string>(
+    initialCategoryId ?? "none"
+  )
+  const [type, setType] = useState<BudgetEntryType>(initialType)
+  const [monthlyAmount, setMonthlyAmount] = useState(
+    entry ? String(entry.monthlyAmount) : ""
+  )
+  const [isPending, startTransition] = useTransition()
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -101,9 +141,7 @@ export function EntryDialog({
     })
   }
 
-  const title = entry ? "Rediger budsjettpost" : "Legg til budsjettpost"
-
-  const formContent = (
+  return (
     <form onSubmit={handleSubmit} className="flex min-w-0 flex-col gap-4">
       <div className="flex flex-col gap-2">
         <Label htmlFor="entry-name">Navn</Label>
@@ -172,31 +210,5 @@ export function EntryDialog({
         </Button>
       </div>
     </form>
-  )
-
-  if (isDesktop) {
-    return (
-      <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent>
-          <SheetHeader>
-            <SheetTitle>{title}</SheetTitle>
-          </SheetHeader>
-          {formContent}
-        </SheetContent>
-      </Sheet>
-    )
-  }
-
-  return (
-    <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent>
-        <DrawerHeader>
-          <DrawerTitle>{title}</DrawerTitle>
-        </DrawerHeader>
-        <ScrollArea className="max-h-[70vh] overflow-x-hidden">
-          <div className="min-w-0 px-4 pb-6">{formContent}</div>
-        </ScrollArea>
-      </DrawerContent>
-    </Drawer>
   )
 }

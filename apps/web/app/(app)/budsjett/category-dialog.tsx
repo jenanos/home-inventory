@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useTransition } from "react"
+import { useState, useTransition } from "react"
 import {
   Sheet,
   SheetContent,
@@ -37,66 +37,16 @@ export function CategoryDialog({
   onOpenChange,
   category,
 }: CategoryDialogProps) {
-  const [name, setName] = useState("")
-  const [isPending, startTransition] = useTransition()
   const isDesktop = useMediaQuery("(min-width: 768px)")
-
-  useEffect(() => {
-    if (!open) return
-
-    setName(category?.name ?? "")
-  }, [open, category])
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-
-    if (!name.trim()) {
-      toast.error("Skriv inn et kategorinavn")
-      return
-    }
-
-    startTransition(async () => {
-      try {
-        await upsertBudgetCategory({
-          id: category?.id,
-          name,
-        })
-        toast.success(category ? "Kategori oppdatert" : "Kategori lagt til")
-        onOpenChange(false)
-      } catch {
-        toast.error("Kunne ikke lagre kategorien")
-      }
-    })
-  }
-
   const title = category ? "Rediger kategori" : "Legg til kategori"
-
-  const formContent = (
-    <form onSubmit={handleSubmit} className="flex min-w-0 flex-col gap-4">
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="category-name">Navn</Label>
-        <Input
-          id="category-name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="F.eks. Bilutgifter"
-        />
-      </div>
-      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => onOpenChange(false)}
-          className="w-full sm:w-auto"
-        >
-          Avbryt
-        </Button>
-        <Button type="submit" disabled={isPending} className="w-full sm:w-auto">
-          {category ? "Lagre" : "Legg til"}
-        </Button>
-      </div>
-    </form>
-  )
+  const formKey = category?.id ?? `new-${open ? "open" : "closed"}`
+  const formContent = open ? (
+    <CategoryDialogForm
+      key={formKey}
+      category={category}
+      onOpenChange={onOpenChange}
+    />
+  ) : null
 
   if (isDesktop) {
     return (
@@ -122,5 +72,65 @@ export function CategoryDialog({
         </ScrollArea>
       </DrawerContent>
     </Drawer>
+  )
+}
+
+function CategoryDialogForm({
+  category,
+  onOpenChange,
+}: {
+  category: BudgetCategoryData | null
+  onOpenChange: (open: boolean) => void
+}) {
+  const [name, setName] = useState(category?.name ?? "")
+  const [isPending, startTransition] = useTransition()
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+
+    if (!name.trim()) {
+      toast.error("Skriv inn et kategorinavn")
+      return
+    }
+
+    startTransition(async () => {
+      try {
+        await upsertBudgetCategory({
+          id: category?.id,
+          name,
+        })
+        toast.success(category ? "Kategori oppdatert" : "Kategori lagt til")
+        onOpenChange(false)
+      } catch {
+        toast.error("Kunne ikke lagre kategorien")
+      }
+    })
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="flex min-w-0 flex-col gap-4">
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="category-name">Navn</Label>
+        <Input
+          id="category-name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="F.eks. Bilutgifter"
+        />
+      </div>
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => onOpenChange(false)}
+          className="w-full sm:w-auto"
+        >
+          Avbryt
+        </Button>
+        <Button type="submit" disabled={isPending} className="w-full sm:w-auto">
+          {category ? "Lagre" : "Legg til"}
+        </Button>
+      </div>
+    </form>
   )
 }
