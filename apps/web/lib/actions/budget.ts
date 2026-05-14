@@ -23,7 +23,7 @@ const VALID_ENTRY_TYPES = new Set<BudgetEntryType>([
 const VALID_LOAN_TYPES = new Set<BudgetLoanType>(["MORTGAGE", "OTHER"])
 const VALID_TRIP_TYPES = new Set<TripTransportType>(["AIR_OR_PUBLIC", "CAR"])
 
-type DbClient = Prisma.TransactionClient | typeof db
+type TransactionOrDbClient = Prisma.TransactionClient | typeof db
 type BudgetCategoryCache = {
   items: Array<{ id: string; name: string }>
   nextSortOrder: number
@@ -86,7 +86,7 @@ async function getBudgetCategoryOrThrow(categoryId: string, budgetId: string) {
 }
 
 async function findBudgetCategoryByName(
-  tx: DbClient,
+  tx: TransactionOrDbClient,
   budgetId: string,
   name: string
 ) {
@@ -101,7 +101,10 @@ async function findBudgetCategoryByName(
   })
 }
 
-async function ensureDefaultBudgetCategories(tx: DbClient, budgetId: string) {
+async function ensureDefaultBudgetCategories(
+  tx: TransactionOrDbClient,
+  budgetId: string
+) {
   const [categoryCount, entryCount] = await Promise.all([
     tx.budgetEntryCategory.count({ where: { budgetId } }),
     tx.budgetEntry.count({ where: { budgetId } }),
@@ -119,7 +122,7 @@ async function ensureDefaultBudgetCategories(tx: DbClient, budgetId: string) {
 }
 
 async function createBudgetCategoryCache(
-  tx: DbClient,
+  tx: TransactionOrDbClient,
   budgetId: string
 ): Promise<BudgetCategoryCache> {
   const categories = await tx.budgetEntryCategory.findMany({
@@ -138,7 +141,7 @@ async function createBudgetCategoryCache(
 }
 
 async function resolveBudgetCategoryId(
-  tx: DbClient,
+  tx: TransactionOrDbClient,
   budgetId: string,
   categoryName?: string | null,
   cache?: BudgetCategoryCache
@@ -1114,7 +1117,8 @@ export async function bulkImportBudgetWithDuplicates(
     }
 
     const categoryCache =
-      input.newEntries?.length || input.entryUpdates?.length
+      (input.newEntries?.length ?? 0) > 0 ||
+      (input.entryUpdates?.length ?? 0) > 0
         ? await createBudgetCategoryCache(tx, budget.id)
         : null
 
