@@ -846,12 +846,13 @@ function EntryList({
 }
 
 function ImpactBadge({ value }: { value: number }) {
-  const toneClass =
-    value > 0
-      ? "text-green-700 dark:text-green-400"
-      : value < 0
-        ? "text-red-700 dark:text-red-400"
-        : undefined
+  let toneClass: string | undefined
+
+  if (value > 0) {
+    toneClass = "text-green-700 dark:text-green-400"
+  } else if (value < 0) {
+    toneClass = "text-red-700 dark:text-red-400"
+  }
 
   return (
     <Badge variant="outline" className={toneClass}>
