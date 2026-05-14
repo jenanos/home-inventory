@@ -53,10 +53,9 @@ export function EntryDialog({
     categories.some((category) => category.id === defaults.categoryId)
       ? defaults.categoryId
       : null)
-  const formKey = entry?.id ?? `${initialCategoryId ?? "none"}-${defaults.type ?? "EXPENSE"}-${open ? "open" : "closed"}`
   const formContent = open ? (
     <EntryDialogForm
-      key={formKey}
+      key={entry?.id ?? "new"}
       entry={entry}
       categories={categories}
       initialCategoryId={initialCategoryId}

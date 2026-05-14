@@ -39,10 +39,9 @@ export function CategoryDialog({
 }: CategoryDialogProps) {
   const isDesktop = useMediaQuery("(min-width: 768px)")
   const title = category ? "Rediger kategori" : "Legg til kategori"
-  const formKey = category?.id ?? `new-${open ? "open" : "closed"}`
   const formContent = open ? (
     <CategoryDialogForm
-      key={formKey}
+      key={category?.id ?? "new"}
       category={category}
       onOpenChange={onOpenChange}
     />
