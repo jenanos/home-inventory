@@ -24,9 +24,17 @@ const VALID_LOAN_TYPES = new Set<BudgetLoanType>(["MORTGAGE", "OTHER"])
 const VALID_TRIP_TYPES = new Set<TripTransportType>(["AIR_OR_PUBLIC", "CAR"])
 
 type DbClient = Prisma.TransactionClient | typeof db
+type BudgetCategoryCache = {
+  byName: Map<string, { id: string }>
+  nextSortOrder: number
+}
 
 function normalizeBudgetCategoryName(name: string) {
   return name.trim().replace(/\s+/g, " ")
+}
+
+function getBudgetCategoryLookupKey(name: string) {
+  return normalizeBudgetCategoryName(name).toLocaleLowerCase("nb-NO")
 }
 
 function normalizeEntryType(type: string) {
@@ -102,22 +110,59 @@ async function ensureDefaultBudgetCategories(tx: DbClient, budgetId: string) {
   })
 }
 
+async function createBudgetCategoryCache(
+  tx: DbClient,
+  budgetId: string
+): Promise<BudgetCategoryCache> {
+  const categories = await tx.budgetEntryCategory.findMany({
+    where: { budgetId },
+    orderBy: { sortOrder: "asc" },
+    select: {
+      id: true,
+      name: true,
+    },
+  })
+
+  return {
+    byName: new Map(
+      categories.map((category) => [
+        getBudgetCategoryLookupKey(category.name),
+        { id: category.id },
+      ])
+    ),
+    nextSortOrder: categories.length,
+  }
+}
+
 async function resolveBudgetCategoryId(
   tx: DbClient,
   budgetId: string,
-  categoryName?: string | null
+  categoryName?: string | null,
+  cache?: BudgetCategoryCache
 ) {
   if (!categoryName) return null
 
   const normalizedName = normalizeBudgetCategoryName(categoryName)
   if (!normalizedName) return null
 
-  const existing = await findBudgetCategoryByName(tx, budgetId, normalizedName)
-  if (existing) return existing.id
+  const lookupKey = getBudgetCategoryLookupKey(normalizedName)
 
-  const sortOrder = await tx.budgetEntryCategory.count({
-    where: { budgetId },
-  })
+  if (cache) {
+    const cachedCategory = cache.byName.get(lookupKey)
+    if (cachedCategory) return cachedCategory.id
+  }
+
+  const existing = await findBudgetCategoryByName(tx, budgetId, normalizedName)
+  if (existing) {
+    cache?.byName.set(lookupKey, { id: existing.id })
+    return existing.id
+  }
+
+  const sortOrder =
+    cache?.nextSortOrder ??
+    (await tx.budgetEntryCategory.count({
+      where: { budgetId },
+    }))
 
   const created = await tx.budgetEntryCategory.create({
     data: {
@@ -126,6 +171,11 @@ async function resolveBudgetCategoryId(
       sortOrder,
     },
   })
+
+  if (cache) {
+    cache.byName.set(lookupKey, { id: created.id })
+    cache.nextSortOrder += 1
+  }
 
   return created.id
 }
@@ -600,6 +650,7 @@ export async function bulkImportBudget(input: BulkBudgetImportInput) {
     }
 
     if (input.entries && input.entries.length > 0) {
+      const categoryCache = await createBudgetCategoryCache(tx, budget.id)
       let sortOrder = await tx.budgetEntry.count({
         where: { budgetId: budget.id },
       })
@@ -615,7 +666,8 @@ export async function bulkImportBudget(input: BulkBudgetImportInput) {
             categoryId: await resolveBudgetCategoryId(
               tx,
               budget.id,
-              entry.category
+              entry.category,
+              categoryCache
             ),
             type: entryType,
             monthlyAmount: entry.monthlyAmount,
@@ -705,6 +757,7 @@ export async function replaceBudget(input: BulkBudgetImportInput) {
     }
 
     if (input.entries && input.entries.length > 0) {
+      const categoryCache = await createBudgetCategoryCache(tx, budget.id)
       let sortOrder = 0
 
       for (const entry of input.entries) {
@@ -718,7 +771,8 @@ export async function replaceBudget(input: BulkBudgetImportInput) {
             categoryId: await resolveBudgetCategoryId(
               tx,
               budget.id,
-              entry.category
+              entry.category,
+              categoryCache
             ),
             type: entryType,
             monthlyAmount: entry.monthlyAmount,
@@ -1058,6 +1112,11 @@ export async function bulkImportBudgetWithDuplicates(
       count += input.tripUpdates.length
     }
 
+    const categoryCache =
+      input.newEntries?.length || input.entryUpdates?.length
+        ? await createBudgetCategoryCache(tx, budget.id)
+        : null
+
     if (input.newEntries && input.newEntries.length > 0) {
       let sortOrder = await tx.budgetEntry.count({
         where: { budgetId: budget.id },
@@ -1074,7 +1133,8 @@ export async function bulkImportBudgetWithDuplicates(
             categoryId: await resolveBudgetCategoryId(
               tx,
               budget.id,
-              entry.category
+              entry.category,
+              categoryCache ?? undefined
             ),
             type: entryType,
             monthlyAmount: entry.monthlyAmount,
@@ -1097,7 +1157,8 @@ export async function bulkImportBudgetWithDuplicates(
           data.categoryId = await resolveBudgetCategoryId(
             tx,
             budget.id,
-            update.fields.category
+            update.fields.category,
+            categoryCache ?? undefined
           )
         }
         if (update.fields.monthlyAmount !== undefined) {
