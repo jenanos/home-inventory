@@ -519,7 +519,7 @@ function buildEntryDiffs(
       label: "Kategori",
       existingValue: existing.category,
       newValue: imported.category,
-      format: (v) => (v == null ? "Ingen" : String(v)),
+      format: (v) => (v === null || v === undefined ? "Ingen" : String(v)),
     },
     {
       key: "monthlyAmount",

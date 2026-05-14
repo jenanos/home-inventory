@@ -25,16 +25,25 @@ const VALID_TRIP_TYPES = new Set<TripTransportType>(["AIR_OR_PUBLIC", "CAR"])
 
 type DbClient = Prisma.TransactionClient | typeof db
 type BudgetCategoryCache = {
-  byName: Map<string, { id: string }>
+  items: Array<{ id: string; name: string }>
   nextSortOrder: number
 }
+const budgetCategoryNameCollator = new Intl.Collator("nb-NO", {
+  sensitivity: "base",
+})
 
 function normalizeBudgetCategoryName(name: string) {
   return name.trim().replace(/\s+/g, " ")
 }
 
-function getBudgetCategoryLookupKey(name: string) {
-  return normalizeBudgetCategoryName(name).toLocaleLowerCase("nb-NO")
+function findCachedBudgetCategoryId(
+  cache: BudgetCategoryCache,
+  name: string
+) {
+  return cache.items.find(
+    (category) =>
+      budgetCategoryNameCollator.compare(category.name, name) === 0
+  )?.id
 }
 
 function normalizeEntryType(type: string) {
@@ -89,7 +98,6 @@ async function findBudgetCategoryByName(
         mode: "insensitive",
       },
     },
-    orderBy: { sortOrder: "asc" },
   })
 }
 
@@ -124,12 +132,7 @@ async function createBudgetCategoryCache(
   })
 
   return {
-    byName: new Map(
-      categories.map((category) => [
-        getBudgetCategoryLookupKey(category.name),
-        { id: category.id },
-      ])
-    ),
+    items: categories,
     nextSortOrder: categories.length,
   }
 }
@@ -145,16 +148,14 @@ async function resolveBudgetCategoryId(
   const normalizedName = normalizeBudgetCategoryName(categoryName)
   if (!normalizedName) return null
 
-  const lookupKey = getBudgetCategoryLookupKey(normalizedName)
-
   if (cache) {
-    const cachedCategory = cache.byName.get(lookupKey)
-    if (cachedCategory) return cachedCategory.id
+    const cachedCategoryId = findCachedBudgetCategoryId(cache, normalizedName)
+    if (cachedCategoryId) return cachedCategoryId
   }
 
   const existing = await findBudgetCategoryByName(tx, budgetId, normalizedName)
   if (existing) {
-    cache?.byName.set(lookupKey, { id: existing.id })
+    cache?.items.push({ id: existing.id, name: existing.name })
     return existing.id
   }
 
@@ -173,7 +174,7 @@ async function resolveBudgetCategoryId(
   })
 
   if (cache) {
-    cache.byName.set(lookupKey, { id: created.id })
+    cache.items.push({ id: created.id, name: created.name })
     cache.nextSortOrder += 1
   }
 

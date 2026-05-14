@@ -274,9 +274,9 @@ export function BudgetView({ budget }: BudgetViewProps) {
   }
 
   function handleDeleteCategory(category: BudgetCategoryData) {
-    const entryCount = budget.entries.filter(
-      (entry) => entry.category?.id === category.id
-    ).length
+    const entryCount =
+      calculations.categoryGroups.find((group) => group.category.id === category.id)
+        ?.entries.length ?? 0
     const message =
       entryCount > 0
         ? `Slette kategorien "${category.name}"? ${entryCount} ${entryCount === 1 ? "post blir" : "poster blir"} ukategorisert.`
