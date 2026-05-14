@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition, useEffect } from "react"
+import { useEffect, useState, useTransition } from "react"
 import {
   Sheet,
   SheetContent,
@@ -26,62 +26,54 @@ import {
 } from "@workspace/ui/components/select"
 import { upsertBudgetEntry } from "@/lib/actions/budget"
 import { toast } from "sonner"
-import type { BudgetCategory, BudgetEntryType } from "@workspace/db"
-import type { BudgetEntryData } from "./budget-view"
-import { CATEGORY_LABELS } from "./budget-view"
+import type { BudgetEntryType } from "@workspace/db"
+import type { BudgetCategoryData, BudgetEntryData } from "./budget-view"
 import { useMediaQuery } from "@/hooks/use-media-query"
-
-const ALL_CATEGORIES: BudgetCategory[] = [
-  "ELECTRICITY",
-  "MUNICIPAL_FEES",
-  "INSURANCE",
-  "HOME_MAINTENANCE",
-  "TRANSPORT",
-  "SUBSCRIPTIONS",
-  "FOOD",
-  "CHILDREN",
-  "PERSONAL",
-  "SAVINGS",
-  "BUFFER",
-]
 
 interface EntryDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   entry: BudgetEntryData | null
-  defaults: { category?: BudgetCategory; type?: BudgetEntryType }
+  categories: BudgetCategoryData[]
+  defaults: { categoryId?: string | null; type?: BudgetEntryType }
 }
 
 export function EntryDialog({
   open,
   onOpenChange,
   entry,
+  categories,
   defaults,
 }: EntryDialogProps) {
   const [name, setName] = useState("")
-  const [category, setCategory] = useState<BudgetCategory | "none">("none")
+  const [categoryId, setCategoryId] = useState<string>("none")
   const [type, setType] = useState<BudgetEntryType>("EXPENSE")
   const [monthlyAmount, setMonthlyAmount] = useState("")
   const [isPending, startTransition] = useTransition()
   const isDesktop = useMediaQuery("(min-width: 768px)")
 
   useEffect(() => {
-    if (open) {
-      if (entry) {
-        setName(entry.name)
-        setCategory(entry.category ?? "none")
-        setType(entry.type)
-        setMonthlyAmount(String(entry.monthlyAmount))
-      } else {
-        setName(
-          defaults.category ? CATEGORY_LABELS[defaults.category] : ""
-        )
-        setCategory(defaults.category ?? "none")
-        setType(defaults.type ?? "EXPENSE")
-        setMonthlyAmount("")
-      }
+    if (!open) return
+
+    if (entry) {
+      setName(entry.name)
+      setCategoryId(entry.category?.id ?? "none")
+      setType(entry.type)
+      setMonthlyAmount(String(entry.monthlyAmount))
+      return
     }
-  }, [open, entry, defaults])
+
+    const defaultCategory =
+      defaults.categoryId &&
+      categories.some((category) => category.id === defaults.categoryId)
+        ? defaults.categoryId
+        : "none"
+
+    setName("")
+    setCategoryId(defaultCategory)
+    setType(defaults.type ?? "EXPENSE")
+    setMonthlyAmount("")
+  }, [categories, defaults, entry, open])
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -97,7 +89,7 @@ export function EntryDialog({
         await upsertBudgetEntry({
           id: entry?.id,
           name: name.trim(),
-          category: category === "none" ? null : category,
+          categoryId: categoryId === "none" ? null : categoryId,
           type,
           monthlyAmount: amount,
         })
@@ -126,7 +118,7 @@ export function EntryDialog({
         <Label htmlFor="entry-type">Type</Label>
         <Select
           value={type}
-          onValueChange={(v) => setType(v as BudgetEntryType)}
+          onValueChange={(value) => setType(value as BudgetEntryType)}
         >
           <SelectTrigger id="entry-type">
             <SelectValue />
@@ -140,20 +132,15 @@ export function EntryDialog({
       </div>
       <div className="flex flex-col gap-2">
         <Label htmlFor="entry-category">Kategori (valgfri)</Label>
-        <Select
-          value={category}
-          onValueChange={(v) =>
-            setCategory(v as BudgetCategory | "none")
-          }
-        >
+        <Select value={categoryId} onValueChange={setCategoryId}>
           <SelectTrigger id="entry-category">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="none">Ingen (manuell post)</SelectItem>
-            {ALL_CATEGORIES.map((cat) => (
-              <SelectItem key={cat} value={cat}>
-                {CATEGORY_LABELS[cat]}
+            <SelectItem value="none">Ingen (ukategorisert)</SelectItem>
+            {categories.map((category) => (
+              <SelectItem key={category.id} value={category.id}>
+                {category.name}
               </SelectItem>
             ))}
           </SelectContent>

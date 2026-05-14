@@ -21,6 +21,10 @@ export default async function BudsjettPage() {
   const serialized = {
     id: budget.id,
     taxDeductionPercent: toNumber(budget.taxDeductionPercent),
+    categories: budget.categories.map((category) => ({
+      id: category.id,
+      name: category.name,
+    })),
     members: budget.members.map((m) => ({
       id: m.id,
       name: m.name,
@@ -49,7 +53,12 @@ export default async function BudsjettPage() {
     entries: budget.entries.map((e) => ({
       id: e.id,
       name: e.name,
-      category: e.category,
+      category: e.category
+        ? {
+            id: e.category.id,
+            name: e.category.name,
+          }
+        : null,
       type: e.type,
       monthlyAmount: toNumber(e.monthlyAmount),
     })),

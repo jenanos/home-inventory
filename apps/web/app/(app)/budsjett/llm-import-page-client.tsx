@@ -112,7 +112,7 @@ Svar KUN med et gyldig JSON-objekt, uten noe annet tekst rundt. Objektet skal ha
   "entries": [
     {
       "name": "Navn på post (obligatorisk)",
-      "category": "ELECTRICITY",
+      "category": "Boligkostnader",
       "type": "EXPENSE",
       "monthlyAmount": 2000
     }
@@ -147,9 +147,7 @@ For "trips":
 For "entries":
 - "name" er obligatorisk
 - "type" er obligatorisk: "INCOME" (inntekt), "EXPENSE" (utgift), eller "DEDUCTION" (fradrag)
-- "category" er valgfritt, og kan være en av:
-  Boligkostnader: ELECTRICITY (strøm), MUNICIPAL_FEES (kommunale avgifter), INSURANCE (forsikring), HOME_MAINTENANCE (vedlikehold)
-  Faste kostnader: TRANSPORT, SUBSCRIPTIONS (abonnement), FOOD (mat), CHILDREN (barn), PERSONAL (personlig), SAVINGS (sparing), BUFFER
+- "category" er valgfritt og skal være navnet på kategorien/gruppen posten hører til, f.eks. "Boligkostnader", "Bilutgifter" eller "Forsikring"
 - "monthlyAmount" er beløp per måned
 
 Eksempel:
@@ -167,8 +165,8 @@ Eksempel:
     { "name": "Hytteturer", "transportType": "CAR", "annualTrips": 10, "tollPerTrip": 160, "ferryPerTrip": 120, "fuelPerTrip": 500 }
   ],
   "entries": [
-    { "name": "Strøm", "category": "ELECTRICITY", "type": "EXPENSE", "monthlyAmount": 2500 },
-    { "name": "Dagligvarer", "category": "FOOD", "type": "EXPENSE", "monthlyAmount": 8000 }
+    { "name": "Strøm", "category": "Boligkostnader", "type": "EXPENSE", "monthlyAmount": 2500 },
+    { "name": "Bilforsikring", "category": "Bilutgifter", "type": "EXPENSE", "monthlyAmount": 1100 }
   ]
 }`
 }
@@ -391,20 +389,6 @@ const formatPrice = (price: number) =>
     maximumFractionDigits: 0,
   }).format(price)
 
-const CATEGORY_LABELS: Record<string, string> = {
-  ELECTRICITY: "Strøm",
-  MUNICIPAL_FEES: "Kommunale avgifter",
-  INSURANCE: "Forsikring",
-  HOME_MAINTENANCE: "Vedlikehold",
-  TRANSPORT: "Transport",
-  SUBSCRIPTIONS: "Abonnement",
-  FOOD: "Mat",
-  CHILDREN: "Barn",
-  PERSONAL: "Personlig forbruk",
-  SAVINGS: "Sparing",
-  BUFFER: "Buffer",
-}
-
 const ENTRY_TYPE_LABELS: Record<string, string> = {
   INCOME: "Inntekt",
   EXPENSE: "Kostnad",
@@ -535,7 +519,7 @@ function buildEntryDiffs(
       label: "Kategori",
       existingValue: existing.category,
       newValue: imported.category,
-      format: (v) => CATEGORY_LABELS[String(v)] ?? String(v),
+      format: (v) => String(v),
     },
     {
       key: "monthlyAmount",
@@ -1266,10 +1250,7 @@ export function BudgetLlmImportPageClient({
                         key={`entry-${index}`}
                         title={entry.name}
                         meta={[
-                          entry.category
-                            ? (CATEGORY_LABELS[entry.category] ??
-                              entry.category)
-                            : null,
+                          entry.category ?? null,
                           ENTRY_TYPE_LABELS[entry.type] ?? entry.type,
                         ]
                           .filter(Boolean)

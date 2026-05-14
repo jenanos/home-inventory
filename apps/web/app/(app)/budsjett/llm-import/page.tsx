@@ -45,7 +45,7 @@ export default async function BudgetLlmImportPage() {
         entries:
           budget?.entries.map((entry) => ({
             name: entry.name,
-            category: entry.category ?? undefined,
+            category: entry.category?.name ?? undefined,
             type: entry.type,
             monthlyAmount: Number(entry.monthlyAmount),
           })) ?? [],
