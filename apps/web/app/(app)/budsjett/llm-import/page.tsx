@@ -22,8 +22,10 @@ export default async function BudgetLlmImportPage() {
             bankName: loan.bankName,
             loanName: loan.loanName,
             loanType: loan.loanType,
-            monthlyInterest: Number(loan.monthlyInterest),
-            monthlyPrincipal: Number(loan.monthlyPrincipal),
+            repaymentType: loan.repaymentType,
+            principalAmount: Number(loan.principalAmount),
+            annualInterestRate: Number(loan.annualInterestRate),
+            termMonths: loan.termMonths,
             monthlyFees: Number(loan.monthlyFees),
           })) ?? [],
         trips:

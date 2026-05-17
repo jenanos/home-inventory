@@ -1,3 +1,5 @@
+import { calculateLoanMonthlyAmounts } from "./budget-loan"
+
 type ShoppingItemStatus = "PENDING" | "PURCHASED" | "SKIPPED" | string
 type ShoppingItemPhase =
   | "BEFORE_MOVE"
@@ -7,6 +9,7 @@ type ShoppingItemPhase =
   | string
 
 type BudgetEntryType = "EXPENSE" | "DEDUCTION" | string
+type BudgetLoanRepaymentType = "ANNUITY" | "SERIAL" | string
 type MaintenanceTaskStatus =
   | "NOT_STARTED"
   | "IN_PROGRESS"
@@ -26,8 +29,10 @@ export type ShoppingStatsItemBase = {
 export type BudgetStatsInput = {
   members: Array<{ grossMonthlyIncome?: unknown; taxPercent?: unknown }>
   loans: Array<{
-    monthlyInterest?: unknown
-    monthlyPrincipal?: unknown
+    principalAmount?: unknown
+    annualInterestRate?: unknown
+    termMonths?: unknown
+    repaymentType?: BudgetLoanRepaymentType
     monthlyFees?: unknown
   }>
   entries: Array<{ type: BudgetEntryType; monthlyAmount?: unknown }>
@@ -102,14 +107,15 @@ export function calculateBudgetStats(budget?: BudgetStatsInput | null) {
         toNumber(member.grossMonthlyIncome) * (1 - toNumber(member.taxPercent) / 100),
       0
     ),
-    totalLoanPayments: budget.loans.reduce(
-      (sum, loan) =>
-        sum +
-        toNumber(loan.monthlyInterest) +
-        toNumber(loan.monthlyPrincipal) +
-        toNumber(loan.monthlyFees),
-      0
-    ),
+    totalLoanPayments: budget.loans.reduce((sum, loan) => {
+      const monthly = calculateLoanMonthlyAmounts({
+        principalAmount: toNumber(loan.principalAmount),
+        annualInterestRate: toNumber(loan.annualInterestRate),
+        termMonths: toNumber(loan.termMonths),
+        repaymentType: loan.repaymentType === "SERIAL" ? "SERIAL" : "ANNUITY",
+      })
+      return sum + monthly.monthlyPayment + toNumber(loan.monthlyFees)
+    }, 0),
     totalExpenses: budget.entries
       .filter((entry) => entry.type === "EXPENSE")
       .reduce((sum, entry) => sum + toNumber(entry.monthlyAmount), 0),
