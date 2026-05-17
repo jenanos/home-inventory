@@ -2,13 +2,191 @@
 
 import {
   db,
-  type BudgetCategory,
+  Prisma,
   type BudgetEntryType,
   type BudgetLoanType,
   type TripTransportType,
 } from "@workspace/db"
 import { requireHousehold } from "@/lib/session"
 import { revalidatePath } from "next/cache"
+
+const DEFAULT_BUDGET_CATEGORY_NAMES = [
+  "Boligkostnader",
+  "Faste kostnader",
+] as const
+
+const VALID_ENTRY_TYPES = new Set<BudgetEntryType>([
+  "INCOME",
+  "EXPENSE",
+  "DEDUCTION",
+])
+const VALID_LOAN_TYPES = new Set<BudgetLoanType>(["MORTGAGE", "OTHER"])
+const VALID_TRIP_TYPES = new Set<TripTransportType>(["AIR_OR_PUBLIC", "CAR"])
+
+type TransactionOrDbClient = Prisma.TransactionClient | typeof db
+type BudgetCategoryCache = {
+  items: Array<{ id: string; name: string }>
+  nextSortOrder: number
+}
+const budgetCategoryNameCollator = new Intl.Collator("nb-NO", {
+  sensitivity: "base",
+})
+
+function normalizeBudgetCategoryName(name: string) {
+  return name.trim().replace(/\s+/g, " ")
+}
+
+function findCachedBudgetCategoryId(
+  cache: BudgetCategoryCache,
+  name: string
+) {
+  return cache.items.find(
+    (category) =>
+      budgetCategoryNameCollator.compare(category.name, name) === 0
+  )?.id
+}
+
+function normalizeEntryType(type: string) {
+  const value = type.toUpperCase() as BudgetEntryType
+  return VALID_ENTRY_TYPES.has(value) ? value : null
+}
+
+function normalizeLoanType(type?: string) {
+  const value = (type ?? "MORTGAGE").toUpperCase() as BudgetLoanType
+  return VALID_LOAN_TYPES.has(value) ? value : "MORTGAGE"
+}
+
+function normalizeTripType(type: string) {
+  const value = type.toUpperCase() as TripTransportType
+  return VALID_TRIP_TYPES.has(value) ? value : null
+}
+
+async function getBudgetForCurrentHousehold() {
+  const { membership } = await requireHousehold()
+
+  const budget = await db.budget.findUnique({
+    where: { householdId: membership.householdId },
+  })
+
+  if (!budget) throw new Error("Budget not found")
+
+  return budget
+}
+
+async function getBudgetCategoryOrThrow(categoryId: string, budgetId: string) {
+  const category = await db.budgetEntryCategory.findUnique({
+    where: { id: categoryId },
+  })
+
+  if (!category || category.budgetId !== budgetId) {
+    throw new Error("Category not found")
+  }
+
+  return category
+}
+
+async function findBudgetCategoryByName(
+  tx: TransactionOrDbClient,
+  budgetId: string,
+  name: string
+) {
+  return tx.budgetEntryCategory.findFirst({
+    where: {
+      budgetId,
+      name: {
+        equals: name,
+        mode: "insensitive",
+      },
+    },
+  })
+}
+
+async function ensureDefaultBudgetCategories(
+  tx: TransactionOrDbClient,
+  budgetId: string
+) {
+  const [categoryCount, entryCount] = await Promise.all([
+    tx.budgetEntryCategory.count({ where: { budgetId } }),
+    tx.budgetEntry.count({ where: { budgetId } }),
+  ])
+
+  if (categoryCount > 0 || entryCount > 0) return
+
+  await tx.budgetEntryCategory.createMany({
+    data: DEFAULT_BUDGET_CATEGORY_NAMES.map((name, index) => ({
+      budgetId,
+      name,
+      sortOrder: index,
+    })),
+  })
+}
+
+async function createBudgetCategoryCache(
+  tx: TransactionOrDbClient,
+  budgetId: string
+): Promise<BudgetCategoryCache> {
+  const categories = await tx.budgetEntryCategory.findMany({
+    where: { budgetId },
+    orderBy: { sortOrder: "asc" },
+    select: {
+      id: true,
+      name: true,
+    },
+  })
+
+  return {
+    items: categories,
+    nextSortOrder: categories.length,
+  }
+}
+
+async function resolveBudgetCategoryId(
+  tx: TransactionOrDbClient,
+  budgetId: string,
+  categoryName?: string | null,
+  cache?: BudgetCategoryCache
+) {
+  if (!categoryName) return null
+
+  const normalizedName = normalizeBudgetCategoryName(categoryName)
+  if (!normalizedName) return null
+
+  if (cache) {
+    const cachedCategoryId = findCachedBudgetCategoryId(cache, normalizedName)
+    if (cachedCategoryId) return cachedCategoryId
+  }
+
+  const existing = await findBudgetCategoryByName(tx, budgetId, normalizedName)
+  if (existing) {
+    cache?.items.push({ id: existing.id, name: existing.name })
+    return existing.id
+  }
+
+  const sortOrder =
+    cache?.nextSortOrder ??
+    (await tx.budgetEntryCategory.count({
+      where: { budgetId },
+    }))
+
+  const created = await tx.budgetEntryCategory.create({
+    data: {
+      budgetId,
+      name: normalizedName,
+      sortOrder,
+    },
+  })
+
+  if (cache) {
+    cache.items.push({ id: created.id, name: created.name })
+    cache.nextSortOrder += 1
+  }
+
+  return created.id
+}
+
+function revalidateBudgetPage() {
+  revalidatePath("/budsjett")
+}
 
 // ─── Budget ─────────────────────────────────────────────────────
 
@@ -21,23 +199,20 @@ export async function ensureBudget() {
     create: { householdId: membership.householdId },
   })
 
+  await ensureDefaultBudgetCategories(db, budget.id)
+
   return budget
 }
 
 export async function updateTaxDeductionPercent(percent: number) {
-  const { membership } = await requireHousehold()
-
-  const budget = await db.budget.findUnique({
-    where: { householdId: membership.householdId },
-  })
-  if (!budget) throw new Error("Budget not found")
+  const budget = await getBudgetForCurrentHousehold()
 
   await db.budget.update({
     where: { id: budget.id },
     data: { taxDeductionPercent: percent },
   })
 
-  revalidatePath("/budsjett")
+  revalidateBudgetPage()
 }
 
 // ─── Budget Members ─────────────────────────────────────────────
@@ -50,19 +225,15 @@ interface UpsertBudgetMemberInput {
 }
 
 export async function upsertBudgetMember(input: UpsertBudgetMemberInput) {
-  const { membership } = await requireHousehold()
-
-  const budget = await db.budget.findUnique({
-    where: { householdId: membership.householdId },
-  })
-  if (!budget) throw new Error("Budget not found")
+  const budget = await getBudgetForCurrentHousehold()
 
   if (input.id) {
     const member = await db.budgetMember.findUnique({
       where: { id: input.id },
     })
-    if (!member || member.budgetId !== budget.id)
+    if (!member || member.budgetId !== budget.id) {
       throw new Error("Member not found")
+    }
 
     await db.budgetMember.update({
       where: { id: input.id },
@@ -73,40 +244,37 @@ export async function upsertBudgetMember(input: UpsertBudgetMemberInput) {
       },
     })
   } else {
-    const count = await db.budgetMember.count({
+    const sortOrder = await db.budgetMember.count({
       where: { budgetId: budget.id },
     })
+
     await db.budgetMember.create({
       data: {
         budgetId: budget.id,
         name: input.name,
         grossMonthlyIncome: input.grossMonthlyIncome,
         taxPercent: input.taxPercent,
-        sortOrder: count,
+        sortOrder,
       },
     })
   }
 
-  revalidatePath("/budsjett")
+  revalidateBudgetPage()
 }
 
 export async function deleteBudgetMember(memberId: string) {
-  const { membership } = await requireHousehold()
-
-  const budget = await db.budget.findUnique({
-    where: { householdId: membership.householdId },
-  })
-  if (!budget) throw new Error("Budget not found")
+  const budget = await getBudgetForCurrentHousehold()
 
   const member = await db.budgetMember.findUnique({
     where: { id: memberId },
   })
-  if (!member || member.budgetId !== budget.id)
+  if (!member || member.budgetId !== budget.id) {
     throw new Error("Member not found")
+  }
 
   await db.budgetMember.delete({ where: { id: memberId } })
 
-  revalidatePath("/budsjett")
+  revalidateBudgetPage()
 }
 
 // ─── Budget Loans ───────────────────────────────────────────────
@@ -122,12 +290,7 @@ interface UpsertBudgetLoanInput {
 }
 
 export async function upsertBudgetLoan(input: UpsertBudgetLoanInput) {
-  const { membership } = await requireHousehold()
-
-  const budget = await db.budget.findUnique({
-    where: { householdId: membership.householdId },
-  })
-  if (!budget) throw new Error("Budget not found")
+  const budget = await getBudgetForCurrentHousehold()
 
   if (input.id) {
     const loan = await db.budgetLoan.findUnique({ where: { id: input.id } })
@@ -145,9 +308,10 @@ export async function upsertBudgetLoan(input: UpsertBudgetLoanInput) {
       },
     })
   } else {
-    const count = await db.budgetLoan.count({
+    const sortOrder = await db.budgetLoan.count({
       where: { budgetId: budget.id },
     })
+
     await db.budgetLoan.create({
       data: {
         budgetId: budget.id,
@@ -157,28 +321,23 @@ export async function upsertBudgetLoan(input: UpsertBudgetLoanInput) {
         monthlyInterest: input.monthlyInterest,
         monthlyPrincipal: input.monthlyPrincipal,
         monthlyFees: input.monthlyFees,
-        sortOrder: count,
+        sortOrder,
       },
     })
   }
 
-  revalidatePath("/budsjett")
+  revalidateBudgetPage()
 }
 
 export async function deleteBudgetLoan(loanId: string) {
-  const { membership } = await requireHousehold()
-
-  const budget = await db.budget.findUnique({
-    where: { householdId: membership.householdId },
-  })
-  if (!budget) throw new Error("Budget not found")
+  const budget = await getBudgetForCurrentHousehold()
 
   const loan = await db.budgetLoan.findUnique({ where: { id: loanId } })
   if (!loan || loan.budgetId !== budget.id) throw new Error("Loan not found")
 
   await db.budgetLoan.delete({ where: { id: loanId } })
 
-  revalidatePath("/budsjett")
+  revalidateBudgetPage()
 }
 
 // ─── Budget Trips ───────────────────────────────────────────────
@@ -195,12 +354,7 @@ interface UpsertBudgetTripInput {
 }
 
 export async function upsertBudgetTrip(input: UpsertBudgetTripInput) {
-  const { membership } = await requireHousehold()
-
-  const budget = await db.budget.findUnique({
-    where: { householdId: membership.householdId },
-  })
-  if (!budget) throw new Error("Budget not found")
+  const budget = await getBudgetForCurrentHousehold()
 
   const baseData = {
     name: input.name,
@@ -227,35 +381,94 @@ export async function upsertBudgetTrip(input: UpsertBudgetTripInput) {
       data: baseData,
     })
   } else {
-    const count = await db.budgetTrip.count({
+    const sortOrder = await db.budgetTrip.count({
       where: { budgetId: budget.id },
     })
+
     await db.budgetTrip.create({
       data: {
         budgetId: budget.id,
         ...baseData,
-        sortOrder: count,
+        sortOrder,
       },
     })
   }
 
-  revalidatePath("/budsjett")
+  revalidateBudgetPage()
 }
 
 export async function deleteBudgetTrip(tripId: string) {
-  const { membership } = await requireHousehold()
-
-  const budget = await db.budget.findUnique({
-    where: { householdId: membership.householdId },
-  })
-  if (!budget) throw new Error("Budget not found")
+  const budget = await getBudgetForCurrentHousehold()
 
   const trip = await db.budgetTrip.findUnique({ where: { id: tripId } })
   if (!trip || trip.budgetId !== budget.id) throw new Error("Trip not found")
 
   await db.budgetTrip.delete({ where: { id: tripId } })
 
-  revalidatePath("/budsjett")
+  revalidateBudgetPage()
+}
+
+// ─── Budget Categories ───────────────────────────────────────────
+
+interface UpsertBudgetCategoryInput {
+  id?: string
+  name: string
+}
+
+export async function upsertBudgetCategory(input: UpsertBudgetCategoryInput) {
+  const budget = await getBudgetForCurrentHousehold()
+  const name = normalizeBudgetCategoryName(input.name)
+
+  if (!name) throw new Error("Category name is required")
+
+  const duplicate = await findBudgetCategoryByName(db, budget.id, name)
+  if (duplicate && duplicate.id !== input.id) {
+    throw new Error("Category already exists")
+  }
+
+  if (input.id) {
+    const category = await getBudgetCategoryOrThrow(input.id, budget.id)
+
+    await db.budgetEntryCategory.update({
+      where: { id: category.id },
+      data: { name },
+    })
+  } else {
+    const sortOrder = await db.budgetEntryCategory.count({
+      where: { budgetId: budget.id },
+    })
+
+    await db.budgetEntryCategory.create({
+      data: {
+        budgetId: budget.id,
+        name,
+        sortOrder,
+      },
+    })
+  }
+
+  revalidateBudgetPage()
+}
+
+export async function deleteBudgetCategory(categoryId: string) {
+  const budget = await getBudgetForCurrentHousehold()
+  const category = await getBudgetCategoryOrThrow(categoryId, budget.id)
+
+  await db.$transaction(async (tx) => {
+    await tx.budgetEntry.updateMany({
+      where: {
+        budgetId: budget.id,
+        categoryId: category.id,
+      },
+      data: { categoryId: null },
+    })
+
+    await tx.budgetEntryCategory.delete({
+      where: { id: category.id },
+    })
+  })
+
+  revalidateBudgetPage()
 }
 
 // ─── Budget Entries ─────────────────────────────────────────────
@@ -263,66 +476,62 @@ export async function deleteBudgetTrip(tripId: string) {
 interface UpsertBudgetEntryInput {
   id?: string
   name: string
-  category?: BudgetCategory | null
+  categoryId?: string | null
   type: BudgetEntryType
   monthlyAmount: number
 }
 
 export async function upsertBudgetEntry(input: UpsertBudgetEntryInput) {
-  const { membership } = await requireHousehold()
+  const budget = await getBudgetForCurrentHousehold()
 
-  const budget = await db.budget.findUnique({
-    where: { householdId: membership.householdId },
-  })
-  if (!budget) throw new Error("Budget not found")
+  if (input.categoryId) {
+    await getBudgetCategoryOrThrow(input.categoryId, budget.id)
+  }
 
   if (input.id) {
     const entry = await db.budgetEntry.findUnique({ where: { id: input.id } })
-    if (!entry || entry.budgetId !== budget.id)
+    if (!entry || entry.budgetId !== budget.id) {
       throw new Error("Entry not found")
+    }
 
     await db.budgetEntry.update({
       where: { id: input.id },
       data: {
         name: input.name,
-        category: input.category ?? null,
+        categoryId: input.categoryId ?? null,
         type: input.type,
         monthlyAmount: input.monthlyAmount,
       },
     })
   } else {
-    const count = await db.budgetEntry.count({
+    const sortOrder = await db.budgetEntry.count({
       where: { budgetId: budget.id },
     })
+
     await db.budgetEntry.create({
       data: {
         budgetId: budget.id,
         name: input.name,
-        category: input.category ?? null,
+        categoryId: input.categoryId ?? null,
         type: input.type,
         monthlyAmount: input.monthlyAmount,
-        sortOrder: count,
+        sortOrder,
       },
     })
   }
 
-  revalidatePath("/budsjett")
+  revalidateBudgetPage()
 }
 
 export async function deleteBudgetEntry(entryId: string) {
-  const { membership } = await requireHousehold()
-
-  const budget = await db.budget.findUnique({
-    where: { householdId: membership.householdId },
-  })
-  if (!budget) throw new Error("Budget not found")
+  const budget = await getBudgetForCurrentHousehold()
 
   const entry = await db.budgetEntry.findUnique({ where: { id: entryId } })
   if (!entry || entry.budgetId !== budget.id) throw new Error("Entry not found")
 
   await db.budgetEntry.delete({ where: { id: entryId } })
 
-  revalidatePath("/budsjett")
+  revalidateBudgetPage()
 }
 
 // ─── Bulk Import ────────────────────────────────────────────────
@@ -367,214 +576,64 @@ interface BulkBudgetImportInput {
 }
 
 export async function bulkImportBudget(input: BulkBudgetImportInput) {
-  const { membership } = await requireHousehold()
-
-  const budget = await db.budget.findUnique({
-    where: { householdId: membership.householdId },
-  })
-  if (!budget) throw new Error("Budget not found")
-
-  const validEntryTypes = new Set(["INCOME", "EXPENSE", "DEDUCTION"])
-  const validLoanTypes = new Set(["MORTGAGE", "OTHER"])
-  const validTripTypes = new Set(["AIR_OR_PUBLIC", "CAR"])
-  const validCategories = new Set([
-    "ELECTRICITY",
-    "MUNICIPAL_FEES",
-    "INSURANCE",
-    "HOME_MAINTENANCE",
-    "TRANSPORT",
-    "SUBSCRIPTIONS",
-    "FOOD",
-    "CHILDREN",
-    "PERSONAL",
-    "SAVINGS",
-    "BUFFER",
-  ])
-
-  let count = 0
-
-  if (input.members && input.members.length > 0) {
-    const memberCount = await db.budgetMember.count({
-      where: { budgetId: budget.id },
-    })
-    await db.$transaction(
-      input.members.map((m, i) =>
-        db.budgetMember.create({
-          data: {
-            budgetId: budget.id,
-            name: m.name,
-            grossMonthlyIncome: m.grossMonthlyIncome,
-            taxPercent: m.taxPercent,
-            sortOrder: memberCount + i,
-          },
-        })
-      )
-    )
-    count += input.members.length
-  }
-
-  if (input.loans && input.loans.length > 0) {
-    const loanCount = await db.budgetLoan.count({
-      where: { budgetId: budget.id },
-    })
-    await db.$transaction(
-      input.loans.map((l, i) => {
-        const loanType = (l.loanType ?? "MORTGAGE").toUpperCase()
-        return db.budgetLoan.create({
-          data: {
-            budgetId: budget.id,
-            bankName: l.bankName,
-            loanName: l.loanName,
-            loanType: validLoanTypes.has(loanType)
-              ? (loanType as BudgetLoanType)
-              : "MORTGAGE",
-            monthlyInterest: l.monthlyInterest,
-            monthlyPrincipal: l.monthlyPrincipal,
-            monthlyFees: l.monthlyFees ?? 0,
-            sortOrder: loanCount + i,
-          },
-        })
-      })
-    )
-    count += input.loans.length
-  }
-
-  if (input.trips && input.trips.length > 0) {
-    const tripCount = await db.budgetTrip.count({
-      where: { budgetId: budget.id },
-    })
-    const validTrips = input.trips.filter((t) =>
-      validTripTypes.has(t.transportType.toUpperCase())
-    )
-    await db.$transaction(
-      validTrips.map((t, i) => {
-        const tripType = t.transportType.toUpperCase() as TripTransportType
-        return db.budgetTrip.create({
-          data: {
-            budgetId: budget.id,
-            name: t.name,
-            transportType: tripType,
-            annualTrips: Math.max(1, Math.round(t.annualTrips || 1)),
-            ticketPerTrip:
-              tripType === "AIR_OR_PUBLIC" ? (t.ticketPerTrip ?? 0) : null,
-            tollPerTrip: tripType === "CAR" ? (t.tollPerTrip ?? 0) : null,
-            ferryPerTrip: tripType === "CAR" ? (t.ferryPerTrip ?? 0) : null,
-            fuelPerTrip: tripType === "CAR" ? (t.fuelPerTrip ?? 0) : null,
-            sortOrder: tripCount + i,
-          },
-        })
-      })
-    )
-    count += validTrips.length
-  }
-
-  if (input.entries && input.entries.length > 0) {
-    const entryCount = await db.budgetEntry.count({
-      where: { budgetId: budget.id },
-    })
-    const validEntries = input.entries.filter((e) =>
-      validEntryTypes.has(e.type.toUpperCase())
-    )
-    await db.$transaction(
-      validEntries.map((e, i) =>
-        db.budgetEntry.create({
-          data: {
-            budgetId: budget.id,
-            name: e.name,
-            category:
-              e.category && validCategories.has(e.category.toUpperCase())
-                ? (e.category.toUpperCase() as BudgetCategory)
-                : null,
-            type: e.type.toUpperCase() as BudgetEntryType,
-            monthlyAmount: e.monthlyAmount,
-            sortOrder: entryCount + i,
-          },
-        })
-      )
-    )
-    count += validEntries.length
-  }
-
-  revalidatePath("/budsjett")
-  return { count }
-}
-
-export async function replaceBudget(input: BulkBudgetImportInput) {
-  const { membership } = await requireHousehold()
-
-  const budget = await db.budget.findUnique({
-    where: { householdId: membership.householdId },
-  })
-  if (!budget) throw new Error("Budget not found")
-
-  const validEntryTypes = new Set(["INCOME", "EXPENSE", "DEDUCTION"])
-  const validLoanTypes = new Set(["MORTGAGE", "OTHER"])
-  const validTripTypes = new Set(["AIR_OR_PUBLIC", "CAR"])
-  const validCategories = new Set([
-    "ELECTRICITY",
-    "MUNICIPAL_FEES",
-    "INSURANCE",
-    "HOME_MAINTENANCE",
-    "TRANSPORT",
-    "SUBSCRIPTIONS",
-    "FOOD",
-    "CHILDREN",
-    "PERSONAL",
-    "SAVINGS",
-    "BUFFER",
-  ])
-
+  const budget = await getBudgetForCurrentHousehold()
   let count = 0
 
   await db.$transaction(async (tx) => {
-    await tx.budgetMember.deleteMany({ where: { budgetId: budget.id } })
-    await tx.budgetLoan.deleteMany({ where: { budgetId: budget.id } })
-    await tx.budgetTrip.deleteMany({ where: { budgetId: budget.id } })
-    await tx.budgetEntry.deleteMany({ where: { budgetId: budget.id } })
-
     if (input.members && input.members.length > 0) {
-      for (const [index, member] of input.members.entries()) {
+      let sortOrder = await tx.budgetMember.count({
+        where: { budgetId: budget.id },
+      })
+
+      for (const member of input.members) {
         await tx.budgetMember.create({
           data: {
             budgetId: budget.id,
             name: member.name,
             grossMonthlyIncome: member.grossMonthlyIncome,
             taxPercent: member.taxPercent,
-            sortOrder: index,
+            sortOrder,
           },
         })
+        sortOrder += 1
       }
+
       count += input.members.length
     }
 
     if (input.loans && input.loans.length > 0) {
-      for (const [index, loan] of input.loans.entries()) {
-        const loanType = (loan.loanType ?? "MORTGAGE").toUpperCase()
+      let sortOrder = await tx.budgetLoan.count({
+        where: { budgetId: budget.id },
+      })
+
+      for (const loan of input.loans) {
         await tx.budgetLoan.create({
           data: {
             budgetId: budget.id,
             bankName: loan.bankName,
             loanName: loan.loanName,
-            loanType: validLoanTypes.has(loanType)
-              ? (loanType as BudgetLoanType)
-              : "MORTGAGE",
+            loanType: normalizeLoanType(loan.loanType),
             monthlyInterest: loan.monthlyInterest,
             monthlyPrincipal: loan.monthlyPrincipal,
             monthlyFees: loan.monthlyFees ?? 0,
-            sortOrder: index,
+            sortOrder,
           },
         })
+        sortOrder += 1
       }
+
       count += input.loans.length
     }
 
     if (input.trips && input.trips.length > 0) {
-      const validTrips = input.trips.filter((trip) =>
-        validTripTypes.has(trip.transportType.toUpperCase())
-      )
+      let sortOrder = await tx.budgetTrip.count({
+        where: { budgetId: budget.id },
+      })
 
-      for (const [index, trip] of validTrips.entries()) {
-        const tripType = trip.transportType.toUpperCase() as TripTransportType
+      for (const trip of input.trips) {
+        const tripType = normalizeTripType(trip.transportType)
+        if (!tripType) continue
+
         await tx.budgetTrip.create({
           data: {
             budgetId: budget.id,
@@ -586,39 +645,153 @@ export async function replaceBudget(input: BulkBudgetImportInput) {
             tollPerTrip: tripType === "CAR" ? (trip.tollPerTrip ?? 0) : null,
             ferryPerTrip: tripType === "CAR" ? (trip.ferryPerTrip ?? 0) : null,
             fuelPerTrip: tripType === "CAR" ? (trip.fuelPerTrip ?? 0) : null,
-            sortOrder: index,
+            sortOrder,
           },
         })
+        sortOrder += 1
+        count += 1
       }
-      count += validTrips.length
     }
 
     if (input.entries && input.entries.length > 0) {
-      const validEntries = input.entries.filter((entry) =>
-        validEntryTypes.has(entry.type.toUpperCase())
-      )
+      const categoryCache = await createBudgetCategoryCache(tx, budget.id)
+      let sortOrder = await tx.budgetEntry.count({
+        where: { budgetId: budget.id },
+      })
 
-      for (const [index, entry] of validEntries.entries()) {
+      for (const entry of input.entries) {
+        const entryType = normalizeEntryType(entry.type)
+        if (!entryType) continue
+
         await tx.budgetEntry.create({
           data: {
             budgetId: budget.id,
             name: entry.name,
-            category:
-              entry.category &&
-              validCategories.has(entry.category.toUpperCase())
-                ? (entry.category.toUpperCase() as BudgetCategory)
-                : null,
-            type: entry.type.toUpperCase() as BudgetEntryType,
+            categoryId: await resolveBudgetCategoryId(
+              tx,
+              budget.id,
+              entry.category,
+              categoryCache
+            ),
+            type: entryType,
             monthlyAmount: entry.monthlyAmount,
-            sortOrder: index,
+            sortOrder,
           },
         })
+        sortOrder += 1
+        count += 1
       }
-      count += validEntries.length
     }
   })
 
-  revalidatePath("/budsjett")
+  revalidateBudgetPage()
+  return { count }
+}
+
+export async function replaceBudget(input: BulkBudgetImportInput) {
+  const budget = await getBudgetForCurrentHousehold()
+  let count = 0
+
+  await db.$transaction(async (tx) => {
+    await tx.budgetMember.deleteMany({ where: { budgetId: budget.id } })
+    await tx.budgetLoan.deleteMany({ where: { budgetId: budget.id } })
+    await tx.budgetTrip.deleteMany({ where: { budgetId: budget.id } })
+    await tx.budgetEntry.deleteMany({ where: { budgetId: budget.id } })
+    await tx.budgetEntryCategory.deleteMany({ where: { budgetId: budget.id } })
+
+    if (input.members && input.members.length > 0) {
+      for (const [sortOrder, member] of input.members.entries()) {
+        await tx.budgetMember.create({
+          data: {
+            budgetId: budget.id,
+            name: member.name,
+            grossMonthlyIncome: member.grossMonthlyIncome,
+            taxPercent: member.taxPercent,
+            sortOrder,
+          },
+        })
+      }
+
+      count += input.members.length
+    }
+
+    if (input.loans && input.loans.length > 0) {
+      for (const [sortOrder, loan] of input.loans.entries()) {
+        await tx.budgetLoan.create({
+          data: {
+            budgetId: budget.id,
+            bankName: loan.bankName,
+            loanName: loan.loanName,
+            loanType: normalizeLoanType(loan.loanType),
+            monthlyInterest: loan.monthlyInterest,
+            monthlyPrincipal: loan.monthlyPrincipal,
+            monthlyFees: loan.monthlyFees ?? 0,
+            sortOrder,
+          },
+        })
+      }
+
+      count += input.loans.length
+    }
+
+    if (input.trips && input.trips.length > 0) {
+      let sortOrder = 0
+
+      for (const trip of input.trips) {
+        const tripType = normalizeTripType(trip.transportType)
+        if (!tripType) continue
+
+        await tx.budgetTrip.create({
+          data: {
+            budgetId: budget.id,
+            name: trip.name,
+            transportType: tripType,
+            annualTrips: Math.max(1, Math.round(trip.annualTrips || 1)),
+            ticketPerTrip:
+              tripType === "AIR_OR_PUBLIC" ? (trip.ticketPerTrip ?? 0) : null,
+            tollPerTrip: tripType === "CAR" ? (trip.tollPerTrip ?? 0) : null,
+            ferryPerTrip: tripType === "CAR" ? (trip.ferryPerTrip ?? 0) : null,
+            fuelPerTrip: tripType === "CAR" ? (trip.fuelPerTrip ?? 0) : null,
+            sortOrder,
+          },
+        })
+        sortOrder += 1
+        count += 1
+      }
+    }
+
+    if (input.entries && input.entries.length > 0) {
+      const categoryCache = await createBudgetCategoryCache(tx, budget.id)
+      let sortOrder = 0
+
+      for (const entry of input.entries) {
+        const entryType = normalizeEntryType(entry.type)
+        if (!entryType) continue
+
+        await tx.budgetEntry.create({
+          data: {
+            budgetId: budget.id,
+            name: entry.name,
+            categoryId: await resolveBudgetCategoryId(
+              tx,
+              budget.id,
+              entry.category,
+              categoryCache
+            ),
+            type: entryType,
+            monthlyAmount: entry.monthlyAmount,
+            sortOrder,
+          },
+        })
+        sortOrder += 1
+        count += 1
+      }
+    }
+
+    await ensureDefaultBudgetCategories(tx, budget.id)
+  })
+
+  revalidateBudgetPage()
   return { count }
 }
 
@@ -676,44 +849,48 @@ export async function findExistingBudgetItems(): Promise<ExistingBudgetItems> {
       members: true,
       loans: true,
       trips: true,
-      entries: true,
+      entries: {
+        include: {
+          category: true,
+        },
+      },
     },
   })
 
   if (!budget) return { members: [], loans: [], trips: [], entries: [] }
 
   return {
-    members: budget.members.map((m) => ({
-      id: m.id,
-      name: m.name,
-      grossMonthlyIncome: Number(m.grossMonthlyIncome),
-      taxPercent: Number(m.taxPercent),
+    members: budget.members.map((member) => ({
+      id: member.id,
+      name: member.name,
+      grossMonthlyIncome: Number(member.grossMonthlyIncome),
+      taxPercent: Number(member.taxPercent),
     })),
-    loans: budget.loans.map((l) => ({
-      id: l.id,
-      bankName: l.bankName,
-      loanName: l.loanName,
-      loanType: l.loanType,
-      monthlyInterest: Number(l.monthlyInterest),
-      monthlyPrincipal: Number(l.monthlyPrincipal),
-      monthlyFees: Number(l.monthlyFees),
+    loans: budget.loans.map((loan) => ({
+      id: loan.id,
+      bankName: loan.bankName,
+      loanName: loan.loanName,
+      loanType: loan.loanType,
+      monthlyInterest: Number(loan.monthlyInterest),
+      monthlyPrincipal: Number(loan.monthlyPrincipal),
+      monthlyFees: Number(loan.monthlyFees),
     })),
-    trips: budget.trips.map((t) => ({
-      id: t.id,
-      name: t.name,
-      transportType: t.transportType,
-      annualTrips: t.annualTrips,
-      ticketPerTrip: t.ticketPerTrip ? Number(t.ticketPerTrip) : null,
-      tollPerTrip: t.tollPerTrip ? Number(t.tollPerTrip) : null,
-      ferryPerTrip: t.ferryPerTrip ? Number(t.ferryPerTrip) : null,
-      fuelPerTrip: t.fuelPerTrip ? Number(t.fuelPerTrip) : null,
+    trips: budget.trips.map((trip) => ({
+      id: trip.id,
+      name: trip.name,
+      transportType: trip.transportType,
+      annualTrips: trip.annualTrips,
+      ticketPerTrip: trip.ticketPerTrip ? Number(trip.ticketPerTrip) : null,
+      tollPerTrip: trip.tollPerTrip ? Number(trip.tollPerTrip) : null,
+      ferryPerTrip: trip.ferryPerTrip ? Number(trip.ferryPerTrip) : null,
+      fuelPerTrip: trip.fuelPerTrip ? Number(trip.fuelPerTrip) : null,
     })),
-    entries: budget.entries.map((e) => ({
-      id: e.id,
-      name: e.name,
-      category: e.category,
-      type: e.type,
-      monthlyAmount: Number(e.monthlyAmount),
+    entries: budget.entries.map((entry) => ({
+      id: entry.id,
+      name: entry.name,
+      category: entry.category?.name ?? null,
+      type: entry.type,
+      monthlyAmount: Number(entry.monthlyAmount),
     })),
   }
 }
@@ -773,102 +950,77 @@ interface BulkBudgetImportWithDuplicatesInput {
 export async function bulkImportBudgetWithDuplicates(
   input: BulkBudgetImportWithDuplicatesInput
 ) {
-  const { membership } = await requireHousehold()
-
-  const budget = await db.budget.findUnique({
-    where: { householdId: membership.householdId },
-  })
-  if (!budget) throw new Error("Budget not found")
-
-  const validEntryTypes = new Set(["INCOME", "EXPENSE", "DEDUCTION"])
-  const validLoanTypes = new Set(["MORTGAGE", "OTHER"])
-  const validTripTypes = new Set(["AIR_OR_PUBLIC", "CAR"])
-  const validCategories = new Set([
-    "ELECTRICITY",
-    "MUNICIPAL_FEES",
-    "INSURANCE",
-    "HOME_MAINTENANCE",
-    "TRANSPORT",
-    "SUBSCRIPTIONS",
-    "FOOD",
-    "CHILDREN",
-    "PERSONAL",
-    "SAVINGS",
-    "BUFFER",
-  ])
-
+  const budget = await getBudgetForCurrentHousehold()
   let count = 0
 
-  // Create new members
-  if (input.newMembers && input.newMembers.length > 0) {
-    const memberCount = await db.budgetMember.count({
-      where: { budgetId: budget.id },
-    })
-    await db.$transaction(
-      input.newMembers.map((m, i) =>
-        db.budgetMember.create({
+  await db.$transaction(async (tx) => {
+    if (input.newMembers && input.newMembers.length > 0) {
+      let sortOrder = await tx.budgetMember.count({
+        where: { budgetId: budget.id },
+      })
+
+      for (const member of input.newMembers) {
+        await tx.budgetMember.create({
           data: {
             budgetId: budget.id,
-            name: m.name,
-            grossMonthlyIncome: m.grossMonthlyIncome,
-            taxPercent: m.taxPercent,
-            sortOrder: memberCount + i,
+            name: member.name,
+            grossMonthlyIncome: member.grossMonthlyIncome,
+            taxPercent: member.taxPercent,
+            sortOrder,
           },
         })
-      )
-    )
-    count += input.newMembers.length
-  }
+        sortOrder += 1
+      }
 
-  // Update existing members
-  if (input.memberUpdates && input.memberUpdates.length > 0) {
-    await db.$transaction(
-      input.memberUpdates.map((update) => {
+      count += input.newMembers.length
+    }
+
+    if (input.memberUpdates && input.memberUpdates.length > 0) {
+      for (const update of input.memberUpdates) {
         const data: {
           grossMonthlyIncome?: number
           taxPercent?: number
         } = {}
-        if (update.fields.grossMonthlyIncome !== undefined)
-          data.grossMonthlyIncome = update.fields.grossMonthlyIncome
-        if (update.fields.taxPercent !== undefined)
-          data.taxPercent = update.fields.taxPercent
-        return db.budgetMember.update({ where: { id: update.id }, data })
-      })
-    )
-    count += input.memberUpdates.length
-  }
 
-  // Create new loans
-  if (input.newLoans && input.newLoans.length > 0) {
-    const loanCount = await db.budgetLoan.count({
-      where: { budgetId: budget.id },
-    })
-    await db.$transaction(
-      input.newLoans.map((l, i) => {
-        const loanType = (l.loanType ?? "MORTGAGE").toUpperCase()
-        return db.budgetLoan.create({
+        if (update.fields.grossMonthlyIncome !== undefined) {
+          data.grossMonthlyIncome = update.fields.grossMonthlyIncome
+        }
+        if (update.fields.taxPercent !== undefined) {
+          data.taxPercent = update.fields.taxPercent
+        }
+
+        await tx.budgetMember.update({ where: { id: update.id }, data })
+      }
+
+      count += input.memberUpdates.length
+    }
+
+    if (input.newLoans && input.newLoans.length > 0) {
+      let sortOrder = await tx.budgetLoan.count({
+        where: { budgetId: budget.id },
+      })
+
+      for (const loan of input.newLoans) {
+        await tx.budgetLoan.create({
           data: {
             budgetId: budget.id,
-            bankName: l.bankName,
-            loanName: l.loanName,
-            loanType: validLoanTypes.has(loanType)
-              ? (loanType as BudgetLoanType)
-              : "MORTGAGE",
-            monthlyInterest: l.monthlyInterest,
-            monthlyPrincipal: l.monthlyPrincipal,
-            monthlyFees: l.monthlyFees ?? 0,
-            sortOrder: loanCount + i,
+            bankName: loan.bankName,
+            loanName: loan.loanName,
+            loanType: normalizeLoanType(loan.loanType),
+            monthlyInterest: loan.monthlyInterest,
+            monthlyPrincipal: loan.monthlyPrincipal,
+            monthlyFees: loan.monthlyFees ?? 0,
+            sortOrder,
           },
         })
-      })
-    )
-    count += input.newLoans.length
-  }
+        sortOrder += 1
+      }
 
-  // Update existing loans
-  if (input.loanUpdates && input.loanUpdates.length > 0) {
-    await db.$transaction(
-      input.loanUpdates.map((update) => {
+      count += input.newLoans.length
+    }
+
+    if (input.loanUpdates && input.loanUpdates.length > 0) {
+      for (const update of input.loanUpdates) {
         const data: {
           bankName?: string
           loanType?: BudgetLoanType
@@ -876,58 +1028,59 @@ export async function bulkImportBudgetWithDuplicates(
           monthlyPrincipal?: number
           monthlyFees?: number
         } = {}
-        if (update.fields.bankName !== undefined)
-          data.bankName = update.fields.bankName
-        if (update.fields.loanType !== undefined) {
-          const lt = update.fields.loanType.toUpperCase()
-          if (validLoanTypes.has(lt)) data.loanType = lt as BudgetLoanType
-        }
-        if (update.fields.monthlyInterest !== undefined)
-          data.monthlyInterest = update.fields.monthlyInterest
-        if (update.fields.monthlyPrincipal !== undefined)
-          data.monthlyPrincipal = update.fields.monthlyPrincipal
-        if (update.fields.monthlyFees !== undefined)
-          data.monthlyFees = update.fields.monthlyFees
-        return db.budgetLoan.update({ where: { id: update.id }, data })
-      })
-    )
-    count += input.loanUpdates.length
-  }
 
-  // Create new trips
-  if (input.newTrips && input.newTrips.length > 0) {
-    const tripCount = await db.budgetTrip.count({
-      where: { budgetId: budget.id },
-    })
-    const validTrips = input.newTrips.filter((t) =>
-      validTripTypes.has(t.transportType.toUpperCase())
-    )
-    await db.$transaction(
-      validTrips.map((t, i) => {
-        const tripType = t.transportType.toUpperCase() as TripTransportType
-        return db.budgetTrip.create({
+        if (update.fields.bankName !== undefined) {
+          data.bankName = update.fields.bankName
+        }
+        if (update.fields.loanType !== undefined) {
+          data.loanType = normalizeLoanType(update.fields.loanType)
+        }
+        if (update.fields.monthlyInterest !== undefined) {
+          data.monthlyInterest = update.fields.monthlyInterest
+        }
+        if (update.fields.monthlyPrincipal !== undefined) {
+          data.monthlyPrincipal = update.fields.monthlyPrincipal
+        }
+        if (update.fields.monthlyFees !== undefined) {
+          data.monthlyFees = update.fields.monthlyFees
+        }
+
+        await tx.budgetLoan.update({ where: { id: update.id }, data })
+      }
+
+      count += input.loanUpdates.length
+    }
+
+    if (input.newTrips && input.newTrips.length > 0) {
+      let sortOrder = await tx.budgetTrip.count({
+        where: { budgetId: budget.id },
+      })
+
+      for (const trip of input.newTrips) {
+        const tripType = normalizeTripType(trip.transportType)
+        if (!tripType) continue
+
+        await tx.budgetTrip.create({
           data: {
             budgetId: budget.id,
-            name: t.name,
+            name: trip.name,
             transportType: tripType,
-            annualTrips: Math.max(1, Math.round(t.annualTrips || 1)),
+            annualTrips: Math.max(1, Math.round(trip.annualTrips || 1)),
             ticketPerTrip:
-              tripType === "AIR_OR_PUBLIC" ? (t.ticketPerTrip ?? 0) : null,
-            tollPerTrip: tripType === "CAR" ? (t.tollPerTrip ?? 0) : null,
-            ferryPerTrip: tripType === "CAR" ? (t.ferryPerTrip ?? 0) : null,
-            fuelPerTrip: tripType === "CAR" ? (t.fuelPerTrip ?? 0) : null,
-            sortOrder: tripCount + i,
+              tripType === "AIR_OR_PUBLIC" ? (trip.ticketPerTrip ?? 0) : null,
+            tollPerTrip: tripType === "CAR" ? (trip.tollPerTrip ?? 0) : null,
+            ferryPerTrip: tripType === "CAR" ? (trip.ferryPerTrip ?? 0) : null,
+            fuelPerTrip: tripType === "CAR" ? (trip.fuelPerTrip ?? 0) : null,
+            sortOrder,
           },
         })
-      })
-    )
-    count += validTrips.length
-  }
+        sortOrder += 1
+        count += 1
+      }
+    }
 
-  // Update existing trips
-  if (input.tripUpdates && input.tripUpdates.length > 0) {
-    await db.$transaction(
-      input.tripUpdates.map((update) => {
+    if (input.tripUpdates && input.tripUpdates.length > 0) {
+      for (const update of input.tripUpdates) {
         const data: {
           transportType?: TripTransportType
           annualTrips?: number
@@ -936,82 +1089,94 @@ export async function bulkImportBudgetWithDuplicates(
           ferryPerTrip?: number | null
           fuelPerTrip?: number | null
         } = {}
-        if (update.fields.transportType !== undefined) {
-          const tt = update.fields.transportType.toUpperCase()
-          if (validTripTypes.has(tt))
-            data.transportType = tt as TripTransportType
-        }
-        if (update.fields.annualTrips !== undefined)
-          data.annualTrips = Math.max(1, Math.round(update.fields.annualTrips))
-        if (update.fields.ticketPerTrip !== undefined)
-          data.ticketPerTrip = update.fields.ticketPerTrip
-        if (update.fields.tollPerTrip !== undefined)
-          data.tollPerTrip = update.fields.tollPerTrip
-        if (update.fields.ferryPerTrip !== undefined)
-          data.ferryPerTrip = update.fields.ferryPerTrip
-        if (update.fields.fuelPerTrip !== undefined)
-          data.fuelPerTrip = update.fields.fuelPerTrip
-        return db.budgetTrip.update({ where: { id: update.id }, data })
-      })
-    )
-    count += input.tripUpdates.length
-  }
 
-  // Create new entries
-  if (input.newEntries && input.newEntries.length > 0) {
-    const entryCount = await db.budgetEntry.count({
-      where: { budgetId: budget.id },
-    })
-    const validEntries = input.newEntries.filter((e) =>
-      validEntryTypes.has(e.type.toUpperCase())
-    )
-    await db.$transaction(
-      validEntries.map((e, i) =>
-        db.budgetEntry.create({
+        if (update.fields.transportType !== undefined) {
+          const tripType = normalizeTripType(update.fields.transportType)
+          if (tripType) data.transportType = tripType
+        }
+        if (update.fields.annualTrips !== undefined) {
+          data.annualTrips = Math.max(1, Math.round(update.fields.annualTrips))
+        }
+        if (update.fields.ticketPerTrip !== undefined) {
+          data.ticketPerTrip = update.fields.ticketPerTrip
+        }
+        if (update.fields.tollPerTrip !== undefined) {
+          data.tollPerTrip = update.fields.tollPerTrip
+        }
+        if (update.fields.ferryPerTrip !== undefined) {
+          data.ferryPerTrip = update.fields.ferryPerTrip
+        }
+        if (update.fields.fuelPerTrip !== undefined) {
+          data.fuelPerTrip = update.fields.fuelPerTrip
+        }
+
+        await tx.budgetTrip.update({ where: { id: update.id }, data })
+      }
+
+      count += input.tripUpdates.length
+    }
+
+    const categoryCache =
+      (input.newEntries?.length ?? 0) > 0 ||
+      (input.entryUpdates?.length ?? 0) > 0
+        ? await createBudgetCategoryCache(tx, budget.id)
+        : null
+
+    if (input.newEntries && input.newEntries.length > 0) {
+      let sortOrder = await tx.budgetEntry.count({
+        where: { budgetId: budget.id },
+      })
+
+      for (const entry of input.newEntries) {
+        const entryType = normalizeEntryType(entry.type)
+        if (!entryType) continue
+
+        await tx.budgetEntry.create({
           data: {
             budgetId: budget.id,
-            name: e.name,
-            category:
-              e.category && validCategories.has(e.category.toUpperCase())
-                ? (e.category.toUpperCase() as BudgetCategory)
-                : null,
-            type: e.type.toUpperCase() as BudgetEntryType,
-            monthlyAmount: e.monthlyAmount,
-            sortOrder: entryCount + i,
+            name: entry.name,
+            categoryId: await resolveBudgetCategoryId(
+              tx,
+              budget.id,
+              entry.category,
+              categoryCache ?? undefined
+            ),
+            type: entryType,
+            monthlyAmount: entry.monthlyAmount,
+            sortOrder,
           },
         })
-      )
-    )
-    count += validEntries.length
-  }
+        sortOrder += 1
+        count += 1
+      }
+    }
 
-  // Update existing entries
-  if (input.entryUpdates && input.entryUpdates.length > 0) {
-    await db.$transaction(
-      input.entryUpdates.map((update) => {
+    if (input.entryUpdates && input.entryUpdates.length > 0) {
+      for (const update of input.entryUpdates) {
         const data: {
-          category?: BudgetCategory | null
+          categoryId?: string | null
           monthlyAmount?: number
         } = {}
-        if (update.fields.category !== undefined) {
-          if (
-            update.fields.category &&
-            validCategories.has(update.fields.category.toUpperCase())
-          ) {
-            data.category =
-              update.fields.category.toUpperCase() as BudgetCategory
-          } else {
-            data.category = null
-          }
-        }
-        if (update.fields.monthlyAmount !== undefined)
-          data.monthlyAmount = update.fields.monthlyAmount
-        return db.budgetEntry.update({ where: { id: update.id }, data })
-      })
-    )
-    count += input.entryUpdates.length
-  }
 
-  revalidatePath("/budsjett")
+        if (update.fields.category !== undefined) {
+          data.categoryId = await resolveBudgetCategoryId(
+            tx,
+            budget.id,
+            update.fields.category,
+            categoryCache ?? undefined
+          )
+        }
+        if (update.fields.monthlyAmount !== undefined) {
+          data.monthlyAmount = update.fields.monthlyAmount
+        }
+
+        await tx.budgetEntry.update({ where: { id: update.id }, data })
+      }
+
+      count += input.entryUpdates.length
+    }
+  })
+
+  revalidateBudgetPage()
   return { count }
 }

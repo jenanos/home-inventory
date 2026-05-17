@@ -269,23 +269,6 @@ enum BudgetEntryType {
   DEDUCTION
 }
 
-enum BudgetCategory {
-  // Housing costs (Boligkostnader)
-  ELECTRICITY
-  MUNICIPAL_FEES
-  INSURANCE
-  HOME_MAINTENANCE
-
-  // Fixed costs (Faste kostnader)
-  TRANSPORT
-  SUBSCRIPTIONS
-  FOOD
-  CHILDREN
-  PERSONAL
-  SAVINGS
-  BUFFER
-}
-
 enum BudgetLoanType {
   MORTGAGE
   OTHER
@@ -307,7 +290,23 @@ model Budget {
   members   BudgetMember[]
   loans     BudgetLoan[]
   trips     BudgetTrip[]
+  categories BudgetEntryCategory[]
   entries   BudgetEntry[]
+}
+
+model BudgetEntryCategory {
+  id        String   @id @default(uuid()) @db.Uuid
+  budgetId   String   @db.Uuid
+  name      String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  budget  Budget       @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  entries BudgetEntry[]
+
+  @@unique([budgetId, name])
+  @@index([budgetId, sortOrder])
 }
 
 model BudgetMember {
@@ -363,17 +362,19 @@ model BudgetTrip {
 }
 
 model BudgetEntry {
-  id            String          @id @default(uuid()) @db.Uuid
-  budgetId      String          @db.Uuid
+  id            String              @id @default(uuid()) @db.Uuid
+  budgetId      String              @db.Uuid
   name          String
-  category      BudgetCategory?
+  categoryId    String?             @db.Uuid
   type          BudgetEntryType
-  monthlyAmount Decimal         @db.Decimal(10, 2)
-  sortOrder     Int             @default(0)
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  monthlyAmount Decimal             @db.Decimal(10, 2)
+  sortOrder     Int                 @default(0)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
 
-  budget Budget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  budget   Budget              @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  category BudgetEntryCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
   @@index([budgetId, sortOrder])
+  @@index([categoryId])
 }

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition, useEffect } from "react"
+import { useState, useTransition } from "react"
 import {
   Sheet,
   SheetContent,
@@ -26,62 +26,93 @@ import {
 } from "@workspace/ui/components/select"
 import { upsertBudgetEntry } from "@/lib/actions/budget"
 import { toast } from "sonner"
-import type { BudgetCategory, BudgetEntryType } from "@workspace/db"
-import type { BudgetEntryData } from "./budget-view"
-import { CATEGORY_LABELS } from "./budget-view"
+import type { BudgetEntryType } from "@workspace/db"
+import type { BudgetCategoryData, BudgetEntryData } from "./budget-view"
 import { useMediaQuery } from "@/hooks/use-media-query"
-
-const ALL_CATEGORIES: BudgetCategory[] = [
-  "ELECTRICITY",
-  "MUNICIPAL_FEES",
-  "INSURANCE",
-  "HOME_MAINTENANCE",
-  "TRANSPORT",
-  "SUBSCRIPTIONS",
-  "FOOD",
-  "CHILDREN",
-  "PERSONAL",
-  "SAVINGS",
-  "BUFFER",
-]
 
 interface EntryDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   entry: BudgetEntryData | null
-  defaults: { category?: BudgetCategory; type?: BudgetEntryType }
+  categories: BudgetCategoryData[]
+  defaults: { categoryId?: string | null; type?: BudgetEntryType }
 }
 
 export function EntryDialog({
   open,
   onOpenChange,
   entry,
+  categories,
   defaults,
 }: EntryDialogProps) {
-  const [name, setName] = useState("")
-  const [category, setCategory] = useState<BudgetCategory | "none">("none")
-  const [type, setType] = useState<BudgetEntryType>("EXPENSE")
-  const [monthlyAmount, setMonthlyAmount] = useState("")
-  const [isPending, startTransition] = useTransition()
   const isDesktop = useMediaQuery("(min-width: 768px)")
+  const title = entry ? "Rediger budsjettpost" : "Legg til budsjettpost"
+  const initialCategoryId =
+    entry?.category?.id ??
+    (defaults.categoryId &&
+    categories.some((category) => category.id === defaults.categoryId)
+      ? defaults.categoryId
+      : null)
+  const formContent = open ? (
+    <EntryDialogForm
+      key={entry?.id ?? "new"}
+      entry={entry}
+      categories={categories}
+      initialCategoryId={initialCategoryId}
+      initialType={entry?.type ?? defaults.type ?? "EXPENSE"}
+      onOpenChange={onOpenChange}
+    />
+  ) : null
 
-  useEffect(() => {
-    if (open) {
-      if (entry) {
-        setName(entry.name)
-        setCategory(entry.category ?? "none")
-        setType(entry.type)
-        setMonthlyAmount(String(entry.monthlyAmount))
-      } else {
-        setName(
-          defaults.category ? CATEGORY_LABELS[defaults.category] : ""
-        )
-        setCategory(defaults.category ?? "none")
-        setType(defaults.type ?? "EXPENSE")
-        setMonthlyAmount("")
-      }
-    }
-  }, [open, entry, defaults])
+  if (isDesktop) {
+    return (
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>{title}</SheetTitle>
+          </SheetHeader>
+          {formContent}
+        </SheetContent>
+      </Sheet>
+    )
+  }
+
+  return (
+    <Drawer open={open} onOpenChange={onOpenChange}>
+      <DrawerContent>
+        <DrawerHeader>
+          <DrawerTitle>{title}</DrawerTitle>
+        </DrawerHeader>
+        <ScrollArea className="max-h-[70vh] overflow-x-hidden">
+          <div className="min-w-0 px-4 pb-6">{formContent}</div>
+        </ScrollArea>
+      </DrawerContent>
+    </Drawer>
+  )
+}
+
+function EntryDialogForm({
+  entry,
+  categories,
+  initialCategoryId,
+  initialType,
+  onOpenChange,
+}: {
+  entry: BudgetEntryData | null
+  categories: BudgetCategoryData[]
+  initialCategoryId: string | null
+  initialType: BudgetEntryType
+  onOpenChange: (open: boolean) => void
+}) {
+  const [name, setName] = useState(entry?.name ?? "")
+  const [categoryId, setCategoryId] = useState<string>(
+    initialCategoryId ?? "none"
+  )
+  const [type, setType] = useState<BudgetEntryType>(initialType)
+  const [monthlyAmount, setMonthlyAmount] = useState(
+    entry ? String(entry.monthlyAmount) : ""
+  )
+  const [isPending, startTransition] = useTransition()
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -97,7 +128,7 @@ export function EntryDialog({
         await upsertBudgetEntry({
           id: entry?.id,
           name: name.trim(),
-          category: category === "none" ? null : category,
+          categoryId: categoryId === "none" ? null : categoryId,
           type,
           monthlyAmount: amount,
         })
@@ -109,9 +140,7 @@ export function EntryDialog({
     })
   }
 
-  const title = entry ? "Rediger budsjettpost" : "Legg til budsjettpost"
-
-  const formContent = (
+  return (
     <form onSubmit={handleSubmit} className="flex min-w-0 flex-col gap-4">
       <div className="flex flex-col gap-2">
         <Label htmlFor="entry-name">Navn</Label>
@@ -126,7 +155,7 @@ export function EntryDialog({
         <Label htmlFor="entry-type">Type</Label>
         <Select
           value={type}
-          onValueChange={(v) => setType(v as BudgetEntryType)}
+          onValueChange={(value) => setType(value as BudgetEntryType)}
         >
           <SelectTrigger id="entry-type">
             <SelectValue />
@@ -140,20 +169,15 @@ export function EntryDialog({
       </div>
       <div className="flex flex-col gap-2">
         <Label htmlFor="entry-category">Kategori (valgfri)</Label>
-        <Select
-          value={category}
-          onValueChange={(v) =>
-            setCategory(v as BudgetCategory | "none")
-          }
-        >
+        <Select value={categoryId} onValueChange={setCategoryId}>
           <SelectTrigger id="entry-category">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="none">Ingen (manuell post)</SelectItem>
-            {ALL_CATEGORIES.map((cat) => (
-              <SelectItem key={cat} value={cat}>
-                {CATEGORY_LABELS[cat]}
+            <SelectItem value="none">Ingen (ukategorisert)</SelectItem>
+            {categories.map((category) => (
+              <SelectItem key={category.id} value={category.id}>
+                {category.name}
               </SelectItem>
             ))}
           </SelectContent>
@@ -185,31 +209,5 @@ export function EntryDialog({
         </Button>
       </div>
     </form>
-  )
-
-  if (isDesktop) {
-    return (
-      <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent>
-          <SheetHeader>
-            <SheetTitle>{title}</SheetTitle>
-          </SheetHeader>
-          {formContent}
-        </SheetContent>
-      </Sheet>
-    )
-  }
-
-  return (
-    <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent>
-        <DrawerHeader>
-          <DrawerTitle>{title}</DrawerTitle>
-        </DrawerHeader>
-        <ScrollArea className="max-h-[70vh] overflow-x-hidden">
-          <div className="min-w-0 px-4 pb-6">{formContent}</div>
-        </ScrollArea>
-      </DrawerContent>
-    </Drawer>
   )
 }

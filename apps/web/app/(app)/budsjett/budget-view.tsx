@@ -1,45 +1,49 @@
 "use client"
 
-import { useState, useMemo, useTransition } from "react"
+import { type ReactNode, useMemo, useState, useTransition } from "react"
 import {
-  Wallet,
   Landmark,
-  Home,
-  Receipt,
-  PlusCircle,
   Pencil,
+  Plane,
+  PlusCircle,
+  Receipt,
   Trash2,
   Users,
-  Plane,
+  Wallet,
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@workspace/ui/components/card"
 import { Button } from "@workspace/ui/components/button"
 import { Badge } from "@workspace/ui/components/badge"
-import { Separator } from "@workspace/ui/components/separator"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@workspace/ui/components/tabs"
+import { Tabs, TabsList, TabsTrigger } from "@workspace/ui/components/tabs"
 import { BudgetStatsSummary } from "@/components/budget-stats-summary"
 import {
-  upsertBudgetMember,
-  deleteBudgetMember,
-  upsertBudgetLoan,
-  deleteBudgetLoan,
-  deleteBudgetTrip,
-  upsertBudgetEntry,
+  deleteBudgetCategory,
   deleteBudgetEntry,
-  updateTaxDeductionPercent,
+  deleteBudgetLoan,
+  deleteBudgetMember,
+  deleteBudgetTrip,
 } from "@/lib/actions/budget"
 import { toast } from "sonner"
-import type { BudgetCategory, BudgetEntryType, BudgetLoanType, TripTransportType } from "@workspace/db"
+import type {
+  BudgetEntryType,
+  BudgetLoanType,
+  TripTransportType,
+} from "@workspace/db"
 import { MemberDialog } from "./member-dialog"
 import { LoanDialog } from "./loan-dialog"
 import { EntryDialog } from "./entry-dialog"
 import { TripDialog } from "./trip-dialog"
+import { CategoryDialog } from "./category-dialog"
 
-// ─── Types ──────────────────────────────────────────────────────
+export interface BudgetCategoryData {
+  id: string
+  name: string
+}
 
 export interface BudgetData {
   id: string
   taxDeductionPercent: number
+  categories: BudgetCategoryData[]
   members: BudgetMemberData[]
   loans: BudgetLoanData[]
   trips: BudgetTripData[]
@@ -63,7 +67,6 @@ export interface BudgetLoanData {
   monthlyFees: number
 }
 
-
 export interface BudgetTripData {
   id: string
   name: string
@@ -78,42 +81,9 @@ export interface BudgetTripData {
 export interface BudgetEntryData {
   id: string
   name: string
-  category: BudgetCategory | null
+  category: BudgetCategoryData | null
   type: BudgetEntryType
   monthlyAmount: number
-}
-
-// ─── Config ─────────────────────────────────────────────────────
-
-const HOUSING_CATEGORIES: BudgetCategory[] = [
-  "ELECTRICITY",
-  "MUNICIPAL_FEES",
-  "INSURANCE",
-  "HOME_MAINTENANCE",
-]
-
-const FIXED_CATEGORIES: BudgetCategory[] = [
-  "TRANSPORT",
-  "SUBSCRIPTIONS",
-  "FOOD",
-  "CHILDREN",
-  "PERSONAL",
-  "SAVINGS",
-  "BUFFER",
-]
-
-export const CATEGORY_LABELS: Record<BudgetCategory, string> = {
-  ELECTRICITY: "Strøm",
-  MUNICIPAL_FEES: "Kommunale avgifter",
-  INSURANCE: "Forsikring",
-  HOME_MAINTENANCE: "Vedlikehold",
-  TRANSPORT: "Transport",
-  SUBSCRIPTIONS: "Abonnement",
-  FOOD: "Mat",
-  CHILDREN: "Barn",
-  PERSONAL: "Personlig forbruk",
-  SAVINGS: "Sparing",
-  BUFFER: "Buffer",
 }
 
 const ENTRY_TYPE_LABELS: Record<BudgetEntryType, string> = {
@@ -129,7 +99,27 @@ const formatCurrency = (amount: number) =>
     maximumFractionDigits: 0,
   }).format(amount)
 
-// ─── Component ──────────────────────────────────────────────────
+function getEntryDisposableImpact(entry: BudgetEntryData) {
+  return entry.type === "EXPENSE" ? -entry.monthlyAmount : entry.monthlyAmount
+}
+
+function getEntryExpenses(entries: BudgetEntryData[]) {
+  return entries
+    .filter((entry) => entry.type === "EXPENSE")
+    .reduce((sum, entry) => sum + entry.monthlyAmount, 0)
+}
+
+function getEntryIncome(entries: BudgetEntryData[]) {
+  return entries
+    .filter((entry) => entry.type === "INCOME")
+    .reduce((sum, entry) => sum + entry.monthlyAmount, 0)
+}
+
+function getEntryDeductions(entries: BudgetEntryData[]) {
+  return entries
+    .filter((entry) => entry.type === "DEDUCTION")
+    .reduce((sum, entry) => sum + entry.monthlyAmount, 0)
+}
 
 interface BudgetViewProps {
   budget: BudgetData
@@ -139,7 +129,6 @@ export function BudgetView({ budget }: BudgetViewProps) {
   const [period, setPeriod] = useState<"month" | "year">("month")
   const multiplier = period === "year" ? 12 : 1
 
-  // Dialog state
   const [memberDialogOpen, setMemberDialogOpen] = useState(false)
   const [editingMember, setEditingMember] = useState<BudgetMemberData | null>(null)
 
@@ -149,37 +138,37 @@ export function BudgetView({ budget }: BudgetViewProps) {
   const [tripDialogOpen, setTripDialogOpen] = useState(false)
   const [editingTrip, setEditingTrip] = useState<BudgetTripData | null>(null)
 
+  const [categoryDialogOpen, setCategoryDialogOpen] = useState(false)
+  const [editingCategory, setEditingCategory] = useState<BudgetCategoryData | null>(
+    null
+  )
+
   const [entryDialogOpen, setEntryDialogOpen] = useState(false)
   const [editingEntry, setEditingEntry] = useState<BudgetEntryData | null>(null)
   const [entryDefaults, setEntryDefaults] = useState<{
-    category?: BudgetCategory
+    categoryId?: string | null
     type?: BudgetEntryType
   }>({})
 
   const [isPending, startTransition] = useTransition()
 
-  // ─── Calculations ───────────────────────────────────────────
-
   const calculations = useMemo(() => {
-    const totalGrossIncome = budget.members.reduce(
-      (sum, m) => sum + m.grossMonthlyIncome,
-      0
-    )
     const totalNetIncome = budget.members.reduce(
-      (sum, m) => sum + m.grossMonthlyIncome * (1 - m.taxPercent / 100),
+      (sum, member) =>
+        sum + member.grossMonthlyIncome * (1 - member.taxPercent / 100),
       0
     )
 
     const totalLoanInterest = budget.loans.reduce(
-      (sum, l) => sum + l.monthlyInterest,
+      (sum, loan) => sum + loan.monthlyInterest,
       0
     )
     const totalLoanPrincipal = budget.loans.reduce(
-      (sum, l) => sum + l.monthlyPrincipal,
+      (sum, loan) => sum + loan.monthlyPrincipal,
       0
     )
     const totalLoanFees = budget.loans.reduce(
-      (sum, l) => sum + l.monthlyFees,
+      (sum, loan) => sum + loan.monthlyFees,
       0
     )
     const totalLoanCost = totalLoanInterest + totalLoanPrincipal + totalLoanFees
@@ -193,85 +182,52 @@ export function BudgetView({ budget }: BudgetViewProps) {
       return sum + (trip.annualTrips * perTrip) / 12
     }, 0)
 
-    // Rentefradrag: annual interest * deduction rate / 12
     const monthlyTaxDeduction =
       (totalLoanInterest * 12 * (budget.taxDeductionPercent / 100)) / 12
 
-    const housingEntries = budget.entries.filter(
-      (e) => e.category && HOUSING_CATEGORIES.includes(e.category)
-    )
-    const fixedEntries = budget.entries.filter(
-      (e) => e.category && FIXED_CATEGORIES.includes(e.category)
-    )
-    const manualEntries = budget.entries.filter((e) => !e.category)
+    const uncategorizedEntries = budget.entries.filter((entry) => !entry.category)
+    const categoryGroups = budget.categories.map((category) => {
+      const entries = budget.entries.filter(
+        (entry) => entry.category?.id === category.id
+      )
 
-    const totalHousing = housingEntries.reduce(
-      (sum, e) => {
-        if (e.type === "DEDUCTION") return sum - e.monthlyAmount
-        if (e.type === "INCOME") return sum
-        return sum + e.monthlyAmount
-      },
-      0
-    )
-    const totalFixed = fixedEntries.reduce(
-      (sum, e) => {
-        if (e.type === "DEDUCTION") return sum - e.monthlyAmount
-        if (e.type === "INCOME") return sum
-        return sum + e.monthlyAmount
-      },
-      0
-    )
+      return {
+        category,
+        entries,
+        disposableImpact: entries.reduce(
+          (sum, entry) => sum + getEntryDisposableImpact(entry),
+          0
+        ),
+      }
+    })
 
-    // Gather income and deductions from categorized entries
-    const categorizedIncome = [...housingEntries, ...fixedEntries]
-      .filter((e) => e.type === "INCOME")
-      .reduce((sum, e) => sum + e.monthlyAmount, 0)
-    const categorizedDeductions = [...housingEntries, ...fixedEntries]
-      .filter((e) => e.type === "DEDUCTION")
-      .reduce((sum, e) => sum + e.monthlyAmount, 0)
+    const entryIncome = getEntryIncome(budget.entries)
+    const entryExpenses = getEntryExpenses(budget.entries)
+    const entryDeductions = getEntryDeductions(budget.entries)
 
-    const manualIncome = manualEntries
-      .filter((e) => e.type === "INCOME")
-      .reduce((sum, e) => sum + e.monthlyAmount, 0)
-    const manualExpenses = manualEntries
-      .filter((e) => e.type === "EXPENSE")
-      .reduce((sum, e) => sum + e.monthlyAmount, 0)
-    const manualDeductions = manualEntries
-      .filter((e) => e.type === "DEDUCTION")
-      .reduce((sum, e) => sum + e.monthlyAmount, 0)
-
-    const totalIncome = totalNetIncome + manualIncome + categorizedIncome
-    const totalExpenses =
-      totalLoanCost + totalTripCost + totalHousing + totalFixed + manualExpenses
-    const totalDeductions =
-      monthlyTaxDeduction + manualDeductions + categorizedDeductions
+    const totalIncome = totalNetIncome + entryIncome
+    const totalExpenses = totalLoanCost + totalTripCost + entryExpenses
+    const totalDeductions = monthlyTaxDeduction + entryDeductions
     const disposable = totalIncome - totalExpenses + totalDeductions
 
     return {
-      totalGrossIncome,
       totalNetIncome,
       totalLoanInterest,
-      totalLoanPrincipal,
-      totalLoanFees,
       totalLoanCost,
       totalTripCost,
       monthlyTaxDeduction,
-      housingEntries,
-      fixedEntries,
-      manualEntries,
-      totalHousing,
-      totalFixed,
-      manualIncome,
-      manualExpenses,
-      manualDeductions,
+      categoryGroups,
+      uncategorizedEntries,
+      uncategorizedImpact: uncategorizedEntries.reduce(
+        (sum, entry) => sum + getEntryDisposableImpact(entry),
+        0
+      ),
       totalIncome,
       totalExpenses,
       totalDeductions,
       disposable,
     }
   }, [budget])
-
-  // ─── Handlers ─────────────────────────────────────────────
 
   function handleDeleteMember(id: string) {
     startTransition(async () => {
@@ -317,8 +273,29 @@ export function BudgetView({ budget }: BudgetViewProps) {
     })
   }
 
+  function handleDeleteCategory(category: BudgetCategoryData) {
+    const entryCount =
+      calculations.categoryGroups.find((group) => group.category.id === category.id)
+        ?.entries.length ?? 0
+    const message =
+      entryCount > 0
+        ? `Slette kategorien "${category.name}"? ${entryCount} ${entryCount === 1 ? "post blir" : "poster blir"} ukategorisert.`
+        : `Slette kategorien "${category.name}"?`
+
+    if (!confirm(message)) return
+
+    startTransition(async () => {
+      try {
+        await deleteBudgetCategory(category.id)
+        toast.success("Kategori slettet")
+      } catch {
+        toast.error("Kunne ikke slette kategori")
+      }
+    })
+  }
+
   function openAddEntry(defaults: {
-    category?: BudgetCategory
+    categoryId?: string | null
     type?: BudgetEntryType
   }) {
     setEditingEntry(null)
@@ -326,24 +303,29 @@ export function BudgetView({ budget }: BudgetViewProps) {
     setEntryDialogOpen(true)
   }
 
-  // ─── Render ───────────────────────────────────────────────
+  function openCreateCategory() {
+    setEditingCategory(null)
+    setCategoryDialogOpen(true)
+  }
 
   return (
     <div className="flex flex-col gap-6 overflow-x-hidden">
-      {/* Period toggle */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Tabs
           value={period}
-          onValueChange={(v) => setPeriod(v as "month" | "year")}
+          onValueChange={(value) => setPeriod(value as "month" | "year")}
         >
           <TabsList>
             <TabsTrigger value="month">Per måned</TabsTrigger>
             <TabsTrigger value="year">Per år</TabsTrigger>
           </TabsList>
         </Tabs>
+        <Button variant="outline" size="sm" onClick={openCreateCategory}>
+          <PlusCircle className="h-3.5 w-3.5" data-icon="inline-start" />
+          Legg til kategori
+        </Button>
       </div>
 
-      {/* Summary card */}
       <BudgetStatsSummary
         disposable={calculations.disposable * multiplier}
         disposableSubtitle={
@@ -370,7 +352,6 @@ export function BudgetView({ budget }: BudgetViewProps) {
         ]}
       />
 
-      {/* Income section */}
       <BudgetSection
         title="Inntekter"
         icon={<Users className="h-4 w-4" />}
@@ -386,14 +367,15 @@ export function BudgetView({ budget }: BudgetViewProps) {
         addLabel="Legg til medlem"
       >
         {budget.members.length === 0 ? (
-          <p className="text-muted-foreground py-4 text-center text-sm">
+          <p className="py-4 text-center text-sm text-muted-foreground">
             Ingen medlemmer lagt til ennå
           </p>
         ) : (
-          <div className="divide-border divide-y">
+          <div className="divide-y divide-border">
             {budget.members.map((member) => {
               const netIncome =
                 member.grossMonthlyIncome * (1 - member.taxPercent / 100)
+
               return (
                 <div
                   key={member.id}
@@ -401,7 +383,7 @@ export function BudgetView({ budget }: BudgetViewProps) {
                 >
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium">{member.name}</p>
-                    <p className="text-muted-foreground text-xs sm:text-sm break-words">
+                    <p className="break-words text-xs text-muted-foreground sm:text-sm">
                       Brutto: {formatCurrency(member.grossMonthlyIncome * multiplier)}
                       {" · "}
                       Skatt: {member.taxPercent}%
@@ -409,10 +391,10 @@ export function BudgetView({ budget }: BudgetViewProps) {
                   </div>
                   <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-start">
                     <div className="text-right">
-                      <p className="font-medium tabular-nums text-sm sm:text-base">
+                      <p className="text-sm font-medium tabular-nums sm:text-base">
                         {formatCurrency(netIncome * multiplier)}
                       </p>
-                      <Badge variant="secondary" className="text-xs hidden sm:inline-flex">
+                      <Badge variant="secondary" className="hidden text-xs sm:inline-flex">
                         Beregnet
                       </Badge>
                     </div>
@@ -444,7 +426,6 @@ export function BudgetView({ budget }: BudgetViewProps) {
         )}
       </BudgetSection>
 
-      {/* Loans section */}
       <BudgetSection
         title="Lån"
         icon={<Landmark className="h-4 w-4" />}
@@ -460,14 +441,15 @@ export function BudgetView({ budget }: BudgetViewProps) {
         addLabel="Legg til lån"
       >
         {budget.loans.length === 0 ? (
-          <p className="text-muted-foreground py-4 text-center text-sm">
+          <p className="py-4 text-center text-sm text-muted-foreground">
             Ingen lån lagt til ennå
           </p>
         ) : (
-          <div className="divide-border divide-y">
+          <div className="divide-y divide-border">
             {budget.loans.map((loan) => {
               const totalMonthly =
                 loan.monthlyInterest + loan.monthlyPrincipal + loan.monthlyFees
+
               return (
                 <div
                   key={loan.id}
@@ -476,28 +458,34 @@ export function BudgetView({ budget }: BudgetViewProps) {
                   <div className="min-w-0 flex-1">
                     <p className="flex items-center gap-x-2 gap-y-1 font-medium sm:flex-wrap">
                       {loan.loanName}
-                      <span className="text-muted-foreground text-sm font-normal hidden sm:inline">
+                      <span className="hidden text-sm font-normal text-muted-foreground sm:inline">
                         {loan.bankName}
                       </span>
-                      <Badge variant="secondary" className="text-xs hidden sm:inline-flex">
+                      <Badge variant="secondary" className="hidden text-xs sm:inline-flex">
                         {loan.loanType === "MORTGAGE" ? "Boliglån" : "Annet"}
                       </Badge>
                     </p>
-                    <p className="text-muted-foreground text-xs sm:text-sm flex flex-wrap gap-x-1 gap-y-1 break-words">
+                    <p className="flex flex-wrap gap-x-1 gap-y-1 break-words text-xs text-muted-foreground sm:text-sm">
                       <span className="sm:hidden">{loan.bankName}</span>
-                      <span className="hidden sm:inline">Renter: {formatCurrency(loan.monthlyInterest * multiplier)}</span>
+                      <span className="hidden sm:inline">
+                        Renter: {formatCurrency(loan.monthlyInterest * multiplier)}
+                      </span>
                       <span className="hidden sm:inline">·</span>
-                      <span className="hidden sm:inline">Avdrag: {formatCurrency(loan.monthlyPrincipal * multiplier)}</span>
+                      <span className="hidden sm:inline">
+                        Avdrag: {formatCurrency(loan.monthlyPrincipal * multiplier)}
+                      </span>
                       {loan.monthlyFees > 0 && (
                         <>
                           <span className="hidden sm:inline">·</span>
-                          <span className="hidden sm:inline">Gebyrer: {formatCurrency(loan.monthlyFees * multiplier)}</span>
+                          <span className="hidden sm:inline">
+                            Gebyrer: {formatCurrency(loan.monthlyFees * multiplier)}
+                          </span>
                         </>
                       )}
                     </p>
                   </div>
                   <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-start">
-                    <p className="font-medium tabular-nums text-sm sm:text-base">
+                    <p className="text-sm font-medium tabular-nums sm:text-base">
                       {formatCurrency(totalMonthly * multiplier)}
                     </p>
                     <div className="flex items-center gap-1 sm:gap-2">
@@ -524,38 +512,33 @@ export function BudgetView({ budget }: BudgetViewProps) {
                 </div>
               )
             })}
-            {/* Auto-calculated rentefradrag row */}
             {calculations.totalLoanInterest > 0 && (
-              <>
-                <div className="bg-muted/50 flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium text-blue-700 dark:text-blue-400">
-                      Rentefradrag
+              <div className="flex flex-col gap-3 bg-muted/50 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-blue-700 dark:text-blue-400">
+                    Rentefradrag
+                  </p>
+                  <p className="break-words text-xs text-muted-foreground sm:text-sm">
+                    {budget.taxDeductionPercent}% av totale rentekostnader (
+                    {formatCurrency(calculations.totalLoanInterest * 12)}/år)
+                  </p>
+                </div>
+                <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-start">
+                  <div className="text-right">
+                    <p className="text-sm font-medium tabular-nums text-blue-700 dark:text-blue-400 sm:text-base">
+                      −{formatCurrency(calculations.monthlyTaxDeduction * multiplier)}
                     </p>
-                    <p className="text-muted-foreground text-xs sm:text-sm break-words">
-                      {budget.taxDeductionPercent}% av totale rentekostnader (
-                      {formatCurrency(calculations.totalLoanInterest * 12)}/år)
-                    </p>
-                  </div>
-                  <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-start sm:gap-2">
-                    <div className="text-right">
-                      <p className="font-medium tabular-nums text-blue-700 dark:text-blue-400 text-sm sm:text-base">
-                        −{formatCurrency(calculations.monthlyTaxDeduction * multiplier)}
-                      </p>
-                      <Badge variant="secondary" className="text-xs hidden sm:inline-flex">
-                        Beregnet
-                      </Badge>
-                    </div>
+                    <Badge variant="secondary" className="hidden text-xs sm:inline-flex">
+                      Beregnet
+                    </Badge>
                   </div>
                 </div>
-              </>
+              </div>
             )}
           </div>
         )}
       </BudgetSection>
 
-
-      {/* Trips section */}
       <BudgetSection
         title="Reiser"
         icon={<Plane className="h-4 w-4" />}
@@ -571,11 +554,11 @@ export function BudgetView({ budget }: BudgetViewProps) {
         addLabel="Legg til reise"
       >
         {budget.trips.length === 0 ? (
-          <p className="text-muted-foreground py-4 text-center text-sm">
+          <p className="py-4 text-center text-sm text-muted-foreground">
             Ingen reiser lagt til ennå
           </p>
         ) : (
-          <div className="divide-border divide-y">
+          <div className="divide-y divide-border">
             {budget.trips.map((trip) => {
               const perTrip =
                 trip.transportType === "AIR_OR_PUBLIC"
@@ -584,17 +567,22 @@ export function BudgetView({ budget }: BudgetViewProps) {
               const monthly = (trip.annualTrips * perTrip) / 12
 
               return (
-                <div key={trip.id} className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                <div
+                  key={trip.id}
+                  className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
+                >
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium">{trip.name}</p>
-                    <p className="text-muted-foreground text-xs sm:text-sm break-words">
+                    <p className="break-words text-xs text-muted-foreground sm:text-sm">
                       {trip.transportType === "AIR_OR_PUBLIC"
                         ? `Fly/offentlig · ${trip.annualTrips} reiser/år · Billett ${formatCurrency(perTrip)}/reise`
                         : `Bil · ${trip.annualTrips} reiser/år · Bom/ferge/drivstoff ${formatCurrency(perTrip)}/reise`}
                     </p>
                   </div>
                   <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-start">
-                    <p className="font-medium tabular-nums text-sm sm:text-base">{formatCurrency(monthly * multiplier)}</p>
+                    <p className="text-sm font-medium tabular-nums sm:text-base">
+                      {formatCurrency(monthly * multiplier)}
+                    </p>
                     <div className="flex items-center gap-1 sm:gap-2">
                       <Button
                         variant="ghost"
@@ -623,92 +611,62 @@ export function BudgetView({ budget }: BudgetViewProps) {
         )}
       </BudgetSection>
 
-      {/* Housing costs section */}
-      <BudgetSection
-        title="Boligkostnader"
-        icon={<Home className="h-4 w-4" />}
-        badge={
-          <Badge variant="outline" className="text-red-700 dark:text-red-400">
-            {formatCurrency(calculations.totalHousing * multiplier)}
-          </Badge>
-        }
-        onAdd={() => openAddEntry({ type: "EXPENSE" })}
-        addLabel="Legg til kostnad"
-      >
-        <EntryList
-          entries={calculations.housingEntries}
-          multiplier={multiplier}
-          onEdit={(entry) => {
-            setEditingEntry(entry)
-            setEntryDefaults({})
-            setEntryDialogOpen(true)
-          }}
-          onDelete={handleDeleteEntry}
-          isPending={isPending}
-          emptyText="Ingen boligkostnader lagt til"
-          showCategory
-        />
-        {/* Quick add buttons for housing categories not yet added */}
-        <QuickAddButtons
-          categories={HOUSING_CATEGORIES}
-          existingEntries={calculations.housingEntries}
-          onAdd={(category) =>
-            openAddEntry({ category, type: "EXPENSE" })
+      {calculations.categoryGroups.map(({ category, entries, disposableImpact }) => (
+        <BudgetSection
+          key={category.id}
+          title={category.name}
+          icon={<Wallet className="h-4 w-4" />}
+          badge={<ImpactBadge value={disposableImpact * multiplier} />}
+          onAdd={() => openAddEntry({ categoryId: category.id, type: "EXPENSE" })}
+          addLabel="Legg til post"
+          headerActions={
+            <div className="flex items-center gap-1 sm:gap-2">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => {
+                  setEditingCategory(category)
+                  setCategoryDialogOpen(true)
+                }}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => handleDeleteCategory(category)}
+                disabled={isPending}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
           }
-        />
-      </BudgetSection>
+        >
+          <EntryList
+            entries={entries}
+            multiplier={multiplier}
+            onEdit={(entry) => {
+              setEditingEntry(entry)
+              setEntryDefaults({})
+              setEntryDialogOpen(true)
+            }}
+            onDelete={handleDeleteEntry}
+            isPending={isPending}
+            emptyText="Ingen poster i kategorien"
+            showType
+          />
+        </BudgetSection>
+      ))}
 
-      {/* Fixed costs section */}
       <BudgetSection
-        title="Faste kostnader"
-        icon={<Wallet className="h-4 w-4" />}
-        badge={
-          <Badge variant="outline" className="text-red-700 dark:text-red-400">
-            {formatCurrency(calculations.totalFixed * multiplier)}
-          </Badge>
-        }
-        onAdd={() => openAddEntry({ type: "EXPENSE" })}
-        addLabel="Legg til kostnad"
-      >
-        <EntryList
-          entries={calculations.fixedEntries}
-          multiplier={multiplier}
-          onEdit={(entry) => {
-            setEditingEntry(entry)
-            setEntryDefaults({})
-            setEntryDialogOpen(true)
-          }}
-          onDelete={handleDeleteEntry}
-          isPending={isPending}
-          emptyText="Ingen faste kostnader lagt til"
-          showCategory
-        />
-        <QuickAddButtons
-          categories={FIXED_CATEGORIES}
-          existingEntries={calculations.fixedEntries}
-          onAdd={(category) =>
-            openAddEntry({ category, type: "EXPENSE" })
-          }
-        />
-      </BudgetSection>
-
-      {/* Manual entries section */}
-      <BudgetSection
-        title="Manuelle budsjettposter"
+        title="Ukategoriserte budsjettposter"
         icon={<Receipt className="h-4 w-4" />}
-        badge={
-          calculations.manualEntries.length > 0 ? (
-            <Badge variant="outline">
-              {calculations.manualEntries.length}{" "}
-              {calculations.manualEntries.length === 1 ? "post" : "poster"}
-            </Badge>
-          ) : null
-        }
-        onAdd={() => openAddEntry({})}
+        badge={<ImpactBadge value={calculations.uncategorizedImpact * multiplier} />}
+        onAdd={() => openAddEntry({ type: "EXPENSE" })}
         addLabel="Legg til post"
       >
         <EntryList
-          entries={calculations.manualEntries}
+          entries={calculations.uncategorizedEntries}
           multiplier={multiplier}
           onEdit={(entry) => {
             setEditingEntry(entry)
@@ -717,12 +675,16 @@ export function BudgetView({ budget }: BudgetViewProps) {
           }}
           onDelete={handleDeleteEntry}
           isPending={isPending}
-          emptyText="Ingen manuelle poster lagt til"
+          emptyText="Ingen ukategoriserte poster"
           showType
         />
       </BudgetSection>
 
-      {/* Dialogs */}
+      <CategoryDialog
+        open={categoryDialogOpen}
+        onOpenChange={setCategoryDialogOpen}
+        category={editingCategory}
+      />
       <MemberDialog
         open={memberDialogOpen}
         onOpenChange={setMemberDialogOpen}
@@ -742,13 +704,12 @@ export function BudgetView({ budget }: BudgetViewProps) {
         open={entryDialogOpen}
         onOpenChange={setEntryDialogOpen}
         entry={editingEntry}
+        categories={budget.categories}
         defaults={entryDefaults}
       />
     </div>
   )
 }
-
-// ─── Sub-components ─────────────────────────────────────────────
 
 function BudgetSection({
   title,
@@ -756,33 +717,38 @@ function BudgetSection({
   badge,
   onAdd,
   addLabel,
+  headerActions,
   children,
 }: {
   title: string
-  icon: React.ReactNode
-  badge: React.ReactNode
+  icon: ReactNode
+  badge: ReactNode
   onAdd: () => void
   addLabel: string
-  children: React.ReactNode
+  headerActions?: ReactNode
+  children: ReactNode
 }) {
   return (
     <Card className="overflow-hidden">
       <CardHeader className="pb-3">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-hidden">
             {icon}
-            <CardTitle className="min-w-0 text-base truncate">{title}</CardTitle>
+            <CardTitle className="min-w-0 truncate text-base">{title}</CardTitle>
             <span className="shrink-0">{badge}</span>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onAdd}
-            className="w-full shrink-0 sm:w-auto"
-          >
-            <PlusCircle className="h-3.5 w-3.5 sm:mr-1.5" />
-            <span className="hidden sm:inline">{addLabel}</span>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {headerActions}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onAdd}
+              className="w-full shrink-0 sm:w-auto"
+            >
+              <PlusCircle className="h-3.5 w-3.5 sm:mr-1.5" />
+              <span className="hidden sm:inline">{addLabel}</span>
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent>{children}</CardContent>
@@ -811,14 +777,12 @@ function EntryList({
 }) {
   if (entries.length === 0) {
     return (
-      <p className="text-muted-foreground py-4 text-center text-sm">
-        {emptyText}
-      </p>
+      <p className="py-4 text-center text-sm text-muted-foreground">{emptyText}</p>
     )
   }
 
   return (
-    <div className="divide-border divide-y">
+    <div className="divide-y divide-border">
       {entries.map((entry) => (
         <div
           key={entry.id}
@@ -829,7 +793,7 @@ function EntryList({
             <div className="flex flex-wrap gap-2">
               {showCategory && entry.category && (
                 <Badge variant="secondary" className="text-xs">
-                  {CATEGORY_LABELS[entry.category]}
+                  {entry.category.name}
                 </Badge>
               )}
               {showType && (
@@ -850,7 +814,7 @@ function EntryList({
           </div>
           <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-start">
             <p
-              className={`font-medium tabular-nums text-sm sm:text-base ${
+              className={`text-sm font-medium tabular-nums sm:text-base ${
                 entry.type === "INCOME"
                   ? "text-green-600 dark:text-green-400"
                   : entry.type === "DEDUCTION"
@@ -862,11 +826,7 @@ function EntryList({
               {formatCurrency(entry.monthlyAmount * multiplier)}
             </p>
             <div className="flex items-center gap-1 sm:gap-2">
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={() => onEdit(entry)}
-              >
+              <Button variant="ghost" size="icon-sm" onClick={() => onEdit(entry)}>
                 <Pencil className="h-3.5 w-3.5" />
               </Button>
               <Button
@@ -885,36 +845,18 @@ function EntryList({
   )
 }
 
-function QuickAddButtons({
-  categories,
-  existingEntries,
-  onAdd,
-}: {
-  categories: BudgetCategory[]
-  existingEntries: BudgetEntryData[]
-  onAdd: (category: BudgetCategory) => void
-}) {
-  const existingCategories = new Set(
-    existingEntries.map((e) => e.category).filter(Boolean)
-  )
-  const missing = categories.filter((c) => !existingCategories.has(c))
+function ImpactBadge({ value }: { value: number }) {
+  let toneClass: string | undefined
 
-  if (missing.length === 0) return null
+  if (value > 0) {
+    toneClass = "text-green-700 dark:text-green-400"
+  } else if (value < 0) {
+    toneClass = "text-red-700 dark:text-red-400"
+  }
 
   return (
-    <div className="mt-3 flex flex-wrap gap-2">
-      {missing.map((category) => (
-        <Button
-          key={category}
-          variant="ghost"
-          size="sm"
-          className="text-muted-foreground h-auto px-2 py-1 text-xs"
-          onClick={() => onAdd(category)}
-        >
-          <PlusCircle className="mr-1 h-3 w-3" />
-          {CATEGORY_LABELS[category]}
-        </Button>
-      ))}
-    </div>
+    <Badge variant="outline" className={toneClass}>
+      {formatCurrency(value)}
+    </Badge>
   )
 }
