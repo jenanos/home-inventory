@@ -26,6 +26,7 @@ import {
 import { toast } from "sonner"
 import type {
   BudgetEntryType,
+  BudgetLoanRepaymentType,
   BudgetLoanType,
   TripTransportType,
 } from "@workspace/db"
@@ -62,9 +63,13 @@ export interface BudgetLoanData {
   bankName: string
   loanName: string
   loanType: BudgetLoanType
+  repaymentType: BudgetLoanRepaymentType
+  principalAmount: number
+  annualInterestRate: number
+  termMonths: number
+  monthlyFees: number
   monthlyInterest: number
   monthlyPrincipal: number
-  monthlyFees: number
 }
 
 export interface BudgetTripData {
@@ -449,6 +454,13 @@ export function BudgetView({ budget }: BudgetViewProps) {
             {budget.loans.map((loan) => {
               const totalMonthly =
                 loan.monthlyInterest + loan.monthlyPrincipal + loan.monthlyFees
+              const needsSetup =
+                loan.principalAmount <= 0 || loan.termMonths <= 0
+              const termYears = loan.termMonths / 12
+              const termLabel =
+                Number.isInteger(termYears)
+                  ? `${termYears} år`
+                  : `${termYears.toFixed(1)} år`
 
               return (
                 <div
@@ -464,25 +476,42 @@ export function BudgetView({ budget }: BudgetViewProps) {
                       <Badge variant="secondary" className="hidden text-xs sm:inline-flex">
                         {loan.loanType === "MORTGAGE" ? "Boliglån" : "Annet"}
                       </Badge>
+                      <Badge variant="secondary" className="hidden text-xs sm:inline-flex">
+                        {loan.repaymentType === "ANNUITY"
+                          ? "Annuitet"
+                          : "Serie"}
+                      </Badge>
                     </p>
-                    <p className="flex flex-wrap gap-x-1 gap-y-1 break-words text-xs text-muted-foreground sm:text-sm">
-                      <span className="sm:hidden">{loan.bankName}</span>
-                      <span className="hidden sm:inline">
-                        Renter: {formatCurrency(loan.monthlyInterest * multiplier)}
-                      </span>
-                      <span className="hidden sm:inline">·</span>
-                      <span className="hidden sm:inline">
-                        Avdrag: {formatCurrency(loan.monthlyPrincipal * multiplier)}
-                      </span>
-                      {loan.monthlyFees > 0 && (
-                        <>
-                          <span className="hidden sm:inline">·</span>
-                          <span className="hidden sm:inline">
-                            Gebyrer: {formatCurrency(loan.monthlyFees * multiplier)}
-                          </span>
-                        </>
-                      )}
-                    </p>
+                    {needsSetup ? (
+                      <p className="text-xs text-amber-600 dark:text-amber-400 sm:text-sm">
+                        Mangler lånebeløp og nedbetalingstid – rediger lånet for
+                        å fullføre.
+                      </p>
+                    ) : (
+                      <p className="flex flex-wrap gap-x-1 gap-y-1 break-words text-xs text-muted-foreground sm:text-sm">
+                        <span className="sm:hidden">{loan.bankName}</span>
+                        <span className="hidden sm:inline">
+                          {formatCurrency(loan.principalAmount)} ·{" "}
+                          {loan.annualInterestRate}% · {termLabel}
+                        </span>
+                        <span className="hidden sm:inline">·</span>
+                        <span className="hidden sm:inline">
+                          Renter: {formatCurrency(loan.monthlyInterest * multiplier)}
+                        </span>
+                        <span className="hidden sm:inline">·</span>
+                        <span className="hidden sm:inline">
+                          Avdrag: {formatCurrency(loan.monthlyPrincipal * multiplier)}
+                        </span>
+                        {loan.monthlyFees > 0 && (
+                          <>
+                            <span className="hidden sm:inline">·</span>
+                            <span className="hidden sm:inline">
+                              Gebyrer: {formatCurrency(loan.monthlyFees * multiplier)}
+                            </span>
+                          </>
+                        )}
+                      </p>
+                    )}
                   </div>
                   <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-start">
                     <p className="text-sm font-medium tabular-nums sm:text-base">

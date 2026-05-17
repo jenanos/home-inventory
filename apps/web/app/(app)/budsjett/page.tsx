@@ -2,6 +2,7 @@ import Link from "next/link"
 import { requireHousehold } from "@/lib/session"
 import { getBudget } from "@/lib/queries/budget"
 import { ensureBudget } from "@/lib/actions/budget"
+import { calculateLoanMonthlyAmounts } from "@/lib/budget-loan"
 import { Button } from "@workspace/ui/components/button"
 import { BotMessageSquare } from "lucide-react"
 import { BudgetView } from "./budget-view"
@@ -31,15 +32,32 @@ export default async function BudsjettPage() {
       grossMonthlyIncome: toNumber(m.grossMonthlyIncome),
       taxPercent: toNumber(m.taxPercent),
     })),
-    loans: budget.loans.map((l) => ({
-      id: l.id,
-      bankName: l.bankName,
-      loanName: l.loanName,
-      loanType: l.loanType,
-      monthlyInterest: toNumber(l.monthlyInterest),
-      monthlyPrincipal: toNumber(l.monthlyPrincipal),
-      monthlyFees: toNumber(l.monthlyFees),
-    })),
+    loans: budget.loans.map((l) => {
+      const principalAmount = toNumber(l.principalAmount)
+      const annualInterestRate = toNumber(l.annualInterestRate)
+      const termMonths = l.termMonths
+      const repaymentType = l.repaymentType
+      const monthly = calculateLoanMonthlyAmounts({
+        principalAmount,
+        annualInterestRate,
+        termMonths,
+        repaymentType,
+      })
+
+      return {
+        id: l.id,
+        bankName: l.bankName,
+        loanName: l.loanName,
+        loanType: l.loanType,
+        repaymentType,
+        principalAmount,
+        annualInterestRate,
+        termMonths,
+        monthlyFees: toNumber(l.monthlyFees),
+        monthlyInterest: monthly.monthlyInterest,
+        monthlyPrincipal: monthly.monthlyPrincipal,
+      }
+    }),
     trips: budget.trips.map((t) => ({
       id: t.id,
       name: t.name,

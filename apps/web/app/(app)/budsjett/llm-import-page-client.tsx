@@ -15,6 +15,10 @@ import {
   type ExistingBudgetEntry,
 } from "@/lib/actions/budget"
 import {
+  calculateLoanMonthlyAmounts,
+  type BudgetLoanRepaymentType,
+} from "@/lib/budget-loan"
+import {
   DuplicateFieldDiffCard,
   DuplicateSummary,
   computeFieldDiffs,
@@ -41,8 +45,10 @@ interface ParsedLoan {
   bankName: string
   loanName: string
   loanType: string
-  monthlyInterest: number
-  monthlyPrincipal: number
+  repaymentType: string
+  principalAmount: number
+  annualInterestRate: number
+  termMonths: number
   monthlyFees: number
 }
 
@@ -94,8 +100,10 @@ Svar KUN med et gyldig JSON-objekt, uten noe annet tekst rundt. Objektet skal ha
       "bankName": "Banknavn (obligatorisk)",
       "loanName": "Navn på lån (obligatorisk)",
       "loanType": "MORTGAGE",
-      "monthlyInterest": 5000,
-      "monthlyPrincipal": 3000,
+      "repaymentType": "ANNUITY",
+      "principalAmount": 3000000,
+      "annualInterestRate": 5.5,
+      "termMonths": 300,
       "monthlyFees": 50
     }
   ],
@@ -133,9 +141,12 @@ For "loans":
 - "bankName" og "loanName" er obligatoriske
 - "loanType" kan være "MORTGAGE" (default) eller "OTHER"
 - Bruk flere låneposter for å splitte boliglån på flere banker (f.eks. SPK + annen bank)
-- "monthlyInterest" er månedlige rentekostnader
-- "monthlyPrincipal" er månedlig avdrag
+- "repaymentType" er "ANNUITY" (annuitetslån, fast månedlig betaling) eller "SERIAL" (serielån, fast avdrag og synkende rente). Standard er "ANNUITY"
+- "principalAmount" er dagens restgjeld (eller fullt lånebeløp for helt nye lån) i NOK
+- "annualInterestRate" er årlig nominell rente i prosent, f.eks. 5.5
+- "termMonths" er gjenværende nedbetalingstid i antall måneder (f.eks. 300 for 25 år)
 - "monthlyFees" er månedlige gebyrer (valgfritt, standard 0)
+- Appen regner ut månedlig rente og avdrag automatisk basert på disse feltene
 
 For "trips":
 - "name" er obligatorisk
@@ -157,8 +168,8 @@ Eksempel:
     { "name": "Kari", "grossMonthlyIncome": 48000, "taxPercent": 30 }
   ],
   "loans": [
-    { "bankName": "SPK", "loanName": "Boliglån del 1", "loanType": "MORTGAGE", "monthlyInterest": 4200, "monthlyPrincipal": 3500, "monthlyFees": 0 },
-    { "bankName": "DNB", "loanName": "Boliglån del 2", "loanType": "MORTGAGE", "monthlyInterest": 4300, "monthlyPrincipal": 4200, "monthlyFees": 50 }
+    { "bankName": "SPK", "loanName": "Boliglån del 1", "loanType": "MORTGAGE", "repaymentType": "ANNUITY", "principalAmount": 1500000, "annualInterestRate": 4.95, "termMonths": 300, "monthlyFees": 0 },
+    { "bankName": "DNB", "loanName": "Boliglån del 2", "loanType": "MORTGAGE", "repaymentType": "SERIAL", "principalAmount": 800000, "annualInterestRate": 5.6, "termMonths": 240, "monthlyFees": 50 }
   ],
   "trips": [
     { "name": "Sommerferie", "transportType": "AIR_OR_PUBLIC", "annualTrips": 1, "ticketPerTrip": 12000 },
@@ -268,19 +279,40 @@ function parseJsonInput(
           errors.push(`Lån ${i + 1}: Mangler "bankName" eller "loanName".`)
           continue
         }
-        const interest = Number(loan.monthlyInterest)
-        const principal = Number(loan.monthlyPrincipal)
-        if (isNaN(interest) || isNaN(principal)) {
-          errors.push(`Lån ${i + 1}: Ugyldig rente eller avdrag.`)
+        const principalAmount = Number(loan.principalAmount)
+        const annualInterestRate = Number(loan.annualInterestRate)
+        let termMonths = Number(loan.termMonths)
+        if (
+          (!isFinite(termMonths) || termMonths <= 0) &&
+          isFinite(Number(loan.termYears))
+        ) {
+          termMonths = Number(loan.termYears) * 12
+        }
+        if (
+          !isFinite(principalAmount) ||
+          principalAmount <= 0 ||
+          !isFinite(annualInterestRate) ||
+          annualInterestRate < 0 ||
+          !isFinite(termMonths) ||
+          termMonths <= 0
+        ) {
+          errors.push(
+            `Lån ${i + 1}: Ugyldig lånebeløp, rente eller nedbetalingstid.`
+          )
           continue
         }
         const loanType = String(loan.loanType ?? "MORTGAGE").toUpperCase()
+        const repaymentType = String(
+          loan.repaymentType ?? "ANNUITY"
+        ).toUpperCase()
         data.loans.push({
           bankName: String(loan.bankName).trim(),
           loanName: String(loan.loanName).trim(),
           loanType: loanType === "OTHER" ? "OTHER" : "MORTGAGE",
-          monthlyInterest: interest,
-          monthlyPrincipal: principal,
+          repaymentType: repaymentType === "SERIAL" ? "SERIAL" : "ANNUITY",
+          principalAmount,
+          annualInterestRate,
+          termMonths: Math.max(1, Math.round(termMonths)),
           monthlyFees: isNaN(Number(loan.monthlyFees))
             ? 0
             : Number(loan.monthlyFees),
@@ -436,18 +468,39 @@ function buildLoanDiffs(
       format: (v) => (String(v) === "MORTGAGE" ? "Boliglån" : "Annet"),
     },
     {
-      key: "monthlyInterest",
-      label: "Månedlig rente",
-      existingValue: existing.monthlyInterest,
-      newValue: imported.monthlyInterest,
+      key: "repaymentType",
+      label: "Nedbetalingstype",
+      existingValue: existing.repaymentType,
+      newValue: imported.repaymentType,
+      format: (v) =>
+        String(v) === "SERIAL" ? "Serielån" : "Annuitetslån",
+    },
+    {
+      key: "principalAmount",
+      label: "Lånebeløp",
+      existingValue: existing.principalAmount,
+      newValue: imported.principalAmount,
       format: (v) => formatPrice(Number(v)),
     },
     {
-      key: "monthlyPrincipal",
-      label: "Månedlig avdrag",
-      existingValue: existing.monthlyPrincipal,
-      newValue: imported.monthlyPrincipal,
-      format: (v) => formatPrice(Number(v)),
+      key: "annualInterestRate",
+      label: "Årlig rente",
+      existingValue: existing.annualInterestRate,
+      newValue: imported.annualInterestRate,
+      format: (v) => `${v}%`,
+    },
+    {
+      key: "termMonths",
+      label: "Nedbetalingstid",
+      existingValue: existing.termMonths,
+      newValue: imported.termMonths,
+      format: (v) => {
+        const months = Number(v)
+        const years = months / 12
+        return Number.isInteger(years)
+          ? `${years} år`
+          : `${years.toFixed(1)} år`
+      },
     },
     {
       key: "monthlyFees",
@@ -851,8 +904,10 @@ export function BudgetLlmImportPageClient({
               const fields: {
                 bankName?: string
                 loanType?: string
-                monthlyInterest?: number
-                monthlyPrincipal?: number
+                repaymentType?: string
+                principalAmount?: number
+                annualInterestRate?: number
+                termMonths?: number
                 monthlyFees?: number
               } = {}
               const selected = selectedFields.get(d.existingId) ?? new Set()
@@ -860,10 +915,14 @@ export function BudgetLlmImportPageClient({
                 fields.bankName = d.importedItem.bankName
               if (selected.has("loanType"))
                 fields.loanType = d.importedItem.loanType
-              if (selected.has("monthlyInterest"))
-                fields.monthlyInterest = d.importedItem.monthlyInterest
-              if (selected.has("monthlyPrincipal"))
-                fields.monthlyPrincipal = d.importedItem.monthlyPrincipal
+              if (selected.has("repaymentType"))
+                fields.repaymentType = d.importedItem.repaymentType
+              if (selected.has("principalAmount"))
+                fields.principalAmount = d.importedItem.principalAmount
+              if (selected.has("annualInterestRate"))
+                fields.annualInterestRate = d.importedItem.annualInterestRate
+              if (selected.has("termMonths"))
+                fields.termMonths = d.importedItem.termMonths
               if (selected.has("monthlyFees"))
                 fields.monthlyFees = d.importedItem.monthlyFees
               return { id: d.existingId, fields }
@@ -1164,15 +1223,19 @@ export function BudgetLlmImportPageClient({
                         />
                       ))}
                     {newLoans.map((loan, index) => {
-                      const total =
-                        loan.monthlyInterest +
-                        loan.monthlyPrincipal +
-                        loan.monthlyFees
+                      const monthly = calculateLoanMonthlyAmounts({
+                        principalAmount: loan.principalAmount,
+                        annualInterestRate: loan.annualInterestRate,
+                        termMonths: loan.termMonths,
+                        repaymentType:
+                          loan.repaymentType as BudgetLoanRepaymentType,
+                      })
+                      const total = monthly.monthlyPayment + loan.monthlyFees
                       return (
                         <SimpleNewRow
                           key={`loan-${index}`}
                           title={loan.loanName}
-                          meta={`${loan.bankName} · ${loan.loanType === "MORTGAGE" ? "Boliglån" : "Annet"}`}
+                          meta={`${loan.bankName} · ${loan.loanType === "MORTGAGE" ? "Boliglån" : "Annet"} · ${loan.repaymentType === "SERIAL" ? "Serielån" : "Annuitetslån"}`}
                           value={`${formatPrice(total)}/mnd`}
                         />
                       )

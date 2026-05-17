@@ -67,8 +67,10 @@ describe("calculateBudgetStats", () => {
       ],
       loans: [
         {
-          monthlyInterest: "1000",
-          monthlyPrincipal: "4000",
+          principalAmount: "1200000",
+          annualInterestRate: "0",
+          termMonths: "240",
+          repaymentType: "ANNUITY",
           monthlyFees: "100",
         },
       ],

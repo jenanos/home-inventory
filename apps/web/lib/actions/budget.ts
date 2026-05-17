@@ -4,6 +4,7 @@ import {
   db,
   Prisma,
   type BudgetEntryType,
+  type BudgetLoanRepaymentType,
   type BudgetLoanType,
   type TripTransportType,
 } from "@workspace/db"
@@ -21,6 +22,10 @@ const VALID_ENTRY_TYPES = new Set<BudgetEntryType>([
   "DEDUCTION",
 ])
 const VALID_LOAN_TYPES = new Set<BudgetLoanType>(["MORTGAGE", "OTHER"])
+const VALID_REPAYMENT_TYPES = new Set<BudgetLoanRepaymentType>([
+  "ANNUITY",
+  "SERIAL",
+])
 const VALID_TRIP_TYPES = new Set<TripTransportType>(["AIR_OR_PUBLIC", "CAR"])
 
 type TransactionOrDbClient = Prisma.TransactionClient | typeof db
@@ -54,6 +59,11 @@ function normalizeEntryType(type: string) {
 function normalizeLoanType(type?: string) {
   const value = (type ?? "MORTGAGE").toUpperCase() as BudgetLoanType
   return VALID_LOAN_TYPES.has(value) ? value : "MORTGAGE"
+}
+
+function normalizeRepaymentType(type?: string) {
+  const value = (type ?? "ANNUITY").toUpperCase() as BudgetLoanRepaymentType
+  return VALID_REPAYMENT_TYPES.has(value) ? value : "ANNUITY"
 }
 
 function normalizeTripType(type: string) {
@@ -284,8 +294,10 @@ interface UpsertBudgetLoanInput {
   bankName: string
   loanName: string
   loanType: BudgetLoanType
-  monthlyInterest: number
-  monthlyPrincipal: number
+  repaymentType: BudgetLoanRepaymentType
+  principalAmount: number
+  annualInterestRate: number
+  termMonths: number
   monthlyFees: number
 }
 
@@ -302,8 +314,10 @@ export async function upsertBudgetLoan(input: UpsertBudgetLoanInput) {
         bankName: input.bankName,
         loanName: input.loanName,
         loanType: input.loanType,
-        monthlyInterest: input.monthlyInterest,
-        monthlyPrincipal: input.monthlyPrincipal,
+        repaymentType: input.repaymentType,
+        principalAmount: input.principalAmount,
+        annualInterestRate: input.annualInterestRate,
+        termMonths: input.termMonths,
         monthlyFees: input.monthlyFees,
       },
     })
@@ -318,8 +332,10 @@ export async function upsertBudgetLoan(input: UpsertBudgetLoanInput) {
         bankName: input.bankName,
         loanName: input.loanName,
         loanType: input.loanType,
-        monthlyInterest: input.monthlyInterest,
-        monthlyPrincipal: input.monthlyPrincipal,
+        repaymentType: input.repaymentType,
+        principalAmount: input.principalAmount,
+        annualInterestRate: input.annualInterestRate,
+        termMonths: input.termMonths,
         monthlyFees: input.monthlyFees,
         sortOrder,
       },
@@ -546,8 +562,10 @@ interface BulkBudgetLoanInput {
   bankName: string
   loanName: string
   loanType?: string
-  monthlyInterest: number
-  monthlyPrincipal: number
+  repaymentType?: string
+  principalAmount: number
+  annualInterestRate: number
+  termMonths: number
   monthlyFees?: number
 }
 
@@ -613,8 +631,10 @@ export async function bulkImportBudget(input: BulkBudgetImportInput) {
             bankName: loan.bankName,
             loanName: loan.loanName,
             loanType: normalizeLoanType(loan.loanType),
-            monthlyInterest: loan.monthlyInterest,
-            monthlyPrincipal: loan.monthlyPrincipal,
+            repaymentType: normalizeRepaymentType(loan.repaymentType),
+            principalAmount: loan.principalAmount,
+            annualInterestRate: loan.annualInterestRate,
+            termMonths: Math.max(1, Math.round(loan.termMonths || 1)),
             monthlyFees: loan.monthlyFees ?? 0,
             sortOrder,
           },
@@ -723,8 +743,10 @@ export async function replaceBudget(input: BulkBudgetImportInput) {
             bankName: loan.bankName,
             loanName: loan.loanName,
             loanType: normalizeLoanType(loan.loanType),
-            monthlyInterest: loan.monthlyInterest,
-            monthlyPrincipal: loan.monthlyPrincipal,
+            repaymentType: normalizeRepaymentType(loan.repaymentType),
+            principalAmount: loan.principalAmount,
+            annualInterestRate: loan.annualInterestRate,
+            termMonths: Math.max(1, Math.round(loan.termMonths || 1)),
             monthlyFees: loan.monthlyFees ?? 0,
             sortOrder,
           },
@@ -809,8 +831,10 @@ export interface ExistingBudgetLoan {
   bankName: string
   loanName: string
   loanType: string
-  monthlyInterest: number
-  monthlyPrincipal: number
+  repaymentType: string
+  principalAmount: number
+  annualInterestRate: number
+  termMonths: number
   monthlyFees: number
 }
 
@@ -871,8 +895,10 @@ export async function findExistingBudgetItems(): Promise<ExistingBudgetItems> {
       bankName: loan.bankName,
       loanName: loan.loanName,
       loanType: loan.loanType,
-      monthlyInterest: Number(loan.monthlyInterest),
-      monthlyPrincipal: Number(loan.monthlyPrincipal),
+      repaymentType: loan.repaymentType,
+      principalAmount: Number(loan.principalAmount),
+      annualInterestRate: Number(loan.annualInterestRate),
+      termMonths: loan.termMonths,
       monthlyFees: Number(loan.monthlyFees),
     })),
     trips: budget.trips.map((trip) => ({
@@ -910,8 +936,10 @@ interface BudgetLoanFieldUpdate {
   fields: {
     bankName?: string
     loanType?: string
-    monthlyInterest?: number
-    monthlyPrincipal?: number
+    repaymentType?: string
+    principalAmount?: number
+    annualInterestRate?: number
+    termMonths?: number
     monthlyFees?: number
   }
 }
@@ -1007,8 +1035,10 @@ export async function bulkImportBudgetWithDuplicates(
             bankName: loan.bankName,
             loanName: loan.loanName,
             loanType: normalizeLoanType(loan.loanType),
-            monthlyInterest: loan.monthlyInterest,
-            monthlyPrincipal: loan.monthlyPrincipal,
+            repaymentType: normalizeRepaymentType(loan.repaymentType),
+            principalAmount: loan.principalAmount,
+            annualInterestRate: loan.annualInterestRate,
+            termMonths: Math.max(1, Math.round(loan.termMonths || 1)),
             monthlyFees: loan.monthlyFees ?? 0,
             sortOrder,
           },
@@ -1024,8 +1054,10 @@ export async function bulkImportBudgetWithDuplicates(
         const data: {
           bankName?: string
           loanType?: BudgetLoanType
-          monthlyInterest?: number
-          monthlyPrincipal?: number
+          repaymentType?: BudgetLoanRepaymentType
+          principalAmount?: number
+          annualInterestRate?: number
+          termMonths?: number
           monthlyFees?: number
         } = {}
 
@@ -1035,11 +1067,17 @@ export async function bulkImportBudgetWithDuplicates(
         if (update.fields.loanType !== undefined) {
           data.loanType = normalizeLoanType(update.fields.loanType)
         }
-        if (update.fields.monthlyInterest !== undefined) {
-          data.monthlyInterest = update.fields.monthlyInterest
+        if (update.fields.repaymentType !== undefined) {
+          data.repaymentType = normalizeRepaymentType(update.fields.repaymentType)
         }
-        if (update.fields.monthlyPrincipal !== undefined) {
-          data.monthlyPrincipal = update.fields.monthlyPrincipal
+        if (update.fields.principalAmount !== undefined) {
+          data.principalAmount = update.fields.principalAmount
+        }
+        if (update.fields.annualInterestRate !== undefined) {
+          data.annualInterestRate = update.fields.annualInterestRate
+        }
+        if (update.fields.termMonths !== undefined) {
+          data.termMonths = Math.max(1, Math.round(update.fields.termMonths))
         }
         if (update.fields.monthlyFees !== undefined) {
           data.monthlyFees = update.fields.monthlyFees
