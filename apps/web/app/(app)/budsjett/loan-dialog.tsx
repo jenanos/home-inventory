@@ -58,9 +58,7 @@ export function LoanDialog({ open, onOpenChange, loan }: LoanDialogProps) {
         setLoanType(loan.loanType)
         setRepaymentType(loan.repaymentType)
         setPrincipalAmount(loan.principalAmount > 0 ? String(loan.principalAmount) : "")
-        setAnnualInterestRate(
-          loan.annualInterestRate > 0 ? String(loan.annualInterestRate) : ""
-        )
+        setAnnualInterestRate(String(loan.annualInterestRate))
         setTermYears(loan.termMonths > 0 ? String(loan.termMonths / 12) : "")
         setMonthlyFees(String(loan.monthlyFees))
       } else {
