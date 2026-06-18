@@ -318,10 +318,13 @@ være tilpasset planter.
    `lists/[id]/llm-import-page-client.tsx` (`parseJsonInput`): toler markdown
    code-blocks, valider at det er en array, valider `name`, map og rens hvert
    felt, valider enum-verdier mot tillatte sett.
-4. **Duplikatdeteksjon:** Legg til `findExistingPlants(householdId, names)` i
-   `apps/web/lib/actions/plant.ts`. Match på navn (case-insensitivt), bygg
-   diff per felt og la brukeren velge hvilke felter som skal oppdateres
-   (`DuplicateFieldDiffCard`).
+4. **Duplikatdeteksjon:** Legg til `findExistingPlants(names)` i
+   `apps/web/lib/actions/plant.ts`. **Ikke** ta `householdId` som argument —
+   det er en Server Action som kalles fra klienten, så tenant-scope skal aldri
+   være klientstyrt. Utled husholdningen internt med `requireHousehold()` og
+   filtrer på `membership.householdId` (samme prinsipp som de eksisterende
+   import-helperne). Match på navn (case-insensitivt), bygg diff per felt og la
+   brukeren velge hvilke felter som skal oppdateres (`DuplicateFieldDiffCard`).
 5. **To importspor (`LlmImportModeToggle`):**
    - *Legg til/oppdater* (merge med duplikathåndtering)
    - *Erstatt alt* (replace) — sletter eksisterende og setter inn nytt
@@ -329,7 +332,9 @@ være tilpasset planter.
    - `bulkCreatePlants(input)`
    - `bulkImportPlantsWithDuplicates(input)` (nye + valgte felt-oppdateringer)
    - `replacePlants(input)` (innen `db.$transaction`)
-   Alle scoped til `householdId` og med `revalidatePath("/hage")`.
+   Ingen av disse skal motta `householdId` fra klienten — alle utleder
+   husholdningen via `requireHousehold()` og scoper til `membership.householdId`,
+   og kaller `revalidatePath("/hage")`.
 7. Naviger tilbake til `/hage` med `toast` ved suksess.
 
 **Akseptansekriterier:**
