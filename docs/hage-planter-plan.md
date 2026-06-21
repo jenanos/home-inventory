@@ -11,6 +11,64 @@ Rekkefølgen er ment som anbefalt utviklingsrekkefølge.
 
 ---
 
+## Status (oppdatert 2026-06-21)
+
+| Oppgave | Status |
+| --- | --- |
+| 1 — Datamodell og migrasjon | ✅ Ferdig |
+| 2 — Query-funksjoner | ✅ Ferdig |
+| 3 — Server Actions (CRUD) | ✅ Ferdig |
+| 4 — Hovedside `/hage` med oversikt | ✅ Ferdig |
+| 5 — Opprett/rediger plante (dialog + skjema) | ✅ Ferdig |
+| 6 — LLM-import | ✅ Ferdig |
+| 7 — Navigasjon | ✅ Ferdig |
+| 8 — Detaljside og stell-logg | ⬜ Gjenstår (valgfri utvidelse) |
+| 9 — Verifisering og opprydding | 🟡 Delvis (`typecheck` + `lint` grønne; se note) |
+
+**MVP-en er på plass.** Hele hage-området (datamodell, queries, actions,
+oversiktsside, opprett/rediger-skjema, LLM-import med duplikathåndtering og
+«erstatt alt», samt navigasjon) er implementert.
+
+### Hva som er gjort i denne runden
+
+- **Oppgave 1:** La til `Plant`-modellen og enums (`WateringNeed`,
+  `WateringMethod`, `SunNeed`, `PlantType`, `Lifecycle`) i
+  `packages/db/prisma/schema.prisma`, relasjon `plants Plant[]` på `Household`,
+  `@@index([householdId])`, og migrasjon
+  `packages/db/prisma/migrations/20260621120000_add_plant_model/`. Prisma-klient
+  generert.
+- **Oppgave 2:** `apps/web/lib/queries/plant.ts` med `getPlants` og `getPlant`.
+- **Oppgave 3:** `apps/web/lib/actions/plant.ts` med `createPlant`,
+  `updatePlant`, `deletePlant` (alle tilgangskontrollert via
+  `requireHousehold()`).
+- **Oppgave 4:** `apps/web/app/(app)/hage/page.tsx` + `plant-card.tsx` (badges
+  for vann/sol/vanningsmetode/type + tydelig giftig-markør, tomtilstand med
+  `Flower2`).
+- **Oppgave 5:** `apps/web/app/(app)/hage/plant-form-dialog.tsx` — delt skjema
+  for både opprett og rediger (Sheet/Drawer, `Select` for enums, `Switch` for
+  giftig, datovelgere). Redigering/sletting nås via meny på `PlantCard`.
+- **Oppgave 6:** `apps/web/app/(app)/hage/llm-import/page.tsx` (server) +
+  `llm-import-page-client.tsx` (klient). Gjenbruker `llm-import-page.tsx` og
+  `duplicate-field-diff.tsx`. To spor (merge med duplikathåndtering + «erstatt
+  alt» i transaksjon). Import-actions (`bulkCreatePlants`,
+  `bulkImportPlantsWithDuplicates`, `replacePlants`) og `findExistingPlants` —
+  alle utleder husholdning internt, tar aldri `householdId` fra klienten.
+- **Oppgave 7:** «Hage» lagt til i `app-sidebar.tsx` og `mobile-nav.tsx` med
+  `Flower2`-ikon, plassert før «Innstillinger».
+
+### Gjenstår
+
+- **Oppgave 8** (valgfri): detaljside `/hage/[id]` og `PlantCareLog`-modell for
+  stell-historikk.
+- **Oppgave 9:** `pnpm typecheck` og `pnpm lint` kjører grønt (ingen feil i de
+  nye filene, ingen `any`). `pnpm build` kunne ikke fullføres i dette miljøet
+  fordi Turbopack ikke får hentet Google Fonts (TLS-relatert nettverksfeil i
+  sandkassen) — dette er ikke relatert til endringene. Kjør `pnpm build` og en
+  manuell gjennomgang lokalt. Migrasjonen er skrevet for hånd (ingen kjørende
+  database i miljøet); verifiser med `pnpm db:migrate` lokalt.
+
+---
+
 ## Mål og kontekst
 
 Brukeren har overtatt et hus med en stor hage med mange planter og blomster som

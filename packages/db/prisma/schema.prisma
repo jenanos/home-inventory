@@ -105,6 +105,7 @@ model Household {
   lists            ShoppingList[]
   categories       Category[]
   maintenanceTasks MaintenanceTask[]
+  plants           Plant[]
   budget           Budget?
 }
 
@@ -259,6 +260,78 @@ model TaskProgressEntry {
   task MaintenanceTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
   @@index([taskId, sortOrder])
+}
+
+// ─── Hage / Planter models ──────────────────────────────────────
+
+enum WateringNeed {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum WateringMethod {
+  MANUAL
+  AUTOMATIC
+}
+
+enum SunNeed {
+  FULL_SUN // Mye sol
+  PARTIAL_SHADE // Halvskygge
+  SHADE // Skygge / lite sol
+}
+
+enum PlantType {
+  TREE // Tre
+  SHRUB // Busk
+  PERENNIAL // Staude
+  ANNUAL // Ettårig
+  FLOWER // Blomst
+  HERB // Krydder/urt
+  VEGETABLE // Grønnsak
+  CLIMBER // Klatreplante
+  GRASS // Gress/prydgress
+  OTHER
+}
+
+enum Lifecycle {
+  ANNUAL // Ettårig
+  BIENNIAL // Toårig
+  PERENNIAL // Flerårig
+}
+
+model Plant {
+  id               String          @id @default(uuid()) @db.Uuid
+  name             String
+  species          String?
+  location         String?
+  description      String?         @db.Text
+  careInstructions String?         @db.Text
+  wateringNeed     WateringNeed?
+  wateringMethod   WateringMethod?
+  lastWateredAt    DateTime?
+  sunNeed          SunNeed?
+  lastPrunedAt     DateTime?
+  pruningSeason    String?
+  isToxic          Boolean         @default(false)
+  toxicityNotes    String?
+  plantType        PlantType?
+  soilType         String?
+  fertilizer       String?
+  hardinessZone    String?
+  lifecycle        Lifecycle?
+  bloomTime        String?
+  plantedAt        DateTime?
+  pests            String?         @db.Text
+  notes            String?         @db.Text
+  imageUrl         String?
+  householdId      String          @db.Uuid
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  @@index([householdId])
 }
 
 // ─── Budget models ──────────────────────────────────────────────
