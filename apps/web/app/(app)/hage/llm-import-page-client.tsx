@@ -141,7 +141,10 @@ Eksempel:
 ]`
 }
 
-function buildContextPrompt(existingPlants: ParsedPlant[], householdName?: string) {
+function buildContextPrompt(
+  existingPlants: ParsedPlant[],
+  householdName?: string
+) {
   return `Jeg bruker en app for å holde oversikt over plantene i hagen${householdName ? ` for ${householdName}` : ""}.
 
 Her er dagens planter i JSON-format:
@@ -469,9 +472,9 @@ export function PlantLlmImportPageClient({
   const [isPending, startTransition] = useTransition()
   const [newPlants, setNewPlants] = useState<ParsedPlant[]>([])
   const [duplicates, setDuplicates] = useState<PlantDuplicate[]>([])
-  const [selectedFields, setSelectedFields] = useState<Map<string, Set<string>>>(
-    new Map()
-  )
+  const [selectedFields, setSelectedFields] = useState<
+    Map<string, Set<string>>
+  >(new Map())
   const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false)
 
   const prompt = buildPrompt()
@@ -515,6 +518,13 @@ export function PlantLlmImportPageClient({
     setParseError(error)
 
     if (mode === "replace") {
+      // Only a valid (possibly empty) array may reach the destructive replace
+      // preview. Invalid JSON / a non-array / entries missing "name" all yield
+      // plants: [] with an error — keep the user on the paste step in that case
+      // so they can't accidentally wipe the whole list via "Tøm planteoversikten".
+      if (plants.length === 0 && error !== null) {
+        return
+      }
       setNewPlants(plants)
       setDuplicates([])
       setSelectedFields(new Map())
@@ -755,7 +765,9 @@ export function PlantLlmImportPageClient({
       {step === "paste" && (
         <LlmImportPasteStep
           title={
-            mode === "replace" ? "Lim inn oppdatert JSON" : "Lim inn JSON-svaret"
+            mode === "replace"
+              ? "Lim inn oppdatert JSON"
+              : "Lim inn JSON-svaret"
           }
           label="JSON fra LLM"
           inputId="plant-json-input"
@@ -819,7 +831,9 @@ export function PlantLlmImportPageClient({
             {mode === "merge" && duplicates.length > 0 && (
               <section className="space-y-3">
                 <div className="flex items-center justify-between gap-3">
-                  <h3 className="font-heading text-lg font-medium">Duplikater</h3>
+                  <h3 className="font-heading text-lg font-medium">
+                    Duplikater
+                  </h3>
                   <span className="text-sm text-muted-foreground">
                     {duplicates.length} treff
                   </span>

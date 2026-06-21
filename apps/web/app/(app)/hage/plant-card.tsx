@@ -100,12 +100,16 @@ export function PlantCard({ plant }: { plant: Plant }) {
               {plant.name}
             </CardTitle>
             {plant.species && (
-              <p className="text-muted-foreground text-sm italic">
+              <p className="text-sm text-muted-foreground italic">
                 {plant.species}
               </p>
             )}
           </div>
-          <DropdownMenu>
+          <DropdownMenu
+            onOpenChange={(open) => {
+              if (!open) setConfirming(false)
+            }}
+          >
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon-sm" className="shrink-0">
                 <MoreVertical className="h-4 w-4" />
@@ -142,10 +146,10 @@ export function PlantCard({ plant }: { plant: Plant }) {
       </CardHeader>
       <CardContent className="flex flex-1 flex-col gap-3">
         {plant.location && (
-          <p className="text-muted-foreground text-sm">📍 {plant.location}</p>
+          <p className="text-sm text-muted-foreground">📍 {plant.location}</p>
         )}
         {plant.description && (
-          <p className="text-muted-foreground line-clamp-2 text-sm">
+          <p className="line-clamp-2 text-sm text-muted-foreground">
             {plant.description}
           </p>
         )}

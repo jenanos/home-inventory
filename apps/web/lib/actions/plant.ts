@@ -360,83 +360,75 @@ export async function bulkImportPlantsWithDuplicates(
 ) {
   const { membership } = await requireHousehold()
 
-  let count = 0
-
-  if (input.newPlants.length > 0) {
-    const results = await db.$transaction(
-      input.newPlants.map((plant) =>
-        db.plant.create({
-          data: toPlantData(plant, membership.householdId),
-        })
-      )
-    )
-    count += results.length
-  }
-
-  if (input.updates.length > 0) {
-    const updateOps = input.updates.map((update) => {
-      const f = update.fields
-      const data: {
-        species?: string
-        location?: string
-        description?: string
-        careInstructions?: string
-        wateringNeed?: WateringNeed
-        wateringMethod?: WateringMethod
-        sunNeed?: SunNeed
-        pruningSeason?: string
-        isToxic?: boolean
-        toxicityNotes?: string
-        plantType?: PlantType
-        soilType?: string
-        fertilizer?: string
-        hardinessZone?: string
-        lifecycle?: Lifecycle
-        bloomTime?: string
-        pests?: string
-        notes?: string
-      } = {}
-
-      if (f.species !== undefined) data.species = f.species || undefined
-      if (f.location !== undefined) data.location = f.location || undefined
-      if (f.description !== undefined)
-        data.description = f.description || undefined
-      if (f.careInstructions !== undefined)
-        data.careInstructions = f.careInstructions || undefined
-      if (f.wateringNeed !== undefined)
-        data.wateringNeed = coerceEnum(f.wateringNeed, validWateringNeed)
-      if (f.wateringMethod !== undefined)
-        data.wateringMethod = coerceEnum(f.wateringMethod, validWateringMethod)
-      if (f.sunNeed !== undefined)
-        data.sunNeed = coerceEnum(f.sunNeed, validSunNeed)
-      if (f.pruningSeason !== undefined)
-        data.pruningSeason = f.pruningSeason || undefined
-      if (f.isToxic !== undefined) data.isToxic = f.isToxic
-      if (f.toxicityNotes !== undefined)
-        data.toxicityNotes = f.toxicityNotes || undefined
-      if (f.plantType !== undefined)
-        data.plantType = coerceEnum(f.plantType, validPlantType)
-      if (f.soilType !== undefined) data.soilType = f.soilType || undefined
-      if (f.fertilizer !== undefined)
-        data.fertilizer = f.fertilizer || undefined
-      if (f.hardinessZone !== undefined)
-        data.hardinessZone = f.hardinessZone || undefined
-      if (f.lifecycle !== undefined)
-        data.lifecycle = coerceEnum(f.lifecycle, validLifecycle)
-      if (f.bloomTime !== undefined) data.bloomTime = f.bloomTime || undefined
-      if (f.pests !== undefined) data.pests = f.pests || undefined
-      if (f.notes !== undefined) data.notes = f.notes || undefined
-
-      return db.plant.update({
-        where: { id: update.id, householdId: membership.householdId },
-        data,
-      })
+  const createOps = input.newPlants.map((plant) =>
+    db.plant.create({
+      data: toPlantData(plant, membership.householdId),
     })
+  )
 
-    await db.$transaction(updateOps)
-    count += input.updates.length
-  }
+  const updateOps = input.updates.map((update) => {
+    const f = update.fields
+    const data: {
+      species?: string
+      location?: string
+      description?: string
+      careInstructions?: string
+      wateringNeed?: WateringNeed
+      wateringMethod?: WateringMethod
+      sunNeed?: SunNeed
+      pruningSeason?: string
+      isToxic?: boolean
+      toxicityNotes?: string
+      plantType?: PlantType
+      soilType?: string
+      fertilizer?: string
+      hardinessZone?: string
+      lifecycle?: Lifecycle
+      bloomTime?: string
+      pests?: string
+      notes?: string
+    } = {}
+
+    if (f.species !== undefined) data.species = f.species || undefined
+    if (f.location !== undefined) data.location = f.location || undefined
+    if (f.description !== undefined)
+      data.description = f.description || undefined
+    if (f.careInstructions !== undefined)
+      data.careInstructions = f.careInstructions || undefined
+    if (f.wateringNeed !== undefined)
+      data.wateringNeed = coerceEnum(f.wateringNeed, validWateringNeed)
+    if (f.wateringMethod !== undefined)
+      data.wateringMethod = coerceEnum(f.wateringMethod, validWateringMethod)
+    if (f.sunNeed !== undefined)
+      data.sunNeed = coerceEnum(f.sunNeed, validSunNeed)
+    if (f.pruningSeason !== undefined)
+      data.pruningSeason = f.pruningSeason || undefined
+    if (f.isToxic !== undefined) data.isToxic = f.isToxic
+    if (f.toxicityNotes !== undefined)
+      data.toxicityNotes = f.toxicityNotes || undefined
+    if (f.plantType !== undefined)
+      data.plantType = coerceEnum(f.plantType, validPlantType)
+    if (f.soilType !== undefined) data.soilType = f.soilType || undefined
+    if (f.fertilizer !== undefined) data.fertilizer = f.fertilizer || undefined
+    if (f.hardinessZone !== undefined)
+      data.hardinessZone = f.hardinessZone || undefined
+    if (f.lifecycle !== undefined)
+      data.lifecycle = coerceEnum(f.lifecycle, validLifecycle)
+    if (f.bloomTime !== undefined) data.bloomTime = f.bloomTime || undefined
+    if (f.pests !== undefined) data.pests = f.pests || undefined
+    if (f.notes !== undefined) data.notes = f.notes || undefined
+
+    return db.plant.update({
+      where: { id: update.id, householdId: membership.householdId },
+      data,
+    })
+  })
+
+  // Run creates and updates in a single transaction so a failed update (e.g. a
+  // duplicate plant deleted between preview and import) doesn't leave the newly
+  // created plants behind as partial data.
+  await db.$transaction([...createOps, ...updateOps])
 
   revalidatePath("/hage")
-  return { count }
+  return { count: createOps.length + updateOps.length }
 }
