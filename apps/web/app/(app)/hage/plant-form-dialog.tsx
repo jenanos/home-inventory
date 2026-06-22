@@ -102,6 +102,7 @@ export function PlantFormDialog({
   const [pests, setPests] = useState(plant?.pests ?? "")
   const [notes, setNotes] = useState(plant?.notes ?? "")
   const [imageUrl, setImageUrl] = useState(plant?.imageUrl ?? "")
+  const [sourceUrl, setSourceUrl] = useState(plant?.sourceUrl ?? "")
   const [error, setError] = useState("")
 
   function resetForm() {
@@ -129,6 +130,7 @@ export function PlantFormDialog({
     setPests("")
     setNotes("")
     setImageUrl("")
+    setSourceUrl("")
     setError("")
   }
 
@@ -166,6 +168,7 @@ export function PlantFormDialog({
             pests: pests.trim() || null,
             notes: notes.trim() || null,
             imageUrl: imageUrl.trim() || null,
+            sourceUrl: sourceUrl.trim() || null,
           })
         } else {
           await createPlant({
@@ -192,6 +195,7 @@ export function PlantFormDialog({
             pests: pests.trim() || undefined,
             notes: notes.trim() || undefined,
             imageUrl: imageUrl.trim() || undefined,
+            sourceUrl: sourceUrl.trim() || undefined,
           })
         }
         resetForm()
@@ -513,6 +517,16 @@ export function PlantFormDialog({
           placeholder="https://..."
           value={imageUrl}
           onChange={(e) => setImageUrl(e.target.value)}
+        />
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="plant-source">Lenke til nettside</Label>
+        <Input
+          id="plant-source"
+          placeholder="F.eks. https://no.wikipedia.org/..."
+          value={sourceUrl}
+          onChange={(e) => setSourceUrl(e.target.value)}
         />
       </div>
 
