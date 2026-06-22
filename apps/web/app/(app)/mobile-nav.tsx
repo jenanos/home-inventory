@@ -2,7 +2,14 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutDashboard, ShoppingCart, Settings, Wrench, Wallet } from "lucide-react"
+import {
+  LayoutDashboard,
+  ShoppingCart,
+  Settings,
+  Wrench,
+  Wallet,
+  Flower2,
+} from "lucide-react"
 import { cn } from "@workspace/ui/lib/utils"
 
 export function MobileNav() {
@@ -13,6 +20,7 @@ export function MobileNav() {
     { href: "/lists", label: "Innkjøp", icon: ShoppingCart },
     { href: "/vedlikehold", label: "Vedlikehold", icon: Wrench },
     { href: "/budsjett", label: "Budsjett", icon: Wallet },
+    { href: "/hage", label: "Hage", icon: Flower2 },
     { href: "/settings", label: "Innstillinger", icon: Settings },
   ]
 

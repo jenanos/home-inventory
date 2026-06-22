@@ -11,6 +11,7 @@ import {
   Plus,
   Wrench,
   Wallet,
+  Flower2,
   Shield,
 } from "lucide-react"
 import { Logo } from "@/components/logo"
@@ -51,6 +52,7 @@ export function AppSidebar({ user, householdName, lists, isAdmin }: AppSidebarPr
     { href: "/lists", label: "Innkjøp", icon: ShoppingCart },
     { href: "/vedlikehold", label: "Vedlikehold", icon: Wrench },
     { href: "/budsjett", label: "Budsjett", icon: Wallet },
+    { href: "/hage", label: "Hage", icon: Flower2 },
     { href: "/settings", label: "Innstillinger", icon: Settings },
     ...(isAdmin
       ? [{ href: "/admin", label: "Administrasjon", icon: Shield }]
