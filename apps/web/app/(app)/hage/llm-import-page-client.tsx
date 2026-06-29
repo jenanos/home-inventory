@@ -56,6 +56,8 @@ interface ParsedPlant {
   bloomTime?: string
   pests?: string
   notes?: string
+  imageUrl?: string
+  sourceUrl?: string
 }
 
 type ImportMode = "merge" | "replace"
@@ -101,7 +103,9 @@ Svar KUN med en gyldig JSON-array, uten noe annet tekst rundt. Hvert objekt repr
   "lifecycle": "ANNUAL | BIENNIAL | PERENNIAL",
   "bloomTime": "Blomstringstid",
   "pests": "Vanlige skadedyr/sykdommer å se etter",
-  "notes": "Egne notater"
+  "notes": "Egne notater",
+  "imageUrl": "Direkte URL til et bilde av planten (https://...)",
+  "sourceUrl": "Lenke til en nettside med mer info, f.eks. Wikipedia (https://...)"
 }
 
 Regler:
@@ -136,7 +140,9 @@ Eksempel:
     "lifecycle": "PERENNIAL",
     "bloomTime": "Juni–august",
     "pests": "Sjelden; pass på rotråte ved fuktig jord",
-    "notes": ""
+    "notes": "",
+    "imageUrl": "https://upload.wikimedia.org/.../Lavandula.jpg",
+    "sourceUrl": "https://no.wikipedia.org/wiki/Lavendel"
   }
 ]`
 }
@@ -242,6 +248,8 @@ function parseJsonInput(
       textField("bloomTime")
       textField("pests")
       textField("notes")
+      textField("imageUrl")
+      textField("sourceUrl")
 
       plant.wateringNeed = coerceEnum(entry.wateringNeed, WATERING_NEED)
       plant.wateringMethod = coerceEnum(entry.wateringMethod, WATERING_METHOD)
@@ -431,6 +439,18 @@ function buildPlantDiffs(
       existingValue: existing.notes,
       newValue: imported.notes,
     },
+    {
+      key: "imageUrl",
+      label: "Bilde-URL",
+      existingValue: existing.imageUrl,
+      newValue: imported.imageUrl,
+    },
+    {
+      key: "sourceUrl",
+      label: "Lenke",
+      existingValue: existing.sourceUrl,
+      newValue: imported.sourceUrl,
+    },
   ])
 }
 
@@ -453,6 +473,8 @@ const UPDATABLE_FIELDS = [
   "toxicityNotes",
   "pests",
   "notes",
+  "imageUrl",
+  "sourceUrl",
 ] as const
 
 export function PlantLlmImportPageClient({

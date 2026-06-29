@@ -52,6 +52,7 @@ interface CreatePlantInput {
   pests?: string
   notes?: string
   imageUrl?: string
+  sourceUrl?: string
 }
 
 export async function createPlant(input: CreatePlantInput) {
@@ -82,6 +83,7 @@ export async function createPlant(input: CreatePlantInput) {
       pests: input.pests,
       notes: input.notes,
       imageUrl: sanitizeUrl(input.imageUrl) ?? undefined,
+      sourceUrl: sanitizeUrl(input.sourceUrl) ?? undefined,
       householdId: membership.householdId,
     },
   })
@@ -112,6 +114,7 @@ interface UpdatePlantInput {
   pests?: string | null
   notes?: string | null
   imageUrl?: string | null
+  sourceUrl?: string | null
 }
 
 export async function updatePlant(input: UpdatePlantInput) {
@@ -122,12 +125,13 @@ export async function updatePlant(input: UpdatePlantInput) {
     throw new Error("Plant not found")
   }
 
-  const { id, imageUrl, ...rest } = input
+  const { id, imageUrl, sourceUrl, ...rest } = input
   const updated = await db.plant.update({
     where: { id },
     data: {
       ...rest,
       ...(imageUrl !== undefined && { imageUrl: sanitizeUrl(imageUrl) }),
+      ...(sourceUrl !== undefined && { sourceUrl: sanitizeUrl(sourceUrl) }),
     },
   })
 
@@ -171,6 +175,8 @@ interface BulkPlantInput {
   bloomTime?: string
   pests?: string
   notes?: string
+  imageUrl?: string
+  sourceUrl?: string
 }
 
 const validWateringNeed = new Set<WateringNeed>(["LOW", "MEDIUM", "HIGH"])
@@ -220,6 +226,8 @@ function toPlantData(plant: BulkPlantInput, householdId: string) {
     bloomTime: plant.bloomTime || undefined,
     pests: plant.pests || undefined,
     notes: plant.notes || undefined,
+    imageUrl: sanitizeUrl(plant.imageUrl) ?? undefined,
+    sourceUrl: sanitizeUrl(plant.sourceUrl) ?? undefined,
     householdId,
   }
 }
@@ -285,6 +293,8 @@ export interface ExistingPlant {
   bloomTime: string | null
   pests: string | null
   notes: string | null
+  imageUrl: string | null
+  sourceUrl: string | null
 }
 
 export async function findExistingPlants(
@@ -321,6 +331,8 @@ export async function findExistingPlants(
       bloomTime: plant.bloomTime,
       pests: plant.pests,
       notes: plant.notes,
+      imageUrl: plant.imageUrl,
+      sourceUrl: plant.sourceUrl,
     }))
 }
 
@@ -347,6 +359,8 @@ export interface PlantFieldUpdate {
     bloomTime?: string
     pests?: string
     notes?: string
+    imageUrl?: string
+    sourceUrl?: string
   }
 }
 
@@ -387,6 +401,8 @@ export async function bulkImportPlantsWithDuplicates(
       bloomTime?: string
       pests?: string
       notes?: string
+      imageUrl?: string
+      sourceUrl?: string
     } = {}
 
     if (f.species !== undefined) data.species = f.species || undefined
@@ -417,6 +433,10 @@ export async function bulkImportPlantsWithDuplicates(
     if (f.bloomTime !== undefined) data.bloomTime = f.bloomTime || undefined
     if (f.pests !== undefined) data.pests = f.pests || undefined
     if (f.notes !== undefined) data.notes = f.notes || undefined
+    if (f.imageUrl !== undefined)
+      data.imageUrl = sanitizeUrl(f.imageUrl) ?? undefined
+    if (f.sourceUrl !== undefined)
+      data.sourceUrl = sanitizeUrl(f.sourceUrl) ?? undefined
 
     return db.plant.update({
       where: { id: update.id, householdId: membership.householdId },

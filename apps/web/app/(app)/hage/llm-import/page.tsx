@@ -29,6 +29,8 @@ export default async function HageLlmImportPage() {
         bloomTime: plant.bloomTime ?? undefined,
         pests: plant.pests ?? undefined,
         notes: plant.notes ?? undefined,
+        imageUrl: plant.imageUrl ?? undefined,
+        sourceUrl: plant.sourceUrl ?? undefined,
       }))}
     />
   )
