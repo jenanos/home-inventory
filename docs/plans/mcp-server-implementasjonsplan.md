@@ -108,8 +108,12 @@ utvei, ikke automatisk neste steg.
 
 ### 3.2 Produktforutsetninger
 
-- En autorisert bruker er fortsatt medlem av maksimalt én aktiv husstand, slik
-  dagens `getUserHousehold` forutsetter.
+- Før MCP aktiveres, skal databasen håndheve maksimalt ett aktivt
+  husstandsmedlemskap per bruker. Migrasjonen skal først finne og stoppe på
+  eksisterende duplikater; deretter legges en unik constraint på `userId`, og
+  invitasjonsflyten skal avvise medlemskap i en ny husstand. Hvis produktet
+  senere skal støtte flere husstander, må det i stedet innføres et eksplisitt,
+  servervalidert valg av aktiv husstand før MCP kan bruke denne modellen.
 - Språket i verktøynavn og feltnavn er engelsk. Beskrivelser, feilmeldinger og
   brukerrettet samtykke kan være norsk.
 - Beløp bruker NOK som standard, siden datamodellen ikke har valutafelt. MCP
@@ -274,7 +278,11 @@ om siste bruk.
 Hvis åpen dynamisk klientregistrering beholdes, må den ha:
 
 - eksakt validering av redirect-URI, med HTTPS som hovedregel
-- et snevert utviklingsunntak for loopback-adresser
+- et snevert produksjonsunntak for native klienters loopback-redirect etter
+  RFC 8252: `http` tillates bare med IP-literalene `127.0.0.1` eller `[::1]`;
+  skjema, IP, sti og query må matche registrert URI eksakt, mens porten i
+  authorize-forespørselen kan være en vilkårlig tilgjengelig port. `localhost`,
+  andre private IP-adresser og HTTP-redirects utenfor loopback skal avvises
 - grenser på antall URI-er, total request-størrelse og tekstlengder
 - rate limiting per IP og en samlet grense på aktive klienter
 - ingen fjerning av gamle klienter kun basert på LRU dersom det også gjør
@@ -356,8 +364,9 @@ Konteksten bygges slik for MCP:
 2. slå opp at `sub` fortsatt er en aktiv bruker
 3. slå opp brukerens medlemskap ved hver forespørsel, eller bruk en svært
    kortlevd kontrollert cache
-4. bruk medlemskapets `householdId`; aldri aksepter `householdId` fra
-   verktøyinput
+4. krev nøyaktig ett medlemskap og bruk dets `householdId`; null eller flere
+   medlemskap skal feile lukket og aldri avgjøres med et uordnet `findFirst`
+5. aldri aksepter `householdId` fra verktøyinput
 
 Dette gjør at fjerning fra en husstand får effekt selv om et access token
 fortsatt er gyldig. Manglende medlemskap skal gi en autorisasjonsfeil, ikke
@@ -584,7 +593,8 @@ fortsatt ikke eksponeres:
 
 Følgende er krav, ikke senere forbedringsforslag:
 
-1. PKCE med S256 og eksakt redirect-URI-match.
+1. PKCE med S256 og eksakt redirect-URI-match, bortsett fra det dokumenterte
+   portunntaket for native klienters loopback-IP.
 2. `state` round-trippes uendret, mens samtykkeskontekst lagres server-side.
 3. Kortlevde og atomisk konsumerte autorisasjonskoder.
 4. Rotasjon, hashing og reuse-deteksjon for refresh tokens.
@@ -677,7 +687,9 @@ være nødvendig for korrekthet, bare for plassbruk.
 
 ### 14.1 Enhetstester
 
-- PKCE S256, redirect-URI- og resource-validering
+- PKCE S256, redirect-URI- og resource-validering, inkludert tillatte dynamiske
+  loopback-porter og avvisning av `localhost`, ikke-loopback-IP-er og avvik i
+  sti eller query
 - hashing, JWT-claims, utløp og algoritmelås
 - scopes og verktøyfiltrering
 - serialisering av `Decimal`, datoer, enums og nullverdier
@@ -691,6 +703,8 @@ være nødvendig for korrekthet, bare for plassbruk.
 - refresh token roteres atomisk, og reuse tilbakekaller forventet familie
 - grant-revokering stopper refresh
 - slettet bruker eller fjernet husstandsmedlem mister tilgang
+- kontekstoppslag feiler lukket dersom eldre data mot formodning gir flere
+  medlemskap for samme bruker
 - bruker A kan aldri lese eller endre bruker/husstand Bs ressurser ved å gjette
   ID-er
 - husstandsmedlem kan ikke se en annen brukers private liste
