@@ -372,11 +372,18 @@ Ikke uttømmende — start med lesetilgang overalt, skriv der gevinsten er stør
 | `create-shopping-list` | skriv |
 | `add-shopping-item` | skriv |
 | `update-shopping-item` | skriv, idempotent |
-| `toggle-item-purchased` | skriv, idempotent |
+| `set-item-purchased` (eksplisitt `purchased: boolean`) | skriv, idempotent |
 | `delete-shopping-item` | skriv, destruktiv |
 | `smart-add-shopping-items` (bulk + duplikatsjekk, jf. `bulkImportShoppingItemsWithDuplicates`) | skriv |
 | `list-categories` / `create-category` | les / skriv |
 | `add-product-alternative`, `set-preferred-alternative` | skriv |
+
+Merk `set-item-purchased`: den eksisterende actionen `toggleItemPurchased`
+(`lib/actions/shopping-item.ts:533`) utleder motsatt status ved hvert kall og
+er derfor **ikke** idempotent. Retter en MCP-klient et kall etter timeout, blir
+elementet satt tilbake. MCP-verktøyet må ta ønsket tilstand som parameter, ikke
+vippe. Samme regel gjelder `select-task-vendor` og
+`complete-progress-entry`: eksponer måltilstanden, ikke en veksling.
 
 ### Budsjett
 | Verktøy | Type |
@@ -413,16 +420,36 @@ bekreftelsesparameter).
 | 1 | **Service-lag** — flytt forretningslogikk ut av `lib/actions/*` til `lib/core/*` som tar `{ userId, householdId }`. Actions blir tynne wrappere som gjør `requireHousehold()` + `revalidatePath()`. Start med `shopping-item` og `budget`. | Delt logikk, ingen funksjonell endring |
 | 2 | **OAuth-datamodell** — Prisma-modeller `OAuthClient`, `OAuthAuthorizationCode`, `OAuthRefreshToken`, `OAuthPendingApproval`, `OAuthApproval` + migrasjon. Bruk `meal-planner/packages/database/prisma/schema.prisma:128-181` som utgangspunkt. | Persistent OAuth-tilstand |
 | 3 | **MCP-endepunkt (skjelett)** — `app/api/mcp/route.ts` med ett lese-verktøy og midlertidig statisk bearer bak env-flagg. Verifiser her at Next.js-transporten fungerer (se 4.1). | Bevis på at transporten holder |
-| 4 | **OAuth-autorisasjonsserver** — `/.well-known/*`, `/api/oauth/register`, `/api/oauth/authorize`, `/api/oauth/authorize/decision`, `/api/oauth/token`. Port fra `meal-planner/apps/mcp-server/src/oauth/`, men med Prisma-lagring og `auth()` i stedet for `getSessionFromCookie`. Fjern det statiske tokenet fra oppgave 3. | Fungerende OAuth |
+| 4 | **OAuth-autorisasjonsserver** — `/.well-known/*`, `/api/oauth/register`, `/api/oauth/authorize`, `/api/oauth/authorize/decision`, `/api/oauth/token`, `/api/oauth/revoke`. Port fra `meal-planner/apps/mcp-server/src/oauth/`, men med Prisma-lagring, `auth()` i stedet for `getSessionFromCookie`, **reelle scopes** og **revokering** (se under). Fjern det statiske tokenet fra oppgave 3. | Fungerende OAuth |
 | 5 | **Innkjøpsverktøy** | Første reelle bruksområde |
 | 6 | **Budsjettverktøy** med avledede tall | Den viktigste gevinsten |
 | 7 | **Vedlikehold + hage** | Full dekning |
-| 8 | **Revokering + tilkoblede apper** — `/api/oauth/revoke` (RFC 7009) og en enkel side under `/settings` som viser og fjerner tilkoblede klienter. | Kontroll over tilgang |
+| 8 | **«Tilkoblede apper»-side** under `/settings` — viser aktive klienter og lar deg koble dem fra. UI over revokeringen fra oppgave 4. | Oversikt |
 | 9 | **Rydd i LLM-import** — behold `replace*`-flyten for store engangsimporter, vurder å avvikle resten. | Mindre å vedlikeholde |
 | 10 | **Tilbakeport til meal-planner** (valgfritt) — persistent OAuth-lagring med de ubrukte tabellene, så deploys ikke lenger kobler fra klientene. | Færre reautoriseringer |
 
 Oppgave 1–4 er infrastruktur og kan gjøres uten at noe blir synlig for
 brukeren. Etter oppgave 5 er MCP-en faktisk nyttig.
+
+### Scopes og revokering hører til oppgave 4, ikke senere
+
+To ting må være ferdige *før* det første skriveverktøyet fra oppgave 5 rulles ut:
+
+- **Scopes må utstedes og håndheves.** Meal Planner annonserer `scope: "mcp"`
+  uten å bruke det til noe, så en ren port ville gitt enhver autorisert klient
+  full skrivetilgang uansett hva samtykkesiden viste. Definer minst
+  `home:read` og `home:write`: `/oauth/authorize` må validere forespurt scope
+  og vise det på samtykkesiden, `/oauth/token` må legge det i JWT-en, og
+  `tools/call` må sjekke at et skriveverktøy har `home:write` i tokenet.
+  Uten håndhevelse i verktøylaget er scopet bare pynt.
+- **Revokering må finnes.** Refresh tokens lever i 30 dager. Uten
+  `/api/oauth/revoke` (RFC 7009) og en måte å slette lagrede tokens på, kan et
+  tapt eller kompromittert token verken stoppes eller utløpes bort mens det
+  fortsatt leser og endrer husstandsdata. Selve endepunktet er lite arbeid når
+  tokenene allerede ligger i Postgres — det er kun UI-et som kan vente til
+  oppgave 8. Nødbrems i mellomtiden: bytte av
+  `HOME_OVERVIEW_MCP_OAUTH_SIGNING_SECRET` invaliderer alle access tokens
+  umiddelbart, men *ikke* refresh tokens, som ligger opakt i databasen.
 
 ---
 
@@ -443,6 +470,9 @@ brukeren. Etter oppgave 5 er MCP-en faktisk nyttig.
 9. **HTML-escaping** på samtykkesiden (klientnavn er brukerkontrollert via DCR).
 10. **Egen signeringssecret** — ikke gjenbruk `HOME_OVERVIEW_AUTH_SECRET` til
     JWT-signering.
+11. **Scopes håndhevet i verktøylaget** — et skriveverktøy må avvise et token
+    uten `home:write`. Å bare annonsere scopet i discovery er ikke nok.
+12. **Revokering på plass før første skriveverktøy** — se oppgave 4.
 
 ---
 
