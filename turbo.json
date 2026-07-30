@@ -4,7 +4,14 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "env": ["ADMIN_EMAIL"],
+      "env": [
+        "ADMIN_EMAIL",
+        "HOME_OVERVIEW_MCP_OAUTH_SIGNING_SECRET",
+        "HOME_OVERVIEW_MCP_ISSUER",
+        "HOME_OVERVIEW_MCP_ACCESS_TOKEN_TTL_SECONDS",
+        "HOME_OVERVIEW_MCP_REFRESH_TOKEN_TTL_SECONDS",
+        "HOME_OVERVIEW_MCP_CLOCK_SKEW_SECONDS"
+      ],
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
       "outputs": [".next/**", "!.next/cache/**", "node_modules/.prisma/**"]
     },
@@ -15,7 +22,8 @@
       "dependsOn": ["^format"]
     },
     "test": {
-      "dependsOn": ["^test"]
+      "dependsOn": ["^test"],
+      "cache": false
     },
     "typecheck": {
       "dependsOn": ["^typecheck"]

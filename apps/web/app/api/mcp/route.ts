@@ -1,5 +1,9 @@
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js"
 
+import {
+  createMcpUnavailableResponse,
+  mcpConfig,
+} from "../../../lib/mcp/config"
 import { MCP_MAX_REQUEST_BYTES } from "../../../lib/mcp/constants"
 import { createMcpServer } from "../../../lib/mcp/server"
 import {
@@ -25,6 +29,10 @@ function jsonResponse(
 }
 
 function disabledResponse(config: Extract<McpSpikeConfig, { enabled: false }>) {
+  if (config.reason === "production" && !mcpConfig.enabled) {
+    return createMcpUnavailableResponse()
+  }
+
   return jsonResponse(
     {
       error: "MCP_DISABLED",

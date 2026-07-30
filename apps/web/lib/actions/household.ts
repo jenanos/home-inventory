@@ -5,30 +5,55 @@ import { DEFAULT_CATEGORIES } from "@workspace/db/seed-categories"
 import { requireAuth } from "@/lib/session"
 import { revalidatePath } from "next/cache"
 
+function isUniqueConstraintError(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "P2002"
+  )
+}
+
 export async function createHousehold(name: string) {
   const session = await requireAuth()
 
-  const household = await db.household.create({
-    data: {
-      name,
-      members: {
-        create: {
-          userId: session.user.id,
-          role: "OWNER",
-        },
-      },
-      categories: {
-        createMany: {
-          data: DEFAULT_CATEGORIES.map((cat) => ({
-            name: cat.name,
-            icon: cat.icon,
-            color: cat.color,
-            isDefault: true,
-          })),
-        },
-      },
-    },
+  const existingMembership = await db.householdMember.findUnique({
+    where: { userId: session.user.id },
+    select: { userId: true },
   })
+  if (existingMembership) {
+    throw new Error("Brukeren er allerede medlem av en husstand.")
+  }
+
+  let household
+  try {
+    household = await db.household.create({
+      data: {
+        name,
+        members: {
+          create: {
+            userId: session.user.id,
+            role: "OWNER",
+          },
+        },
+        categories: {
+          createMany: {
+            data: DEFAULT_CATEGORIES.map((cat) => ({
+              name: cat.name,
+              icon: cat.icon,
+              color: cat.color,
+              isDefault: true,
+            })),
+          },
+        },
+      },
+    })
+  } catch (error) {
+    if (isUniqueConstraintError(error)) {
+      throw new Error("Brukeren er allerede medlem av en husstand.")
+    }
+    throw error
+  }
 
   revalidatePath("/")
   return household
@@ -56,24 +81,29 @@ export async function inviteToHousehold(householdId: string, email: string) {
   }
 
   const existingMembership = await db.householdMember.findUnique({
-    where: {
-      userId_householdId: {
-        userId: invitedUser.id,
-        householdId,
-      },
-    },
+    where: { userId: invitedUser.id },
   })
   if (existingMembership) {
-    throw new Error("Brukeren er allerede medlem av denne husstanden.")
+    if (existingMembership.householdId === householdId) {
+      throw new Error("Brukeren er allerede medlem av denne husstanden.")
+    }
+    throw new Error("Brukeren er allerede medlem av en annen husstand.")
   }
 
-  await db.householdMember.create({
-    data: {
-      userId: invitedUser.id,
-      householdId,
-      role: "MEMBER",
-    },
-  })
+  try {
+    await db.householdMember.create({
+      data: {
+        userId: invitedUser.id,
+        householdId,
+        role: "MEMBER",
+      },
+    })
+  } catch (error) {
+    if (isUniqueConstraintError(error)) {
+      throw new Error("Brukeren er allerede medlem av en husstand.")
+    }
+    throw error
+  }
 
   revalidatePath("/settings")
 }
