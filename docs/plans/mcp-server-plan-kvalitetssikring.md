@@ -121,22 +121,39 @@ budsjett — `NOT_FOUND`, tom oppsummering, eller `hasBudget: false` — og hell
 om `upsert-budget-*` implisitt får opprette budsjettraden. Dette er en
 kontraktbeslutning som hører i planen, ikke i implementasjonen.
 
-### H6 — Private lister uten eier er usynlige for alle
+### H6 — Sletting av bruker feiler hvis brukeren eier en privat liste
 
-`ShoppingList.createdById` er nullbar med `onDelete: SetNull`.
-`getVisibleShoppingListsWhere` (`apps/web/lib/shopping-list-access.ts`) filtrerer
-med `OR: [{ isPrivate: false }, { createdById: userId }]`, så en privat liste der
-oppretteren er slettet blir utilgjengelig for **alle**.
-`canManageShoppingListPrivacy` har allerede en særregel for `createdById === null`,
-så tilstanden er kjent i koden, men ikke i planen.
+`ShoppingList.createdById` er nullbar med `onDelete: SetNull`, men migrasjonen
+`packages/db/prisma/migrations/20260427141000_add_private_shopping_lists/migration.sql`
+legger i tillegg på en check-constraint:
 
-Samtidig sier §6 at «alle relasjoner til `User` skal slettes eller revokeres ved
-sletting av brukeren». Det stemmer ikke for denne relasjonen — den er `SetNull`
-ved design.
+```sql
+ALTER TABLE "ShoppingList"
+ADD CONSTRAINT "ShoppingList_private_lists_require_creator"
+CHECK (NOT "isPrivate" OR "createdById" IS NOT NULL);
+```
 
-Foreslått endring: presiser i §6 at kravet gjelder de nye OAuth-tabellene, ikke
-eksisterende app-relasjoner, og definer i §7 hva MCP gjør med foreldreløse private
-lister (sannsynligvis: samme «ikke funnet» som ellers).
+`SET NULL` kan derfor ikke gjennomføres for en privat liste. Konsekvensen er ikke
+at data blir usynlig, men at **slettingen selv feiler**: `deleteUser`
+(`apps/web/lib/actions/admin.ts:56`) gjør et bart `db.user.delete({ where: { id } })`
+uten å håndtere private lister, så operasjonen avbrytes med brudd på
+check-constrainten hvis brukeren har opprettet minst én privat liste.
+
+En foreldreløs privat liste er altså en **uoppnåelig** tilstand — invarianten er
+god. Merk samtidig at check-constrainten ikke finnes i `schema.prisma` (Prisma
+modellerer den ikke), bare i migrasjons-SQL, så den er usynlig for den som leser
+modellen. Det er verdt en kommentar i schemaet.
+
+Konsekvens for planen: §6 («alle relasjoner til `User` skal slettes eller
+revokeres ved sletting av brukeren») og §14.2s test «slettet bruker eller fjernet
+husstandsmedlem mister tilgang» kan ikke oppfylles før en produktbeslutning er
+tatt: ved sletting av en bruker skal deres private lister (a) slettes, (b)
+overføres til et annet husstandsmedlem, eller (c) gjøres offentlige. Planen bør
+kreve at valget tas og at `deleteUser` håndterer det eksplisitt i samme
+transaksjon.
+
+I tillegg bør §6 presiseres til å gjelde de nye OAuth-tabellene — for eksisterende
+app-relasjoner er `SetNull` et bevisst valg, ikke et avvik.
 
 ### H7 — Kontekstoppslaget returnerer fulle `User`-rader
 
@@ -185,38 +202,52 @@ fasene mindre ut enn de er.
 ### M3 — Eksisterende LLM-importflyter er allerede halve verktøyflaten
 
 Fase 8 sier «evaluer om manuelle LLM-importflyter fortsatt skal beholdes». Men de
-flytene inneholder allerede mønstre planen foreslår å bygge fra grunnen av:
+flytene inneholder allerede mønstre planen foreslår å bygge fra grunnen av — for
+alle tre domener, inkludert innkjøp:
 
+- `bulkCreateShoppingItems` (`lib/actions/shopping-item.ts:188`),
+  `findExistingShoppingItems` (`:334`) og
+  `bulkImportShoppingItemsWithDuplicates` (`:398`), med duplikatforhåndsvisning
+  koblet opp i `app/(app)/lists/[id]/llm-import-page-client.tsx`
 - `bulkImportMaintenanceTasks`, `findExistingMaintenanceTasks` (duplikatdeteksjon
-  på lowercased tittel), `applyTaskUpdates`, `bulkImportMaintenanceTasksWithDuplicates`
-  i `lib/actions/maintenance-task.ts`
+  på lowercased tittel), `applyTaskUpdates`,
+  `bulkImportMaintenanceTasksWithDuplicates` i `lib/actions/maintenance-task.ts`
 - `bulkImportBudget`, `bulkImportBudgetWithDuplicates`, `findExistingBudgetItems`
   i `lib/actions/budget.ts`
 - `formatDateToIsoDate` som normativ leseside for datoer
 
-§10.4 foreslår `add-shopping-items` «med duplikatforhåndsvisning og begrenset
-batch» — det mønsteret finnes altså i produksjon for to andre domener. Planen bør
-referere til disse som utgangspunkt for verktøykontraktene i stedet for å behandle
-dem som noe som skal evalueres helt til slutt.
+§10.4s `add-shopping-items` «med duplikatforhåndsvisning og begrenset batch» er
+altså ikke et nytt verktøy, men en re-eksponering av en flyt som allerede kjører i
+produksjon. **Innkjøpsflyten er det primære uttrekksmålet**, ikke budsjett- eller
+vedlikeholdsvarianten: den har allerede den listespesifikke autorisasjonen
+(privatliste-regelen via `getVisibleShoppingListsWhere`) og oppdateringssemantikken
+som de to andre domenene ikke har. Å modellere verktøyet etter en av de andre
+variantene risikerer å duplisere oppførsel og miste privatliste-sjekken.
+
+Planen bør referere til disse som utgangspunkt for verktøykontraktene i stedet for å
+behandle dem som noe som skal evalueres helt til slutt.
 
 Merk samtidig en konflikt: `bulkImportMaintenanceTasks` faller stille tilbake til
 `MEDIUM` ved ukjent `priority` (`priority.toUpperCase()` mot et `Set`), mens §9.1
 krever eksplisitt validering av enumverdier. Planen bør si hvilken oppførsel som
 gjelder etter uttrekket.
 
-### M4 — `replaceBudget()` finnes og må eksplisitt holdes utenfor MCP-tjenestelaget
+### M4 — `replaceBudget()` og `replaceShoppingItems()` må eksplisitt holdes utenfor MCP-tjenestelaget
 
-`lib/actions/budget.ts:711`. §10.4 forbyr «full `replace` av ... budsjett» ✓, men
-Fase 6 trekker write-services ut av nettopp denne filen. Planen bør si at
-`replaceBudget` beholdes som ren action og ikke flyttes til `application/budget`,
-eller at tjenestefunksjonen den bygger på aldri registreres i verktøyregisteret.
-Ellers er forbudet avhengig av at ingen registrerer den ved en feil.
+`replaceBudget` (`lib/actions/budget.ts:711`) og `replaceShoppingItems`
+(`lib/actions/shopping-item.ts:251`). §10.4 forbyr full `replace` av både lister og
+budsjett ✓, men Fase 5 og 6 trekker write-services ut av nettopp disse to filene.
+
+Planen bør si at begge beholdes som rene actions og ikke flyttes til
+`application/`, eller at tjenestefunksjonene de bygger på aldri registreres i
+verktøyregisteret. Ellers er forbudet avhengig av at ingen registrerer dem ved en
+feil.
 
 ### M5 — Eksisterende bulk-actions har ingen størrelsesgrense
 
 `bulkImportMaintenanceTasks` mapper `input.tasks` direkte inn i `db.$transaction(...)`
-uten lengdesjekk; det samme gjelder `bulkImportBudget`. §9.1 og §11 punkt 11 krever
-grenser på liste- og pagineringsinput.
+uten lengdesjekk; det samme gjelder `bulkCreateShoppingItems` og `bulkImportBudget`.
+§9.1 og §11 punkt 11 krever grenser på liste- og pagineringsinput.
 
 Poenget for planen: grensen må ligge i **tjenestelaget**, ikke bare i
 MCP-adapteren. Ligger den bare i adapteren, gjelder den ikke for webflyten, og de
@@ -294,6 +325,9 @@ Kontrollert mot schemaet og bekreftet:
   med hva som faktisk er eksponert i appen i dag.
 - Advarselen mot `findFirst` og mot check-then-act er ikke teoretisk — begge
   mønstrene finnes i koden nå.
+- §9.2s krav om `set-shopping-item-status(status)` framfor «toggle purchased» er
+  konkret begrunnet: `toggleItemPurchased` (`lib/actions/shopping-item.ts:515`)
+  finnes faktisk, og er nøyaktig den ikke-idempotente formen planen vil unngå.
 
 ## 6. Anbefalt rekkefølge for oppfølging
 
@@ -301,7 +335,10 @@ Kontrollert mot schemaet og bekreftet:
    akseptansekriterier håndhevbare.
 2. Avklar H3, H4 og H5 som kontraktbeslutninger i Fase 0, ikke i Fase 6.
    Budsjettformelen er den største tekniske usikkerheten i planen.
-3. Ta H6, H7, M1 og M6 inn som presiseringer i kapittel 3, 6, 7 og 8.
+3. H6 krever en produktbeslutning om brukersletting, og avdekker samtidig at
+   `deleteUser` er ødelagt i dag for brukere med private lister. Den bør løses som
+   egen sak, uavhengig av MCP-arbeidet — §14.2s test er blokkert til den er tatt.
+4. Ta H7, M1 og M6 inn som presiseringer i kapittel 3, 7 og 8.
 4. Tallfest M2 i faseplanen, og legg M3–M5 inn som eksplisitte oppgaver i Fase 5
    og 6.
 5. L1–L6 kan gå inn som redaksjonelle presiseringer uten å endre faseinndelingen.
