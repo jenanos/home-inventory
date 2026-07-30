@@ -76,8 +76,10 @@ pnpm db:generate  # Generate Prisma client
 pnpm db:migrate   # Run Prisma migrations locally
 pnpm db:setup     # Start from a fresh local DB schema + seed
 pnpm db:seed      # Seed demo data into an existing schema
+pnpm db:test:prepare # Start isolated test DB and apply all migrations
 pnpm lint         # ESLint across all workspaces
 pnpm format       # Prettier across all workspaces
+pnpm test         # Run Vitest across all workspaces
 pnpm typecheck    # TypeScript type checking
 ```
 
@@ -92,7 +94,7 @@ pnpm dlx shadcn@latest add <component-name> -c packages/ui
 Components are installed to `packages/ui/src/components/` and imported via `@workspace/ui`.
 
 ```tsx
-import { Button } from "@workspace/ui/components/button";
+import { Button } from "@workspace/ui/components/button"
 ```
 
 ## Deployment
@@ -100,6 +102,7 @@ import { Button } from "@workspace/ui/components/button";
 The app is containerized with a multi-stage Dockerfile. GitHub Actions builds and pushes the image to `ghcr.io` on push to `main`.
 
 Production stack:
+
 - Docker Compose with PostgreSQL
 - Caddy for TLS and reverse proxy
 - Watchtower for automatic image updates

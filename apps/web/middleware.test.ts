@@ -19,6 +19,12 @@ describe("isPublicPathname", () => {
     expect(isPublicPathname("/icon.svg")).toBe(true)
   })
 
+  it("allows only the exact MCP endpoint through middleware", () => {
+    expect(isPublicPathname("/api/mcp")).toBe(true)
+    expect(isPublicPathname("/api/mcp/anything")).toBe(false)
+    expect(isPublicPathname("/api/mcp-malicious")).toBe(false)
+  })
+
   it("keeps protected app routes private", () => {
     expect(isPublicPathname("/")).toBe(false)
     expect(isPublicPathname("/lists")).toBe(false)

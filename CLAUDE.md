@@ -11,10 +11,12 @@ pnpm dev          # Start Next.js dev server with Turbopack
 pnpm build        # Production build (via Turbo)
 pnpm lint         # ESLint across all workspaces
 pnpm format       # Prettier across all workspaces
+pnpm test         # Vitest across workspaces
 pnpm typecheck    # TypeScript type checking (tsc --noEmit)
 ```
 
-All commands are orchestrated by Turbo. No test framework is configured yet.
+All commands are orchestrated by Turbo. Unit tests use Vitest. Database
+integration tests use the separate PostgreSQL service described below.
 
 ## Local Development
 
@@ -23,6 +25,8 @@ All commands are orchestrated by Turbo. No test framework is configured yet.
 - Reset database: `docker compose down -v` (sletter all data)
 - Run migrations: `pnpm db:migrate`
 - Setup database + seed: `pnpm db:setup`
+- Start and migrate test database: `pnpm db:test:prepare`
+- Test database: PostgreSQL on port 5436, configured by `.env.test`
 
 ## Architecture
 

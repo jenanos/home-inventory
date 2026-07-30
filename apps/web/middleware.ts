@@ -2,11 +2,13 @@ import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 
 const publicPaths = ["/login", "/login/verify", "/shared", "/api/auth"]
+const exactPublicPaths = ["/api/mcp"]
 const publicAssetPrefixes = ["/icon", "/apple-icon"]
 const publicAssetPaths = ["/favicon.ico", "/manifest.webmanifest", "/sw.js"]
 
 export function isPublicPathname(pathname: string) {
   return (
+    exactPublicPaths.includes(pathname) ||
     publicPaths.some((path) => pathname.startsWith(path)) ||
     publicAssetPrefixes.some((path) => pathname.startsWith(path)) ||
     publicAssetPaths.includes(pathname)
