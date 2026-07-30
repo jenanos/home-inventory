@@ -145,6 +145,7 @@ utvei, ikke automatisk neste steg.
   håndtere det i samme transaksjon, og schemaet bør få en kommentar om
   constrainten. Dette er uavhengig av MCP-arbeidet, men blokkerer
   negativtesten i 14.2 om at slettet bruker mister tilgang.
+
 - Språket i verktøynavn og feltnavn er engelsk. Beskrivelser, feilmeldinger og
   brukerrettet samtykke kan være norsk.
 - Beløp bruker NOK som standard, siden datamodellen ikke har valutafelt. MCP
@@ -1026,6 +1027,15 @@ slås sammen bare når de fortsatt har et klart rollback-punkt.
   bevisst innført regresjon
 
 ### Fase 1 – applikasjonstjenester for lesing
+
+Fasen leveres i to gjennomgåbare deler:
+
+- **Fase 1A – fundament:** `ApplicationContext`, typede applikasjonsfeil,
+  fail-lukket/minimalt kontekstoppslag, tynn webadapter og felles
+  serialiseringsprimitiver.
+- **Fase 1B – lesedomener:** read services for de fire domenene,
+  budsjettkarakterisering og én felles budsjettberegning, med eksisterende
+  webspørringer som adaptere.
 
 **Oppgaver**
 

@@ -11,7 +11,12 @@ import {
   Users,
   Wallet,
 } from "lucide-react"
-import { Card, CardContent, CardHeader, CardTitle } from "@workspace/ui/components/card"
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@workspace/ui/components/card"
 import { Button } from "@workspace/ui/components/button"
 import { Badge } from "@workspace/ui/components/badge"
 import { Tabs, TabsList, TabsTrigger } from "@workspace/ui/components/tabs"
@@ -23,6 +28,8 @@ import {
   deleteBudgetMember,
   deleteBudgetTrip,
 } from "@/lib/actions/budget"
+import { calculateBudgetOverview } from "@/lib/application/budget/calculations"
+import { calculateLoanMonthlyAmounts } from "@/lib/budget-loan"
 import { toast } from "sonner"
 import type {
   BudgetEntryType,
@@ -68,8 +75,6 @@ export interface BudgetLoanData {
   annualInterestRate: number
   termMonths: number
   monthlyFees: number
-  monthlyInterest: number
-  monthlyPrincipal: number
 }
 
 export interface BudgetTripData {
@@ -104,28 +109,6 @@ const formatCurrency = (amount: number) =>
     maximumFractionDigits: 0,
   }).format(amount)
 
-function getEntryDisposableImpact(entry: BudgetEntryData) {
-  return entry.type === "EXPENSE" ? -entry.monthlyAmount : entry.monthlyAmount
-}
-
-function getEntryExpenses(entries: BudgetEntryData[]) {
-  return entries
-    .filter((entry) => entry.type === "EXPENSE")
-    .reduce((sum, entry) => sum + entry.monthlyAmount, 0)
-}
-
-function getEntryIncome(entries: BudgetEntryData[]) {
-  return entries
-    .filter((entry) => entry.type === "INCOME")
-    .reduce((sum, entry) => sum + entry.monthlyAmount, 0)
-}
-
-function getEntryDeductions(entries: BudgetEntryData[]) {
-  return entries
-    .filter((entry) => entry.type === "DEDUCTION")
-    .reduce((sum, entry) => sum + entry.monthlyAmount, 0)
-}
-
 interface BudgetViewProps {
   budget: BudgetData
 }
@@ -135,7 +118,9 @@ export function BudgetView({ budget }: BudgetViewProps) {
   const multiplier = period === "year" ? 12 : 1
 
   const [memberDialogOpen, setMemberDialogOpen] = useState(false)
-  const [editingMember, setEditingMember] = useState<BudgetMemberData | null>(null)
+  const [editingMember, setEditingMember] = useState<BudgetMemberData | null>(
+    null
+  )
 
   const [loanDialogOpen, setLoanDialogOpen] = useState(false)
   const [editingLoan, setEditingLoan] = useState<BudgetLoanData | null>(null)
@@ -144,9 +129,8 @@ export function BudgetView({ budget }: BudgetViewProps) {
   const [editingTrip, setEditingTrip] = useState<BudgetTripData | null>(null)
 
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false)
-  const [editingCategory, setEditingCategory] = useState<BudgetCategoryData | null>(
-    null
-  )
+  const [editingCategory, setEditingCategory] =
+    useState<BudgetCategoryData | null>(null)
 
   const [entryDialogOpen, setEntryDialogOpen] = useState(false)
   const [editingEntry, setEditingEntry] = useState<BudgetEntryData | null>(null)
@@ -157,82 +141,7 @@ export function BudgetView({ budget }: BudgetViewProps) {
 
   const [isPending, startTransition] = useTransition()
 
-  const calculations = useMemo(() => {
-    const totalNetIncome = budget.members.reduce(
-      (sum, member) =>
-        sum + member.grossMonthlyIncome * (1 - member.taxPercent / 100),
-      0
-    )
-
-    const totalLoanInterest = budget.loans.reduce(
-      (sum, loan) => sum + loan.monthlyInterest,
-      0
-    )
-    const totalLoanPrincipal = budget.loans.reduce(
-      (sum, loan) => sum + loan.monthlyPrincipal,
-      0
-    )
-    const totalLoanFees = budget.loans.reduce(
-      (sum, loan) => sum + loan.monthlyFees,
-      0
-    )
-    const totalLoanCost = totalLoanInterest + totalLoanPrincipal + totalLoanFees
-
-    const totalTripCost = budget.trips.reduce((sum, trip) => {
-      const perTrip =
-        trip.transportType === "AIR_OR_PUBLIC"
-          ? trip.ticketPerTrip
-          : trip.tollPerTrip + trip.ferryPerTrip + trip.fuelPerTrip
-
-      return sum + (trip.annualTrips * perTrip) / 12
-    }, 0)
-
-    const monthlyTaxDeduction =
-      (totalLoanInterest * 12 * (budget.taxDeductionPercent / 100)) / 12
-
-    const uncategorizedEntries = budget.entries.filter((entry) => !entry.category)
-    const categoryGroups = budget.categories.map((category) => {
-      const entries = budget.entries.filter(
-        (entry) => entry.category?.id === category.id
-      )
-
-      return {
-        category,
-        entries,
-        disposableImpact: entries.reduce(
-          (sum, entry) => sum + getEntryDisposableImpact(entry),
-          0
-        ),
-      }
-    })
-
-    const entryIncome = getEntryIncome(budget.entries)
-    const entryExpenses = getEntryExpenses(budget.entries)
-    const entryDeductions = getEntryDeductions(budget.entries)
-
-    const totalIncome = totalNetIncome + entryIncome
-    const totalExpenses = totalLoanCost + totalTripCost + entryExpenses
-    const totalDeductions = monthlyTaxDeduction + entryDeductions
-    const disposable = totalIncome - totalExpenses + totalDeductions
-
-    return {
-      totalNetIncome,
-      totalLoanInterest,
-      totalLoanCost,
-      totalTripCost,
-      monthlyTaxDeduction,
-      categoryGroups,
-      uncategorizedEntries,
-      uncategorizedImpact: uncategorizedEntries.reduce(
-        (sum, entry) => sum + getEntryDisposableImpact(entry),
-        0
-      ),
-      totalIncome,
-      totalExpenses,
-      totalDeductions,
-      disposable,
-    }
-  }, [budget])
+  const calculations = useMemo(() => calculateBudgetOverview(budget), [budget])
 
   function handleDeleteMember(id: string) {
     startTransition(async () => {
@@ -280,8 +189,9 @@ export function BudgetView({ budget }: BudgetViewProps) {
 
   function handleDeleteCategory(category: BudgetCategoryData) {
     const entryCount =
-      calculations.categoryGroups.find((group) => group.category.id === category.id)
-        ?.entries.length ?? 0
+      calculations.categoryGroups.find(
+        (group) => group.category.id === category.id
+      )?.entries.length ?? 0
     const message =
       entryCount > 0
         ? `Slette kategorien "${category.name}"? ${entryCount} ${entryCount === 1 ? "post blir" : "poster blir"} ukategorisert.`
@@ -361,7 +271,10 @@ export function BudgetView({ budget }: BudgetViewProps) {
         title="Inntekter"
         icon={<Users className="h-4 w-4" />}
         badge={
-          <Badge variant="outline" className="text-green-700 dark:text-green-400">
+          <Badge
+            variant="outline"
+            className="text-green-700 dark:text-green-400"
+          >
             {formatCurrency(calculations.totalNetIncome * multiplier)} netto
           </Badge>
         }
@@ -388,8 +301,9 @@ export function BudgetView({ budget }: BudgetViewProps) {
                 >
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium">{member.name}</p>
-                    <p className="break-words text-xs text-muted-foreground sm:text-sm">
-                      Brutto: {formatCurrency(member.grossMonthlyIncome * multiplier)}
+                    <p className="text-xs break-words text-muted-foreground sm:text-sm">
+                      Brutto:{" "}
+                      {formatCurrency(member.grossMonthlyIncome * multiplier)}
                       {" · "}
                       Skatt: {member.taxPercent}%
                     </p>
@@ -399,7 +313,10 @@ export function BudgetView({ budget }: BudgetViewProps) {
                       <p className="text-sm font-medium tabular-nums sm:text-base">
                         {formatCurrency(netIncome * multiplier)}
                       </p>
-                      <Badge variant="secondary" className="hidden text-xs sm:inline-flex">
+                      <Badge
+                        variant="secondary"
+                        className="hidden text-xs sm:inline-flex"
+                      >
                         Beregnet
                       </Badge>
                     </div>
@@ -452,15 +369,14 @@ export function BudgetView({ budget }: BudgetViewProps) {
         ) : (
           <div className="divide-y divide-border">
             {budget.loans.map((loan) => {
-              const totalMonthly =
-                loan.monthlyInterest + loan.monthlyPrincipal + loan.monthlyFees
+              const monthly = calculateLoanMonthlyAmounts(loan)
+              const totalMonthly = monthly.monthlyPayment + loan.monthlyFees
               const needsSetup =
                 loan.principalAmount <= 0 || loan.termMonths <= 0
               const termYears = loan.termMonths / 12
-              const termLabel =
-                Number.isInteger(termYears)
-                  ? `${termYears} år`
-                  : `${termYears.toFixed(1)} år`
+              const termLabel = Number.isInteger(termYears)
+                ? `${termYears} år`
+                : `${termYears.toFixed(1)} år`
 
               return (
                 <div
@@ -473,22 +389,28 @@ export function BudgetView({ budget }: BudgetViewProps) {
                       <span className="hidden text-sm font-normal text-muted-foreground sm:inline">
                         {loan.bankName}
                       </span>
-                      <Badge variant="secondary" className="hidden text-xs sm:inline-flex">
+                      <Badge
+                        variant="secondary"
+                        className="hidden text-xs sm:inline-flex"
+                      >
                         {loan.loanType === "MORTGAGE" ? "Boliglån" : "Annet"}
                       </Badge>
-                      <Badge variant="secondary" className="hidden text-xs sm:inline-flex">
+                      <Badge
+                        variant="secondary"
+                        className="hidden text-xs sm:inline-flex"
+                      >
                         {loan.repaymentType === "ANNUITY"
                           ? "Annuitet"
                           : "Serie"}
                       </Badge>
                     </p>
                     {needsSetup ? (
-                      <p className="text-xs text-amber-600 dark:text-amber-400 sm:text-sm">
+                      <p className="text-xs text-amber-600 sm:text-sm dark:text-amber-400">
                         Mangler lånebeløp og nedbetalingstid – rediger lånet for
                         å fullføre.
                       </p>
                     ) : (
-                      <p className="flex flex-wrap gap-x-1 gap-y-1 break-words text-xs text-muted-foreground sm:text-sm">
+                      <p className="flex flex-wrap gap-x-1 gap-y-1 text-xs break-words text-muted-foreground sm:text-sm">
                         <span className="sm:hidden">{loan.bankName}</span>
                         <span className="hidden sm:inline">
                           {formatCurrency(loan.principalAmount)} ·{" "}
@@ -496,17 +418,22 @@ export function BudgetView({ budget }: BudgetViewProps) {
                         </span>
                         <span className="hidden sm:inline">·</span>
                         <span className="hidden sm:inline">
-                          Renter: {formatCurrency(loan.monthlyInterest * multiplier)}
+                          Renter:{" "}
+                          {formatCurrency(monthly.monthlyInterest * multiplier)}
                         </span>
                         <span className="hidden sm:inline">·</span>
                         <span className="hidden sm:inline">
-                          Avdrag: {formatCurrency(loan.monthlyPrincipal * multiplier)}
+                          Avdrag:{" "}
+                          {formatCurrency(
+                            monthly.monthlyPrincipal * multiplier
+                          )}
                         </span>
                         {loan.monthlyFees > 0 && (
                           <>
                             <span className="hidden sm:inline">·</span>
                             <span className="hidden sm:inline">
-                              Gebyrer: {formatCurrency(loan.monthlyFees * multiplier)}
+                              Gebyrer:{" "}
+                              {formatCurrency(loan.monthlyFees * multiplier)}
                             </span>
                           </>
                         )}
@@ -547,17 +474,23 @@ export function BudgetView({ budget }: BudgetViewProps) {
                   <p className="font-medium text-blue-700 dark:text-blue-400">
                     Rentefradrag
                   </p>
-                  <p className="break-words text-xs text-muted-foreground sm:text-sm">
+                  <p className="text-xs break-words text-muted-foreground sm:text-sm">
                     {budget.taxDeductionPercent}% av totale rentekostnader (
                     {formatCurrency(calculations.totalLoanInterest * 12)}/år)
                   </p>
                 </div>
                 <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-start">
                   <div className="text-right">
-                    <p className="text-sm font-medium tabular-nums text-blue-700 dark:text-blue-400 sm:text-base">
-                      −{formatCurrency(calculations.monthlyTaxDeduction * multiplier)}
+                    <p className="text-sm font-medium text-blue-700 tabular-nums sm:text-base dark:text-blue-400">
+                      −
+                      {formatCurrency(
+                        calculations.monthlyTaxDeduction * multiplier
+                      )}
                     </p>
-                    <Badge variant="secondary" className="hidden text-xs sm:inline-flex">
+                    <Badge
+                      variant="secondary"
+                      className="hidden text-xs sm:inline-flex"
+                    >
                       Beregnet
                     </Badge>
                   </div>
@@ -602,7 +535,7 @@ export function BudgetView({ budget }: BudgetViewProps) {
                 >
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium">{trip.name}</p>
-                    <p className="break-words text-xs text-muted-foreground sm:text-sm">
+                    <p className="text-xs break-words text-muted-foreground sm:text-sm">
                       {trip.transportType === "AIR_OR_PUBLIC"
                         ? `Fly/offentlig · ${trip.annualTrips} reiser/år · Billett ${formatCurrency(perTrip)}/reise`
                         : `Bil · ${trip.annualTrips} reiser/år · Bom/ferge/drivstoff ${formatCurrency(perTrip)}/reise`}
@@ -640,57 +573,63 @@ export function BudgetView({ budget }: BudgetViewProps) {
         )}
       </BudgetSection>
 
-      {calculations.categoryGroups.map(({ category, entries, disposableImpact }) => (
-        <BudgetSection
-          key={category.id}
-          title={category.name}
-          icon={<Wallet className="h-4 w-4" />}
-          badge={<ImpactBadge value={disposableImpact * multiplier} />}
-          onAdd={() => openAddEntry({ categoryId: category.id, type: "EXPENSE" })}
-          addLabel="Legg til post"
-          headerActions={
-            <div className="flex items-center gap-1 sm:gap-2">
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={() => {
-                  setEditingCategory(category)
-                  setCategoryDialogOpen(true)
-                }}
-              >
-                <Pencil className="h-3.5 w-3.5" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={() => handleDeleteCategory(category)}
-                disabled={isPending}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          }
-        >
-          <EntryList
-            entries={entries}
-            multiplier={multiplier}
-            onEdit={(entry) => {
-              setEditingEntry(entry)
-              setEntryDefaults({})
-              setEntryDialogOpen(true)
-            }}
-            onDelete={handleDeleteEntry}
-            isPending={isPending}
-            emptyText="Ingen poster i kategorien"
-            showType
-          />
-        </BudgetSection>
-      ))}
+      {calculations.categoryGroups.map(
+        ({ category, entries, disposableImpact }) => (
+          <BudgetSection
+            key={category.id}
+            title={category.name}
+            icon={<Wallet className="h-4 w-4" />}
+            badge={<ImpactBadge value={disposableImpact * multiplier} />}
+            onAdd={() =>
+              openAddEntry({ categoryId: category.id, type: "EXPENSE" })
+            }
+            addLabel="Legg til post"
+            headerActions={
+              <div className="flex items-center gap-1 sm:gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => {
+                    setEditingCategory(category)
+                    setCategoryDialogOpen(true)
+                  }}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => handleDeleteCategory(category)}
+                  disabled={isPending}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            }
+          >
+            <EntryList
+              entries={entries}
+              multiplier={multiplier}
+              onEdit={(entry) => {
+                setEditingEntry(entry)
+                setEntryDefaults({})
+                setEntryDialogOpen(true)
+              }}
+              onDelete={handleDeleteEntry}
+              isPending={isPending}
+              emptyText="Ingen poster i kategorien"
+              showType
+            />
+          </BudgetSection>
+        )
+      )}
 
       <BudgetSection
         title="Ukategoriserte budsjettposter"
         icon={<Receipt className="h-4 w-4" />}
-        badge={<ImpactBadge value={calculations.uncategorizedImpact * multiplier} />}
+        badge={
+          <ImpactBadge value={calculations.uncategorizedImpact * multiplier} />
+        }
         onAdd={() => openAddEntry({ type: "EXPENSE" })}
         addLabel="Legg til post"
       >
@@ -763,7 +702,9 @@ function BudgetSection({
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-hidden">
             {icon}
-            <CardTitle className="min-w-0 truncate text-base">{title}</CardTitle>
+            <CardTitle className="min-w-0 truncate text-base">
+              {title}
+            </CardTitle>
             <span className="shrink-0">{badge}</span>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -806,7 +747,9 @@ function EntryList({
 }) {
   if (entries.length === 0) {
     return (
-      <p className="py-4 text-center text-sm text-muted-foreground">{emptyText}</p>
+      <p className="py-4 text-center text-sm text-muted-foreground">
+        {emptyText}
+      </p>
     )
   }
 
@@ -855,7 +798,11 @@ function EntryList({
               {formatCurrency(entry.monthlyAmount * multiplier)}
             </p>
             <div className="flex items-center gap-1 sm:gap-2">
-              <Button variant="ghost" size="icon-sm" onClick={() => onEdit(entry)}>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => onEdit(entry)}
+              >
                 <Pencil className="h-3.5 w-3.5" />
               </Button>
               <Button

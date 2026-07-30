@@ -98,7 +98,7 @@ const statusConfig = {
 }
 
 export default async function DashboardPage() {
-  const { session, membership } = await requireHousehold()
+  const { context } = await requireHousehold()
   const {
     householdLists,
     privateLists,
@@ -106,15 +106,9 @@ export default async function DashboardPage() {
     budgetStats,
     maintenanceStats,
     maintenanceTasks,
-  } = await getDashboardData(membership.householdId, session.user.id)
+  } = await getDashboardData(context)
 
-  // Budget calculations
-  const cashFlow = budgetStats.hasBudget
-    ? budgetStats.totalNetIncome -
-      budgetStats.totalLoanPayments -
-      budgetStats.totalExpenses +
-      budgetStats.totalDeductions
-    : 0
+  const cashFlow = budgetStats.hasBudget ? budgetStats.disposable : 0
 
   return (
     <div className="flex flex-col gap-6 sm:gap-10">
@@ -158,7 +152,7 @@ export default async function DashboardPage() {
               },
               {
                 label: "Utgifter",
-                value: budgetStats.totalExpenses,
+                value: budgetStats.totalNonLoanExpenses,
                 tone: "expense",
               },
             ]}

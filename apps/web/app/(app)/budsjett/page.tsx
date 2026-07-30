@@ -2,7 +2,6 @@ import Link from "next/link"
 import { requireHousehold } from "@/lib/session"
 import { getBudget } from "@/lib/queries/budget"
 import { ensureBudget } from "@/lib/actions/budget"
-import { calculateLoanMonthlyAmounts } from "@/lib/budget-loan"
 import { Button } from "@workspace/ui/components/button"
 import { BotMessageSquare } from "lucide-react"
 import { BudgetView } from "./budget-view"
@@ -12,11 +11,11 @@ function toNumber(d: unknown): number {
 }
 
 export default async function BudsjettPage() {
-  const { membership } = await requireHousehold()
+  const { context } = await requireHousehold()
 
   // Ensure a budget exists for this household
   await ensureBudget()
-  const budget = await getBudget(membership.householdId)
+  const budget = await getBudget(context)
   if (!budget) throw new Error("Budget not found")
 
   const serialized = {
@@ -32,32 +31,17 @@ export default async function BudsjettPage() {
       grossMonthlyIncome: toNumber(m.grossMonthlyIncome),
       taxPercent: toNumber(m.taxPercent),
     })),
-    loans: budget.loans.map((l) => {
-      const principalAmount = toNumber(l.principalAmount)
-      const annualInterestRate = toNumber(l.annualInterestRate)
-      const termMonths = l.termMonths
-      const repaymentType = l.repaymentType
-      const monthly = calculateLoanMonthlyAmounts({
-        principalAmount,
-        annualInterestRate,
-        termMonths,
-        repaymentType,
-      })
-
-      return {
-        id: l.id,
-        bankName: l.bankName,
-        loanName: l.loanName,
-        loanType: l.loanType,
-        repaymentType,
-        principalAmount,
-        annualInterestRate,
-        termMonths,
-        monthlyFees: toNumber(l.monthlyFees),
-        monthlyInterest: monthly.monthlyInterest,
-        monthlyPrincipal: monthly.monthlyPrincipal,
-      }
-    }),
+    loans: budget.loans.map((l) => ({
+      id: l.id,
+      bankName: l.bankName,
+      loanName: l.loanName,
+      loanType: l.loanType,
+      repaymentType: l.repaymentType,
+      principalAmount: toNumber(l.principalAmount),
+      annualInterestRate: toNumber(l.annualInterestRate),
+      termMonths: l.termMonths,
+      monthlyFees: toNumber(l.monthlyFees),
+    })),
     trips: budget.trips.map((t) => ({
       id: t.id,
       name: t.name,
@@ -89,7 +73,7 @@ export default async function BudsjettPage() {
           <h1 className="font-heading text-2xl font-bold tracking-tight">
             Budsjett
           </h1>
-          <p className="text-muted-foreground text-sm">
+          <p className="text-sm text-muted-foreground">
             Oversikt over husstandens inntekter og kostnader
           </p>
         </div>

@@ -1,20 +1,13 @@
-import { db } from "@workspace/db"
+import type { ApplicationContext } from "@/lib/application/context"
+import {
+  getPlant as readPlant,
+  listPlants,
+} from "@/lib/application/garden/read"
 
-export async function getPlants(householdId: string) {
-  return db.plant.findMany({
-    where: { householdId },
-    orderBy: { name: "asc" },
-  })
+export async function getPlants(context: ApplicationContext) {
+  return listPlants(context)
 }
 
-export async function getPlant(plantId: string, householdId: string) {
-  const plant = await db.plant.findUnique({
-    where: { id: plantId },
-  })
-
-  if (!plant || plant.householdId !== householdId) {
-    return null
-  }
-
-  return plant
+export async function getPlant(context: ApplicationContext, plantId: string) {
+  return readPlant(context, plantId)
 }

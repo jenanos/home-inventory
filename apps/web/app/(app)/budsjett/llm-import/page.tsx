@@ -4,9 +4,9 @@ import { getBudget } from "@/lib/queries/budget"
 import { BudgetLlmImportPageClient } from "../llm-import-page-client"
 
 export default async function BudgetLlmImportPage() {
-  const { membership } = await requireHousehold()
+  const { context } = await requireHousehold()
   await ensureBudget()
-  const budget = await getBudget(membership.householdId)
+  const budget = await getBudget(context)
 
   return (
     <BudgetLlmImportPageClient

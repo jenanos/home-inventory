@@ -1,6 +1,7 @@
 "use server"
 
 import { db, type Priority, type TaskStatus } from "@workspace/db"
+import { formatDateToIsoDate } from "@/lib/application/serialization"
 import { requireHousehold } from "@/lib/session"
 import { revalidatePath } from "next/cache"
 
@@ -17,10 +18,6 @@ function sanitizeUrl(
     // invalid URL
   }
   return undefined
-}
-
-function formatDateToIsoDate(date: Date): string {
-  return date.toISOString().slice(0, 10)
 }
 
 // --- MaintenanceTask actions ---

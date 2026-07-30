@@ -1,17 +1,6 @@
-import { db } from "@workspace/db"
+import type { ApplicationContext } from "@/lib/application/context"
+import { getBudget as readBudget } from "@/lib/application/budget/read"
 
-export async function getBudget(householdId: string) {
-  return db.budget.findUnique({
-    where: { householdId },
-    include: {
-      categories: { orderBy: { sortOrder: "asc" } },
-      members: { orderBy: { sortOrder: "asc" } },
-      loans: { orderBy: { sortOrder: "asc" } },
-      trips: { orderBy: { sortOrder: "asc" } },
-      entries: {
-        orderBy: { sortOrder: "asc" },
-        include: { category: true },
-      },
-    },
-  })
+export async function getBudget(context: ApplicationContext) {
+  return readBudget(context)
 }

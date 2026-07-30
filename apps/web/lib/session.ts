@@ -1,4 +1,9 @@
 import { auth } from "@/lib/auth"
+import {
+  type ApplicationContext,
+  getApplicationContext,
+} from "@/lib/application/context"
+import { HouseholdMembershipRequiredError } from "@/lib/application/errors"
 import { db } from "@workspace/db"
 import { redirect } from "next/navigation"
 
@@ -11,30 +16,54 @@ export async function requireAuth() {
 }
 
 export async function getUserHousehold(userId: string) {
-  const membership = await db.householdMember.findFirst({
-    where: { userId },
+  try {
+    const context = await getApplicationContext(userId)
+    return await getHouseholdMembership(context)
+  } catch (error) {
+    if (error instanceof HouseholdMembershipRequiredError) {
+      return null
+    }
+    throw error
+  }
+}
+
+async function getHouseholdMembership(context: ApplicationContext) {
+  const membership = await db.householdMember.findUnique({
+    where: {
+      userId_householdId: {
+        userId: context.userId,
+        householdId: context.householdId,
+      },
+    },
     include: {
       household: {
-        include: {
-          members: {
-            include: { user: true },
-          },
+        select: {
+          id: true,
+          name: true,
         },
       },
     },
   })
+
+  if (!membership) {
+    throw new HouseholdMembershipRequiredError()
+  }
+
   return membership
 }
 
 export async function requireHousehold() {
   const session = await requireAuth()
-  const membership = await getUserHousehold(session.user.id)
-
-  if (!membership) {
-    redirect("/onboarding")
+  try {
+    const context = await getApplicationContext(session.user.id)
+    const membership = await getHouseholdMembership(context)
+    return { session, membership, context }
+  } catch (error) {
+    if (error instanceof HouseholdMembershipRequiredError) {
+      redirect("/onboarding")
+    }
+    throw error
   }
-
-  return { session, membership }
 }
 
 export async function isCurrentUserAdmin() {

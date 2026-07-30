@@ -10,8 +10,8 @@ import { CreateListDialog } from "./create-list-dialog"
 import { EditListDialog } from "./edit-list-dialog"
 
 export default async function ListsPage() {
-  const { session, membership } = await requireHousehold()
-  const lists = await getShoppingLists(membership.householdId, session.user.id)
+  const { context } = await requireHousehold()
+  const lists = await getShoppingLists(context)
   const householdLists = lists.filter((list) => !list.isPrivate)
   const privateLists = lists.filter((list) => list.isPrivate)
 

@@ -1,10 +1,11 @@
+import { formatDateToIsoDate } from "@/lib/application/serialization"
 import { requireHousehold } from "@/lib/session"
 import { getMaintenanceTasks } from "@/lib/queries/maintenance"
 import { MaintenanceLlmImportPageClient } from "../llm-import-page-client"
 
 export default async function VedlikeholdLlmImportPage() {
-  const { membership } = await requireHousehold()
-  const tasks = await getMaintenanceTasks(membership.householdId)
+  const { context, membership } = await requireHousehold()
+  const tasks = await getMaintenanceTasks(context)
 
   return (
     <MaintenanceLlmImportPageClient
@@ -16,9 +17,7 @@ export default async function VedlikeholdLlmImportPage() {
         estimatedDuration: task.estimatedDuration ?? undefined,
         estimatedPrice:
           task.estimatedPrice != null ? Number(task.estimatedPrice) : undefined,
-        dueDate: task.dueDate
-          ? task.dueDate.toISOString().slice(0, 10)
-          : undefined,
+        dueDate: task.dueDate ? formatDateToIsoDate(task.dueDate) : undefined,
         vendors: task.vendors.map((vendor) => ({
           name: vendor.name,
           description: vendor.description ?? undefined,
