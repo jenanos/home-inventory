@@ -1,6 +1,7 @@
 # Implementasjonsplan: MCP-server for Home Overview
 
-Dato: 2026-07-29
+Dato: 2026-07-29. Revidert 2026-07-30 etter kvalitetssikring mot kodebasen;
+funnene er innarbeidet i kapitlene under, særlig 3.2, 3.4, 7, 10.2, 10.4 og 14.0.
 
 ## 1. Mål og avgrensning
 
@@ -20,6 +21,8 @@ Planen dekker:
 - et felles tjenestelag for webgrensesnittet og MCP
 - verktøykontrakter for innkjøp, budsjett, vedlikehold og hage
 - databasemodeller for persistent OAuth-tilstand
+- forarbeidet i eksisterende kode som MCP er avhengig av: kjørbare tester,
+  delt budsjettberegning og autorisasjon i oppslaget (se 3.4)
 - testing, observabilitet, utrulling og drift
 - en oppdeling i leveranser som kan implementeres og gjennomgås hver for seg
 
@@ -95,7 +98,10 @@ avklarer følgende:
    målklient. Ikke anta at alle klienter tolker discovery-lokasjoner likt.
 6. **Runtime.** MCP- og OAuth-rutene skal eksplisitt bruke Node-runtime, ikke
    Edge-runtime, fordi Prisma og kryptografien skal være den samme som ellers
-   på serveren.
+   på serveren. Konkret regel, slik at den er sjekkbar i review: hver ny rute
+   eksporterer `export const runtime = "nodejs"`. Ingen slik eksport finnes i
+   koden i dag — eneste API-rute er `app/api/auth/[...nextauth]/route.ts` — så
+   dette er en ny konvensjon, ikke en videreføring.
 
 Spiken kan bruke ett ufarlig verktøy, for eksempel `get-server-info`, og en
 midlertidig utviklingstoken som kun er tilgjengelig lokalt. Midlertidig auth
@@ -109,20 +115,59 @@ utvei, ikke automatisk neste steg.
 ### 3.2 Produktforutsetninger
 
 - Før MCP aktiveres, skal databasen håndheve maksimalt ett aktivt
-  husstandsmedlemskap per bruker. Migrasjonen skal først finne og stoppe på
-  eksisterende duplikater; deretter legges en unik constraint på `userId`, og
-  invitasjonsflyten skal avvise medlemskap i en ny husstand. Hvis produktet
-  senere skal støtte flere husstander, må det i stedet innføres et eksplisitt,
-  servervalidert valg av aktiv husstand før MCP kan bruke denne modellen.
+  husstandsmedlemskap per bruker. `HouseholdMember` har i dag sammensatt
+  primærnøkkel `@@id([userId, householdId])` og ingen egen `id`-kolonne, så en
+  unik constraint på `userId` alene er mulig — men den gjør modellen de facto
+  1:1 med `User`, som er en produktbeslutning og bør kommenteres i schemaet.
+  Migrasjonen skal først finne og stoppe på eksisterende duplikater. Siden
+  Prisma-migrasjoner er ren SQL, må dette skrives som en eksplisitt guard
+  (`DO $$ ... RAISE EXCEPTION ... $$`) før `CREATE UNIQUE INDEX`; ellers blir
+  migrasjonen enten uten guard eller manuell. Deretter skal invitasjonsflyten
+  avvise medlemskap i en ny husstand. Hvis produktet senere skal støtte flere
+  husstander, må det i stedet innføres et eksplisitt, servervalidert valg av
+  aktiv husstand før MCP kan bruke denne modellen.
+- **Sletting av bruker må avklares før fase 4.** Migrasjonen
+  `20260427141000_add_private_shopping_lists` legger på en check-constraint som
+  Prisma ikke modellerer, og som derfor er usynlig i `schema.prisma`:
+
+  ```sql
+  CHECK (NOT "isPrivate" OR "createdById" IS NOT NULL)
+  ```
+
+  Fremmednøkkelen er `ON DELETE SET NULL`, men constrainten blokkerer den
+  nullingen for private lister. Konsekvensen er at `deleteUser`
+  (`apps/web/lib/actions/admin.ts:56`, et bart `db.user.delete`) **feiler i dag**
+  for enhver bruker som har opprettet minst én privat liste. En eierløs privat
+  liste er dermed en uoppnåelig tilstand — invarianten er god — men
+  brukersletting er blokkert. Produktbeslutningen som mangler: ved sletting av en
+  bruker skal deres private lister (a) slettes, (b) overføres til et annet
+  husstandsmedlem, eller (c) gjøres offentlige. Valget må tas, `deleteUser` må
+  håndtere det i samme transaksjon, og schemaet bør få en kommentar om
+  constrainten. Dette er uavhengig av MCP-arbeidet, men blokkerer
+  negativtesten i 14.2 om at slettet bruker mister tilgang.
 - Språket i verktøynavn og feltnavn er engelsk. Beskrivelser, feilmeldinger og
   brukerrettet samtykke kan være norsk.
 - Beløp bruker NOK som standard, siden datamodellen ikke har valutafelt. MCP
   skal ikke late som om flere valutaer støttes.
 - Datoer sendes som ISO 8601. Kalenderdatoer som forfallsdato bør være
-  `YYYY-MM-DD`; tidspunkter skal være UTC med `Z`.
-- Desimaltall serialiseres uten Prisma-spesifikke typer. Pengebeløp bør
-  returneres som desimalstrenger for å unngå binær avrunding, med mindre en
-  dokumentert felles kontrakt velger heltall i øre.
+  `YYYY-MM-DD`; tidspunkter skal være UTC med `Z`. Merk at `dueDate` på
+  `ShoppingItem`, `MaintenanceTask` og `TaskProgressEntry` alle er `DateTime`,
+  ikke `date`. Eksisterende kode gjør `new Date("YYYY-MM-DD")`, som gir midnatt
+  **UTC**, og leser tilbake med `formatDateToIsoDate`. Med Europe/Oslo (UTC+1/+2)
+  kan en dato ellers skifte dag mellom skriving og visning, så
+  konverteringsregelen skal fastsettes eksplisitt, og `formatDateToIsoDate` er
+  normativ leseside.
+- Desimaltall serialiseres uten Prisma-spesifikke typer. **Lagrede** pengebeløp
+  returneres som desimalstrenger direkte fra `Decimal`, for å unngå binær
+  avrunding. For **beregnede** aggregater gjelder ikke dette uten videre: all
+  aggregering skjer i JS-`number` i dag (`toNumber(...)` i
+  `app/(app)/budsjett/page.tsx` og `Number(value)` i `lib/dashboard-stats.ts`),
+  altså forlater `Decimal` domenet før noe summeres. Kravet om desimalstrenger og
+  kravet i 10.2 om «samme avrunding som UI-et» kan derfor ikke oppfylles
+  samtidig uten en beslutning. Velg én: dokumenter aggregatene som
+  float-derivert med definert avrunding, eller flytt beregningen til `Decimal`
+  som en egen, større oppgave. Uten valget vil MCP og UI vise ulike tall i
+  randtilfeller.
 
 ### 3.3 Driftsforutsetninger
 
@@ -140,6 +185,58 @@ Før produksjonsaktivering må følgende finnes:
 
 Mangler MCP-konfigurasjon, skal de nye rutene svare kontrollert med `503`, mens
 resten av Home Overview starter og fungerer normalt.
+
+Det finnes ingen konfigurasjonsmodul i dag: hele kodebasen har tre
+`process.env`-oppslag (`ADMIN_EMAIL`, `EMAIL_FROM`, `RESEND_API_KEY`), uten
+validering. Konfigurasjonen får derfor en egen modul, for eksempel
+`apps/web/lib/mcp/config.ts`, som valideres én gang ved oppstart og ikke per
+forespørsel. `503`-oppførselen leses fra den samme modulen.
+
+### 3.4 Utgangspunktet i dagens kodebase
+
+Følgende er verifisert mot koden og påvirker flere av fasene. Det står samlet her
+fordi flere punkter ellers ville blitt oppdaget først under implementasjon.
+
+- **Testoppsettet finnes, men kjøres ikke automatisk.** Vitest 4.1.5 er
+  konfigurert i `apps/web` med `"test": "vitest run"`, og det finnes fire
+  testfiler: `middleware.test.ts`, `lib/dashboard-stats.test.ts`,
+  `lib/shopping-list-access.test.ts`, `lib/shopping-list-pricing.test.ts`. Men
+  `turbo.json` har ingen `test`-task, rot-`package.json` ingen `test`-script, og
+  `.github/workflows/build-push.yml` kjører bare docker build — ingen lint, ingen
+  typecheck, ingen tester. Uten at dette rettes i fase 0 er «grønne tester» i
+  akseptansekriteriene ikke håndhevbart. `CLAUDE.md` sier feilaktig at det ikke
+  finnes noe testrammeverk, og rettes samtidig.
+- **Det finnes ingen testdatabase.** `docker-compose.yml` har bare
+  dev-databasen (postgres:16 på port 5435), og `packages/db` har ikke noe
+  test-script. Se 14.2 for hva integrasjonstestene trenger.
+- **Autorisasjon skjer som check-then-act.** Mønsteret
+  `findUnique({ where: { id } })` → separat eierskapssjekk →
+  `update({ where: { id } })` finnes i minst 13 funksjoner (`budget.ts` 6,
+  `shopping-list.ts` 3, `plant.ts` 2, `admin.ts` 1, `share-link.ts` 1) av totalt
+  66 eksporterte server actions fordelt på 11 filer. Se kapittel 7; omfanget
+  fordeler seg over fasene 1, 5, 6 og 7.
+- **Husstanden slås opp med uordnet `findFirst` også i webflyten.**
+  `getUserHousehold()` (`apps/web/lib/session.ts:15`) gjør nettopp det kapittel 7
+  forbyr for MCP, og `requireHousehold()` kaller i tillegg `redirect()` fra
+  `next/navigation`. Begge må endres i fase 1, ellers får web og MCP forskjellig
+  regel for samme tilstand.
+- **Budsjettberegningen er ikke delt, og finnes i to divergerende utgaver.**
+  Se 10.2.
+- **Duplikat-import-flyter finnes allerede** for innkjøp, vedlikehold og
+  budsjett. Se 10.4 — de er utgangspunkt for verktøykontraktene, ikke noe som
+  skal vurderes til slutt.
+- **Ingen rate limiting og ingen `Cache-Control`-headere finnes.** Søk etter
+  `rateLimit` og `Cache-Control` i `apps/web` gir null treff. Kapittel 11 punkt
+  12–13 er derfor ny infrastruktur, ikke tilpasning av noe eksisterende.
+- **Auth.js er en pinnet beta.** `next-auth 5.0.0-beta.30`, med `@auth/core`
+  pinnet til `0.41.1` i `pnpm.overrides` og en TODO i `lib/auth.ts` om
+  oppgradering til stabil v5. Samtykkeflyten i 5.1 er avhengig av `auth()`, så en
+  senere oppgradering er en reell risiko for OAuth-flyten og bør dekkes av
+  fase 3-testene.
+- **Produksjonsoppsettet ligger utenfor dette repoet.** `docker-compose.yml` her
+  er bare dev-databasen; Caddy- og prod-compose-konfigurasjon finnes et annet
+  sted. Kapittel 16 og 17 kan derfor ikke etterprøves i denne kodebasen, og må
+  verifiseres mot den faktiske serverkonfigurasjonen.
 
 ## 4. Protokoll- og HTTP-flate
 
@@ -196,13 +293,20 @@ til `/login`. MCP-klienter bruker bearer-token og har ingen slik cookie.
 Følgende stier må derfor klassifiseres som offentlige på middleware-nivå:
 
 - `/api/mcp`
-- `/api/oauth`
+- `/api/oauth/`
 - `/.well-known`
+
+Dagens `isPublicPathname` matcher med `startsWith`, så prefikset skrives med
+avsluttende skråstrek (`/api/oauth/`) eller med eksakt matching — ellers slipper
+også en sti som `/api/oauthfoo` gjennom. `matcher`-konfigurasjonen ekskluderer i
+dag bare `_next/static`, `_next/image` og `favicon.ico`, så både `/api/mcp` og
+`/.well-known` går faktisk gjennom middleware; tilføyelsen er nødvendig.
 
 «Offentlig» betyr her bare at middleware slipper forespørselen frem. Hver rute
 skal fortsatt utføre sin egen fullstendige autentisering. Det må finnes tester
 som hindrer en senere middleware-endring i å gjøre discovery eller tokenflyten
-utilgjengelig.
+utilgjengelig; de hører i eksisterende `apps/web/middleware.test.ts`, som allerede
+dekker `isPublicPathname`.
 
 ## 5. Autentisering, samtykke og tokenlivsløp
 
@@ -337,9 +441,12 @@ må persisteres:
 - referanse til erstattende token for rotasjon/reuse-deteksjon
 
 Indekser må dekke hashuppslag, utløpsopprydding, brukerens aktive grants og
-klientens aktive tokens. Alle relasjoner til `User` skal slettes eller
-revokeres ved sletting av brukeren. Autorisasjonskodekonsum og refresh-rotasjon
-skal utføres i transaksjoner som tåler to samtidige forespørsler.
+klientens aktive tokens. Alle relasjoner **fra disse nye tabellene** til `User`
+skal slettes eller revokeres ved sletting av brukeren. Kravet gjelder ikke
+eksisterende app-relasjoner: `ShoppingList.createdBy` er bevisst `SetNull`, og
+brukersletting har sin egen uavklarte sak (se 3.2). Autorisasjonskodekonsum og
+refresh-rotasjon skal utføres i transaksjoner som tåler to samtidige
+forespørsler.
 
 Ikke lagre access tokens. Authorization codes, refresh tokens,
 samtykke-engangstokens og eventuelle client secrets skal aldri lagres i
@@ -368,6 +475,18 @@ Konteksten bygges slik for MCP:
    medlemskap skal feile lukket og aldri avgjøres med et uordnet `findFirst`
 5. aldri aksepter `householdId` fra verktøyinput
 
+Kontekstoppslaget skal være en **egen, minimal spørring** som bare henter
+`userId`, `householdId` og eventuelt `role`. Det er ikke nok å gjenbruke
+`getUserHousehold()`: den gjør i dag
+`include: { household: { include: { members: { include: { user: true } } } } }`,
+altså hele `User`-raden for alle husstandsmedlemmer — inkludert `email`,
+`isAdmin` og `image`. Gjenbruk av den spørringen legger persondata i objektgrafen
+før noe verktøy har bestemt seg for å utelate dem.
+
+Merk også at `getUserHousehold()` bruker `findFirst` uten sortering, altså
+nøyaktig mønsteret punkt 4 forbyr, og at `requireHousehold()` kaller `redirect()`.
+Begge endres i fase 1 slik at webflyten og MCP håndhever samme regel.
+
 Dette gjør at fjerning fra en husstand får effekt selv om et access token
 fortsatt er gyldig. Manglende medlemskap skal gi en autorisasjonsfeil, ikke
 automatisk onboarding eller redirect.
@@ -375,7 +494,16 @@ automatisk onboarding eller redirect.
 For hver ID-basert operasjon skal tjenestelaget hente eller mutere med både
 ressurs-ID og riktig eiergrense. En `update({ where: { id } })` etterfulgt av
 en separat eierskapssjekk er ikke godt nok; autorisasjonen må være del av
-oppslaget/transaksjonen. Barneressurser skal avgrenses via forelderen:
+oppslaget/transaksjonen.
+
+Dette er ikke en teoretisk innvending: mønsteret finnes i minst 13 eksisterende
+funksjoner (se 3.4), for eksempel `upsertBudgetMember`
+(`lib/actions/budget.ts:237`), som slår opp med `findUnique({ where: { id } })`,
+sammenligner `budgetId`, og deretter oppdaterer på `id` alene. Konverteringen
+fordeler seg over fasene 1, 5, 6 og 7, og er en større del av dem enn
+oppgavelistene alene antyder.
+
+Barneressurser skal avgrenses via forelderen:
 
 - handleelement → synlig handleliste → husstand og bruker
 - produktalternativ → handleelement → synlig handleliste
@@ -386,6 +514,14 @@ oppslaget/transaksjonen. Barneressurser skal avgrenses via forelderen:
 Private handlelister er synlige bare for oppretteren. Dette gjelder også
 søk, tellinger, dashboardlignende oppsummeringer og feilmeldinger. En bruker
 uten tilgang bør normalt få samme «ikke funnet»-respons som for en ukjent ID.
+Regelen finnes allerede som `getVisibleShoppingListsWhere` og
+`isShoppingListAccessible` i `apps/web/lib/shopping-list-access.ts`, med tester —
+tjenestelaget skal bruke disse, ikke reimplementere filteret.
+
+En privat liste kan ikke være eierløs; check-constrainten beskrevet i 3.2 gjør
+den tilstanden uoppnåelig. Verktøyene trenger derfor ingen særregel for
+`createdById = null` på private lister, men brukersletting må avklares før
+fase 4.
 
 ## 8. Felles tjenestelag
 
@@ -413,7 +549,10 @@ apps/web/lib/mcp/
 
 Det er viktigere å holde avhengighetsretningen ren enn å følge akkurat disse
 mappenavnene. `application` skal ikke importere fra `next/headers`,
-`next/cache`, MCP-SDK-en eller React.
+`next/cache`, `next/navigation`, MCP-SDK-en eller React. `next/navigation` er
+med i listen fordi `requireHousehold()` i dag kaller `redirect()`: en
+`NEXT_REDIRECT`-throw fra tjenestelaget vil boble ut gjennom MCP-ruten som en
+uforståelig feil i stedet for en autorisasjonsfeil.
 
 ### 8.2 Gradvis refaktorering
 
@@ -456,14 +595,26 @@ Adapterne bør eie:
 - Resultater bruker både maskinlesbart `structuredContent` og kort tekstlig
   `content`, med samsvar mellom de to.
 - Hemmelige eller interne felt, Prisma-objekter og stack traces returneres
-  aldri.
+  aldri. Brukerfelt skal i tillegg være **hvitelistet per verktøy**, ikke bare
+  filtrert for hemmeligheter: `ShoppingItem.assignedTo` og `BudgetMember.name`
+  er persondata, og kontekstspørringen i kapittel 7 er allerede en kjent kilde
+  til utilsiktet `User`-eksponering.
 - Oppdateringsverktøy skiller mellom «felt ikke oppgitt» og «sett felt til
   null».
 - Resultatlister har stabil sortering og paginering med en konservativ
   standardgrense og maksimalgrense.
 - Fritekstsøk skal ha lengdegrenser og definerte felt det søker i.
 - Bulkverktøy skal ha lav maksgrense, transaksjonell semantikk og resultat per
-  element dersom delvis suksess tillates.
+  element dersom delvis suksess tillates. Grensen skal ligge i **tjenestelaget**,
+  ikke bare i MCP-adapteren: `bulkCreateShoppingItems`,
+  `bulkImportMaintenanceTasks` og `bulkImportBudget` mapper i dag input rett inn i
+  `db.$transaction(...)` uten lengdesjekk, og ligger grensen bare i adapteren
+  gjelder den ikke for webflyten — da får de to lagene ulik kontrakt for samme
+  operasjon.
+- Enumverdier valideres eksplisitt og avvises ved ukjent verdi. Merk at
+  eksisterende `bulkImportMaintenanceTasks` faller stille tilbake til `MEDIUM`
+  ved ukjent `priority`; den oppførselen skal ikke videreføres i tjenestelaget
+  uten at det er et bevisst valg.
 
 ### 9.2 Idempotens og samtidighet
 
@@ -472,6 +623,11 @@ Verktøy skal uttrykke ønsket sluttilstand:
 - `set-shopping-item-status(status: "PURCHASED")`, ikke «toggle purchased»
 - `set-selected-vendor(vendorId | null)`, ikke «toggle selected»
 - `set-progress-entry-completed(completed: true)`, ikke «toggle completed»
+
+Det første punktet er konkret: `toggleItemPurchased`
+(`lib/actions/shopping-item.ts:515`) finnes i dag og er nøyaktig den
+ikke-idempotente formen som ikke skal eksponeres. Den kan beholdes som action for
+webflyten, men tjenestelaget skal tilby sluttilstandsvarianten.
 
 For risikable mutasjoner bør klienten kunne sende ressursens `updatedAt` som
 `expectedUpdatedAt`. Serveren avviser da et gammelt kall i stedet for å
@@ -545,6 +701,38 @@ Oppsummeringen skal bruke samme beregningsfunksjoner og avrunding som UI-et.
 Detaljer og oppsummering splittes for å unngå at hele budsjettet sendes for
 ethvert spørsmål.
 
+**Det finnes ingen slik delt funksjon i dag, og dette er planens største tekniske
+usikkerhet.** Beregningen finnes i to uavhengige utgaver:
+
+1. `apps/web/app/(app)/budsjett/budget-view.tsx` er `"use client"` og beregner
+   nettoinntekt, lånerente/-avdrag/-gebyr, reisekostnader, rentefradrag og
+   disponibelt beløp i en `useMemo` (ca. linje 161–230).
+2. `apps/web/lib/dashboard-stats.ts:93` `calculateBudgetStats()` beregner et
+   annet sett — `totalGrossIncome`, `totalNetIncome`, `totalLoanPayments`,
+   `totalExpenses`, `totalDeductions` — **uten reiser, uten rentefradrag**, og
+   uten disponibelt beløp.
+
+Bare `calculateLoanMonthlyAmounts` (`apps/web/lib/budget-loan.ts`) er faktisk
+delt. Feltene listet over matcher dermed ingen eksisterende funksjon fullstendig,
+og «sentraliser budsjettberegninger» i fase 1 er ikke en flytting, men en
+sammenslåing av to formler pluss et uttrekk fra en klientkomponent.
+
+Rekkefølgen må være: (a) beslutt hvilken formel som er normativ, (b) skriv en
+karakteriseringstest som låser dagens tall fra `budget-view.tsx`, (c) flytt
+beregningen til en ren modul under `application/budget`, (d) la både
+`budget-view.tsx`, `dashboard-stats.ts` og MCP bruke den. Uten (b) oppdages
+avviket først når MCP og UI viser ulike beløp.
+
+`Budget` er dessuten valgfri per husstand (`Household.budget` er `Budget?`), og
+`ensureBudget()` (`lib/actions/budget.ts:203`) oppretter raden når webflyten
+trenger den. Kontrakten må derfor fastsettes eksplisitt: for en husstand uten
+budsjett returnerer `get-budget-summary` et tomt, veldefinert svar med et
+`hasBudget: false`-lignende felt — ikke `NOT_FOUND`, siden husstanden finnes — og
+skriveverktøyene i nivå 2 får opprette budsjettraden implisitt via samme
+`ensureBudget`-semantikk. Alternativet (krev at budsjettet opprettes i webappen
+først) er også akseptabelt, men valget skal stå her og ikke tas under
+implementasjon.
+
 #### Vedlikehold
 
 | Verktøy                  | Input                                | Resultat                              |
@@ -580,6 +768,28 @@ Aktuelle sammensatte verktøy etter at enkelverktøyene er observert i bruk:
 - `apply-budget-changes` bundet til en kortlevd preview-ID eller
   revisjonsverdi
 
+**`add-shopping-items` er ikke et nytt mønster.** Duplikat-import med
+forhåndsvisning kjører allerede i produksjon for alle tre domener, som de manuelle
+LLM-importflytene:
+
+- innkjøp: `bulkCreateShoppingItems` (`lib/actions/shopping-item.ts:188`),
+  `findExistingShoppingItems` (`:334`),
+  `bulkImportShoppingItemsWithDuplicates` (`:398`), med forhåndsvisningen koblet
+  opp i `app/(app)/lists/[id]/llm-import-page-client.tsx`
+- vedlikehold: `bulkImportMaintenanceTasks`, `findExistingMaintenanceTasks`
+  (duplikatdeteksjon på lowercased tittel), `applyTaskUpdates`,
+  `bulkImportMaintenanceTasksWithDuplicates` i `lib/actions/maintenance-task.ts`
+- budsjett: `bulkImportBudget`, `bulkImportBudgetWithDuplicates`,
+  `findExistingBudgetItems` i `lib/actions/budget.ts`
+
+**Innkjøpsflyten er det primære uttrekksmålet** for dette verktøyet, ikke
+budsjett- eller vedlikeholdsvarianten: den har allerede den listespesifikke
+autorisasjonen (privatliste-regelen via `getVisibleShoppingListsWhere`) og
+oppdateringssemantikken som de to andre domenene mangler. Å modellere verktøyet
+etter en av de andre variantene risikerer å duplisere oppførsel og miste
+privatliste-sjekken. Det som faktisk mangler i den eksisterende flyten er
+batch-grensen (se 9.1).
+
 Sletting av enkeltelementer kan innføres ett domene av gangen. Følgende skal
 fortsatt ikke eksponeres:
 
@@ -588,6 +798,14 @@ fortsatt ikke eksponeres:
 - administratoroperasjoner
 - full `replace` av lister, budsjett, vedlikeholdsoppgaver eller planter
 - endring av egen adminstatus eller OAuth-konfigurasjon
+
+To eksisterende funksjoner treffer forbudet mot full `replace` direkte:
+`replaceShoppingItems` (`lib/actions/shopping-item.ts:251`) og `replaceBudget`
+(`lib/actions/budget.ts:711`). Fase 5 og 6 trekker write-services ut av nettopp
+disse to filene, så forbudet må håndheves strukturelt: begge beholdes som rene
+server actions og flyttes **ikke** til `application/`, alternativt eksponeres
+tjenestefunksjonen de bygger på aldri i verktøyregisteret. Ellers hviler forbudet
+bare på at ingen registrerer dem ved en feil.
 
 ## 11. Sikkerhetstiltak
 
@@ -685,6 +903,37 @@ være nødvendig for korrekthet, bare for plassbruk.
 
 ## 14. Teststrategi
 
+### 14.0 Kjøremiljø for tester
+
+Dette må på plass i fase 0, før noen av testene under kan brukes som
+akseptansekriterium.
+
+Vitest er allerede konfigurert i `apps/web` (se 3.4), så enhetstestene har et
+rammeverk å bygge på. Det som mangler er at noe faktisk kjører dem:
+
+- `test` legges til som task i `turbo.json`
+- `test`-script legges til i rot-`package.json`
+- CI får et jobb-steg som kjører `pnpm lint`, `pnpm typecheck` og `pnpm test`;
+  i dag bygger `.github/workflows/build-push.yml` bare docker-imaget
+- `CLAUDE.md` rettes, den sier feilaktig at det ikke finnes noe testrammeverk
+
+Integrasjonstestene i 14.2 trenger i tillegg en database, og det finnes ingen
+testdatabase i dag. Planen forutsetter:
+
+- en egen testdatabase eller et eget schema, ikke dev-databasen — enten som en
+  ny service i `docker-compose.yml` eller via `DATABASE_URL`-override
+- migrasjoner påført før kjøring (`prisma migrate deploy` mot testdatabasen), slik
+  at testene også dekker at migrasjonene faktisk går
+- en avklaring av hvor testene bor: `packages/db` har i dag ikke noe test-script,
+  så enten opprettes det der, eller testene legges i `apps/web` med databasen som
+  ekstern avhengighet
+- en `services:`-blokk for postgres i CI-jobben, ellers kan samtidighetstestene
+  bare kjøres lokalt
+
+Uten dette er akseptansekriteriet i fase 2 («samtidighetstester beviser
+engangskonsum») ikke oppnåelig, og «grønne tester» andre steder i planen er ikke
+håndhevbart.
+
 ### 14.1 Enhetstester
 
 - PKCE S256, redirect-URI- og resource-validering, inkludert tillatte dynamiske
@@ -693,7 +942,11 @@ være nødvendig for korrekthet, bare for plassbruk.
 - hashing, JWT-claims, utløp og algoritmelås
 - scopes og verktøyfiltrering
 - serialisering av `Decimal`, datoer, enums og nullverdier
-- beregninger i budsjettoppsummeringen
+- karakteriseringstest som låser dagens budsjett-tall fra `budget-view.tsx` før
+  beregningen flyttes (se 10.2), og deretter beregningene i den samlede
+  budsjettoppsummeringen
+- konvertering av `YYYY-MM-DD` til `DateTime` og tilbake, med et tilfelle rundt
+  sommertid, siden feltene er `DateTime` og ikke `date` (se 3.2)
 - inputgrenser, paginering og feilmapping
 - private liste-regler og alle eierskapsgrenser
 
@@ -702,7 +955,10 @@ være nødvendig for korrekthet, bare for plassbruk.
 - authorization code kan konsumeres nøyaktig én gang ved samtidighet
 - refresh token roteres atomisk, og reuse tilbakekaller forventet familie
 - grant-revokering stopper refresh
-- slettet bruker eller fjernet husstandsmedlem mister tilgang
+- slettet bruker eller fjernet husstandsmedlem mister tilgang. Merk at
+  brukersletting er blokkert i dag for brukere med private lister (se 3.2), så
+  denne testen kan først skrives etter at den produktbeslutningen er tatt — og
+  den skal da også dekke at `deleteUser` faktisk lykkes for en slik bruker
 - kontekstoppslag feiler lukket dersom eldre data mot formodning gir flere
   medlemskap for samme bruker
 - bruker A kan aldri lese eller endre bruker/husstand Bs ressurser ved å gjette
@@ -752,42 +1008,70 @@ slås sammen bare når de fortsatt har et klart rollback-punkt.
 - bevis stateless Streamable HTTP i Next.js
 - avklar discovery-stier, klientregistrering og `resource`
 - definer feilformat, dato-/pengeformat og verktøynavngivning
+- gjør testene kjørbare: `test`-task i `turbo.json`, `test`-script i
+  rot-`package.json`, CI-steg for lint/typecheck/test, og rett `CLAUDE.md`
+  (se 14.0)
+- sett opp testdatabase og migrasjonspåføring for integrasjonstestene (14.0)
+- ta de fire kontraktbeslutningene som ellers blir tatt under implementasjon:
+  normativ budsjettformel (10.2), oppførsel når `Budget` mangler (10.2),
+  pengeserialisering for beregnede aggregater (3.2), og
+  dato-/tidssonekonvertering (3.2)
 
 **Akseptansekriterier**
 
 - MCP-inspektør kan initialisere og kalle ett lokalt diagnoseverktøy
 - arkitekturbeslutningene er skrevet ned
 - ingen midlertidig produksjonsauth finnes i deploybar kode
+- `pnpm test` kjører de eksisterende testene lokalt og i CI, og CI feiler på en
+  bevisst innført regresjon
 
 ### Fase 1 – applikasjonstjenester for lesing
 
 **Oppgaver**
 
 - innfør `ApplicationContext` og typede applikasjonsfeil
-- trekk ut read services for innkjøp, budsjett, vedlikehold og hage
-- sentraliser serialisering og budsjettberegninger
+- erstatt `getUserHousehold()`s uordnede `findFirst` med et fail-lukket oppslag,
+  og gjør `requireHousehold()` til en tynn adapter som oversetter
+  autorisasjonsfeilen til `redirect()` — tjenestelaget skal ikke kalle
+  `next/navigation` (se kapittel 7 og 8.1)
+- innfør en egen minimal kontekstspørring i stedet for å gjenbruke
+  `getUserHousehold()`s fulle `User`-graf (kapittel 7)
+- trekk ut read services for innkjøp, budsjett, vedlikehold og hage, og gjenbruk
+  `getVisibleShoppingListsWhere`/`isShoppingListAccessible` framfor å
+  reimplementere privatliste-filteret
+- **flytt budsjettberegningen ut av `budget-view.tsx`** og slå den sammen med
+  `calculateBudgetStats` til én implementasjon, etter rekkefølgen i 10.2
+  (karakteriseringstest før flytting)
+- sentraliser serialisering av `Decimal`, datoer og enums
 - behold eksisterende Server Actions/queries som adaptere
 
 **Akseptansekriterier**
 
 - eksisterende webfunksjonalitet er uendret
+- budsjettallene i UI er bit-identiske med karakteriseringstesten fra før
+  flyttingen, og `dashboard-stats` og budsjettsiden bruker nå samme funksjon
 - enhetstester dekker husstandsisolasjon og private lister
-- read services kan kalles uten cookies eller Next.js-kontekst
+- read services kan kalles uten cookies eller Next.js-kontekst, og
+  `application/` importerer ikke `next/navigation`
 
 ### Fase 2 – persistent OAuth-datamodell
 
 **Oppgaver**
 
 - legg til Prisma-modeller og migrasjon
+- legg til husstandsmedlemskaps-migrasjonen med SQL-guard mot duplikater (3.2)
 - implementer hash- og tokenrepository
 - implementer transaksjonelt kodekonsum og refresh-rotasjon
 - implementer opprydding av utløpte rader
+- legg til konfigurasjonsmodulen med validering ved oppstart og `503`-oppførsel
+  (3.3)
 
 **Akseptansekriterier**
 
-- samtidighetstester beviser engangskonsum
+- samtidighetstester beviser engangskonsum, kjørt mot testdatabasen fra 14.0
 - ingen hemmelige tokenverdier lagres i klartekst
 - migrasjon og rollback-prosedyre er dokumentert
+- duplikat-guarden er verifisert mot en database som faktisk har duplikater
 
 ### Fase 3 – OAuth og samtykke
 
@@ -815,6 +1099,7 @@ slås sammen bare når de fortsatt har et klart rollback-punkt.
 - registrer nivå 1-verktøy og output schemas
 - legg til paginering, størrelsesgrenser og strukturerte resultater
 - implementer scopefiltrert `tools/list`
+- rate-limit også `/api/mcp`, ikke bare OAuth-endepunktene fra fase 3
 - legg til strukturert logging uten sensitive data
 
 **Akseptansekriterier**
@@ -822,6 +1107,7 @@ slås sammen bare når de fortsatt har et klart rollback-punkt.
 - alle fire domener kan leses med respektive scope
 - kryssbruker- og privatliste-testene passerer
 - token for ett domene kan ikke lese et annet
+- ingen verktøysvar inneholder brukerfelt som ikke er eksplisitt hvitelistet
 - faktisk målklient kan koble til etter deploy
 
 Dette er første anbefalte produksjonsmilepæl. MCP kan stå read-only en periode
@@ -831,8 +1117,14 @@ for å samle erfaring med verktøybeskrivelser, responsstørrelse og klientadfer
 
 **Oppgaver**
 
-- trekk ut write services for lister, elementer og alternativer
-- gjør status- og foretrukket-alternativ-operasjoner idempotente
+- trekk ut write services for lister, elementer og alternativer, og konverter
+  check-then-act-mønsteret i `shopping-list.ts` (3 steder) til autorisasjon i
+  oppslaget
+- gjør status- og foretrukket-alternativ-operasjoner idempotente; `set-*` framfor
+  eksisterende `toggleItemPurchased` (9.2)
+- trekk ut duplikat-import-flyten fra `shopping-item.ts` som grunnlag for
+  `add-shopping-items`, og legg batch-grensen i tjenestelaget (10.4, 9.1)
+- hold `replaceShoppingItems` utenfor `application/` (10.4)
 - legg til write-verktøy, concurrency-sjekk og revisjonshendelser
 - test duplikater, retries og child-resource-autorisasjon
 
@@ -841,14 +1133,21 @@ for å samle erfaring med verktøybeskrivelser, responsstørrelse og klientadfer
 - web og MCP bruker samme domenelogikk
 - read-only token kan ikke mutere
 - retry av idempotente kall gir samme sluttilstand
+- bulk-kall over maksgrensen avvises, også når de kommer fra webflyten
+- `replaceShoppingItems` er ikke nåbar fra verktøyregisteret
 
 ### Fase 6 – budsjettmutasjoner
 
 **Oppgaver**
 
-- trekk ut write services for poster, kategorier, medlemmer, lån og reiser
-- gjenbruk én beregningsimplementasjon i UI og MCP
+- trekk ut write services for poster, kategorier, medlemmer, lån og reiser, og
+  konverter check-then-act-mønsteret i `budget.ts` (6 steder) til autorisasjon i
+  oppslaget
+- bruk den samlede beregningsimplementasjonen fra fase 1 (den skal allerede være
+  delt her, ikke lages nå)
+- implementer den valgte oppførselen for husstander uten `Budget`-rad (10.2)
 - legg til preview for sammensatte budsjettendringer før eventuell apply
+- hold `replaceBudget` utenfor `application/` (10.4)
 - utvid revisjon og sikkerhetstester for sensitive data
 
 **Akseptansekriterier**
@@ -856,14 +1155,19 @@ for å samle erfaring med verktøybeskrivelser, responsstørrelse og klientadfer
 - lagrede og beregnede tall samsvarer med webgrensesnittet
 - stale `updatedAt` avvises der optimistic concurrency brukes
 - ingen full erstatning eller husstandsendring er eksponert
+- `replaceBudget` er ikke nåbar fra verktøyregisteret
+- `BudgetMember.name` returneres bare der det er eksplisitt del av kontrakten
 
 ### Fase 7 – vedlikehold og hage
 
 **Oppgaver**
 
-- trekk ut de resterende write services
+- trekk ut de resterende write services, og konverter check-then-act i `plant.ts`
+  (2 steder) til autorisasjon i oppslaget
 - implementer eksplisitte sluttilstander for leverandør og fremdrift
 - legg til create/update for planter og vedlikeholdsoppgaver
+- avklar enum-validering i vedlikeholdsimporten: eksisterende stille fallback til
+  `MEDIUM` skal ikke videreføres uforandret (9.1)
 
 **Akseptansekriterier**
 
@@ -878,7 +1182,9 @@ for å samle erfaring med verktøybeskrivelser, responsstørrelse og klientadfer
 - dashboards/alarmer og dokumentert hendelseshåndtering
 - secret-rotasjonsprosedyre og restore-test
 - vurder destruktive verktøy basert på faktisk behov
-- evaluer om manuelle LLM-importflyter fortsatt skal beholdes
+- evaluer om de manuelle LLM-importflytene fortsatt skal beholdes som eget
+  UI. Merk at kontraktene deres allerede er gjenbrukt i fase 5–7 (10.4), så dette
+  er et spørsmål om brukergrensesnittet, ikke om koden bak
 
 **Akseptansekriterier**
 
@@ -895,7 +1201,13 @@ for å samle erfaring med verktøybeskrivelser, responsstørrelse og klientadfer
 - ta databasebackup
 - kjør migrasjonen i staging eller en kopi av produksjonsdatabasen
 - kontroller at discovery- og OAuth-ruter ikke fanges av login-middleware
-- kjør lint, typecheck, tester og produksjonsbygg
+- kjør lint, typecheck, tester og produksjonsbygg — forutsetter at fase 0 har gjort
+  testene kjørbare (14.0)
+
+Caddy- og prod-compose-konfigurasjonen ligger utenfor dette repoet, så punktene i
+dette kapittelet og i kapittel 17 må verifiseres mot den faktiske
+serverkonfigurasjonen og ikke antas ut fra `docker-compose.yml` her, som bare er
+dev-databasen.
 
 ### Deployrekkefølge
 
@@ -971,9 +1283,12 @@ MCP-serveren er ferdig for første fullverdige versjon når:
 - husstandsisolasjon og private lister er bevist med negative tester
 - read-verktøy finnes for alle fire domener
 - de valgte write-verktøyene bruker samme tjenestelag som webappen
+- budsjettbeløp beregnes av én implementasjon som både UI, dashboard og MCP
+  bruker, og tallene er verifisert mot karakteriseringstesten fra fase 1
 - mutasjoner er presise, observerbare og idempotente der det er mulig
 - administrator-, medlems-, delings- og full-erstatningsoperasjoner ikke er
-  eksponert
+  eksponert, og `replaceBudget`/`replaceShoppingItems` er ikke nåbare fra
+  verktøyregisteret
 - revokering, nødbryter, backup/restore, secret-rotasjon og rollback er
   dokumentert og testet
 - lint, typecheck, automatiske tester og produksjonsbygg passerer
