@@ -60,7 +60,18 @@ export type AuthorizeValidationResult =
   | AuthorizeRedirectError
 
 export function readAuthorizeParams(url: URL): AuthorizeRequestParams {
-  const get = (name: string) => url.searchParams.get(name)
+  const get = (name: string) => {
+    const values = url.searchParams.getAll(name)
+    if (values.length > 1) {
+      throw new OAuthError(
+        "invalid_request",
+        `Parameteren ${name} kan ikke oppgis flere ganger.`,
+        400
+      )
+    }
+
+    return values[0] ?? null
+  }
 
   return {
     clientId: get("client_id"),

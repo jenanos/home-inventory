@@ -514,6 +514,21 @@ describe("negative cases", () => {
     expect((await response.json()).error).toBe("invalid_grant")
   })
 
+  it("rejects a code when the client registration was revoked", async () => {
+    const clientId = await registerClient()
+    const code = await obtainAuthorizationCode(clientId)
+
+    await prisma.mcpOAuthClient.update({
+      where: { id: clientId },
+      data: { status: "REVOKED", revokedAt: new Date() },
+    })
+
+    const response = await exchangeCode(clientId, code)
+
+    expect(response.status).toBe(401)
+    expect((await response.json()).error).toBe("invalid_client")
+  })
+
   it("consumes a code exactly once and revokes the grant on replay", async () => {
     const clientId = await registerClient()
     const code = await obtainAuthorizationCode(clientId)
@@ -630,6 +645,30 @@ describe("revocation", () => {
     )
 
     expect(response.status).toBe(200)
+  })
+
+  it("stops refresh when the client registration is revoked", async () => {
+    const clientId = await registerClient()
+    const code = await obtainAuthorizationCode(clientId)
+    const tokens = (await (await exchangeCode(clientId, code)).json()) as {
+      refresh_token: string
+    }
+
+    await prisma.mcpOAuthClient.update({
+      where: { id: clientId },
+      data: { status: "REVOKED", revokedAt: new Date() },
+    })
+
+    const response = await routes.token(
+      formRequest(`${ISSUER}/api/oauth/token`, {
+        grant_type: "refresh_token",
+        client_id: clientId,
+        refresh_token: tokens.refresh_token,
+      })
+    )
+
+    expect(response.status).toBe(401)
+    expect((await response.json()).error).toBe("invalid_client")
   })
 
   it("stops refresh when the user revokes the grant from settings", async () => {

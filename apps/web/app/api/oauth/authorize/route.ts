@@ -54,7 +54,12 @@ export async function GET(request: Request) {
   }
 
   const url = new URL(request.url)
-  const params = readAuthorizeParams(url)
+  let params
+  try {
+    params = readAuthorizeParams(url)
+  } catch (error) {
+    return toBrowserError(error)
+  }
 
   if (!params.clientId) {
     return oauthBrowserErrorResponse(

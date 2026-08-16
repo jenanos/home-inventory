@@ -113,6 +113,11 @@ async function handleAuthorizationCodeGrant(
     )
   }
 
+  // Public clients have no secret, but their registration is still part of
+  // their identity. Refuse a code if the client was revoked after consent or
+  // its unused dynamic registration expired before the exchange.
+  await clientRegistry.resolveClient(clientId)
+
   const authorizationCode = await repository.consumeAuthorizationCode(code)
 
   if (!authorizationCode) {
@@ -210,6 +215,10 @@ async function handleRefreshTokenGrant(
       400
     )
   }
+
+  // Re-check the persisted client on every refresh. Otherwise revoking a
+  // client registration would leave all of its refresh tokens usable.
+  await clientRegistry.resolveClient(clientId)
 
   const existing = await repository.findRefreshToken(refreshToken)
   if (!existing || existing.grant.clientId !== clientId) {

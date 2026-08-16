@@ -10,7 +10,6 @@ import {
   CardTitle,
 } from "@workspace/ui/components/card"
 import { Button } from "@workspace/ui/components/button"
-import { Separator } from "@workspace/ui/components/separator"
 import { listConnectedApps } from "@/lib/queries/connected-apps"
 import { ProfileForm } from "./profile-form"
 import { MembersSection } from "./members-section"

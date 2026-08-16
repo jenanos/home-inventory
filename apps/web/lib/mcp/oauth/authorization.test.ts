@@ -213,6 +213,16 @@ describe("readAuthorizeParams", () => {
       resource: "res",
     })
   })
+
+  it("rejects duplicated OAuth parameters", () => {
+    const url = new URL(
+      "https://home.jenanos.xyz/api/oauth/authorize?client_id=first&client_id=second"
+    )
+
+    expect(() => readAuthorizeParams(url)).toThrowError(
+      expect.objectContaining({ code: "invalid_request" })
+    )
+  })
 })
 
 describe("consent CSRF token", () => {

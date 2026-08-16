@@ -20,7 +20,7 @@ import {
   rateLimitedResponse,
   rateLimitKeyFromRequest,
 } from "@/lib/mcp/oauth/rate-limit"
-import { MAX_OAUTH_BODY_BYTES } from "@/lib/mcp/oauth/request-body"
+import { readFormBody } from "@/lib/mcp/oauth/request-body"
 import { createOAuthTokenRepository } from "@/lib/mcp/oauth/repository"
 import { isMcpScope, sortScopes } from "@/lib/mcp/oauth/scopes"
 import { hashOpaqueToken } from "@/lib/mcp/oauth/token-hash"
@@ -108,20 +108,16 @@ export async function POST(request: Request) {
     )
   }
 
-  const declaredLength = Number(request.headers.get("content-length"))
-  if (
-    Number.isFinite(declaredLength) &&
-    declaredLength > MAX_OAUTH_BODY_BYTES
-  ) {
+  let form: URLSearchParams
+  try {
+    form = await readFormBody(request, {
+      allowRepeatedParameters: ["scope"],
+    })
+  } catch (error) {
     return fail(
-      new OAuthError("invalid_request", "Forespørselen er for stor.", 413)
-    )
-  }
-
-  const form = await request.formData().catch(() => null)
-  if (!form) {
-    return fail(
-      new OAuthError("invalid_request", "Ugyldig skjemainnsending.", 400)
+      error instanceof OAuthError
+        ? error
+        : new OAuthError("invalid_request", "Ugyldig skjemainnsending.", 400)
     )
   }
 

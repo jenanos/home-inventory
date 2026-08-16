@@ -29,7 +29,7 @@ export function ConnectedAppsSection({ apps }: { apps: ConnectedAppView[] }) {
   function handleRevoke(grantId: string, clientName: string) {
     if (
       !window.confirm(
-        `Trekk tilbake tilgangen for «${clientName}»? Klienten mister tilgangen umiddelbart og må godkjennes på nytt.`
+        `Trekk tilbake tilgangen for «${clientName}»? Klienten kan ikke fornye tilgangen og må godkjennes på nytt. Et allerede utstedt tilgangstoken virker til det utløper.`
       )
     ) {
       return
