@@ -1,6 +1,8 @@
 import type {
   McpOAuthAuthorizationCode,
   McpOAuthAuthorizationRequest,
+  McpOAuthClient,
+  McpOAuthGrant,
   McpOAuthRefreshToken,
   PrismaClient,
 } from "@workspace/db"
@@ -98,6 +100,165 @@ export class McpOAuthTokenRepository {
     return { token, authorizationRequest }
   }
 
+  /**
+   * Reads a pending consent request. The caller must still check that the
+   * signed-in user matches `userId`; this only resolves the opaque token.
+   */
+  async findPendingAuthorizationRequest(
+    token: string
+  ): Promise<
+    (McpOAuthAuthorizationRequest & { client: McpOAuthClient }) | null
+  > {
+    const request = await this.prisma.mcpOAuthAuthorizationRequest.findUnique({
+      where: { requestTokenHash: this.hash(token) },
+      include: { client: true },
+    })
+
+    if (
+      !request ||
+      request.consumedAt ||
+      request.expiresAt <= this.now() ||
+      request.client.status !== "ACTIVE"
+    ) {
+      return null
+    }
+
+    return request
+  }
+
+  /**
+   * Consumes the consent request exactly once. A second submission of the same
+   * form — a double-click or a replayed POST — observes `count === 0`.
+   */
+  async consumeAuthorizationRequest(
+    token: string,
+    outcome: "approved" | "rejected"
+  ): Promise<McpOAuthAuthorizationRequest | null> {
+    const requestTokenHash = this.hash(token)
+    const consumedAt = this.now()
+
+    return this.prisma.$transaction(async (transaction) => {
+      const claim = await transaction.mcpOAuthAuthorizationRequest.updateMany({
+        where: {
+          requestTokenHash,
+          consumedAt: null,
+          expiresAt: { gt: consumedAt },
+        },
+        data: {
+          consumedAt,
+          ...(outcome === "approved"
+            ? { approvedAt: consumedAt }
+            : { rejectedAt: consumedAt }),
+        },
+      })
+
+      if (claim.count !== 1) {
+        return null
+      }
+
+      return transaction.mcpOAuthAuthorizationRequest.findUniqueOrThrow({
+        where: { requestTokenHash },
+      })
+    })
+  }
+
+  /**
+   * Records the user's consent. Re-consenting replaces the scope set rather
+   * than accumulating it, so the latest consent screen is always the whole
+   * truth about what the client may do.
+   */
+  async upsertGrant(
+    userId: string,
+    clientId: string,
+    scopes: string[]
+  ): Promise<McpOAuthGrant> {
+    const now = this.now()
+
+    return this.prisma.mcpOAuthGrant.upsert({
+      where: { userId_clientId: { userId, clientId } },
+      create: { userId, clientId, scopes },
+      update: { scopes, revokedAt: null, lastUsedAt: now },
+    })
+  }
+
+  async findActiveGrant(
+    userId: string,
+    clientId: string
+  ): Promise<McpOAuthGrant | null> {
+    return this.prisma.mcpOAuthGrant.findFirst({
+      where: { userId, clientId, revokedAt: null },
+    })
+  }
+
+  async listUserGrants(userId: string) {
+    return this.prisma.mcpOAuthGrant.findMany({
+      where: { userId, revokedAt: null },
+      include: { client: { select: { name: true, registrationSource: true } } },
+      orderBy: { createdAt: "asc" },
+    })
+  }
+
+  /**
+   * Revokes a grant the user actually owns. The user id is part of the query,
+   * so a guessed grant id from another user matches nothing.
+   */
+  async revokeUserGrant(userId: string, grantId: string) {
+    const revokedAt = this.now()
+
+    return this.prisma.$transaction(async (transaction) => {
+      const grant = await transaction.mcpOAuthGrant.updateMany({
+        where: { id: grantId, userId, revokedAt: null },
+        data: { revokedAt },
+      })
+
+      if (grant.count !== 1) {
+        return { grantRevoked: false, refreshTokensRevoked: 0 }
+      }
+
+      const refreshTokens = await transaction.mcpOAuthRefreshToken.updateMany({
+        where: { grantId, revokedAt: null },
+        data: { revokedAt },
+      })
+
+      return {
+        grantRevoked: true,
+        refreshTokensRevoked: refreshTokens.count,
+      }
+    })
+  }
+
+  async touchGrant(grantId: string) {
+    await this.prisma.mcpOAuthGrant.updateMany({
+      where: { id: grantId },
+      data: { lastUsedAt: this.now() },
+    })
+  }
+
+  async findRefreshToken(token: string) {
+    return this.prisma.mcpOAuthRefreshToken.findUnique({
+      where: { tokenHash: this.hash(token) },
+      include: { grant: true },
+    })
+  }
+
+  /**
+   * RFC 7009: revoking a refresh token also invalidates the tokens derived
+   * from it, so the whole rotation family goes at once.
+   */
+  async revokeRefreshTokenFamily(token: string) {
+    const refreshToken = await this.findRefreshToken(token)
+    if (!refreshToken) {
+      return { revoked: 0 }
+    }
+
+    const revoked = await this.prisma.mcpOAuthRefreshToken.updateMany({
+      where: { familyId: refreshToken.familyId, revokedAt: null },
+      data: { revokedAt: this.now() },
+    })
+
+    return { revoked: revoked.count, grantId: refreshToken.grantId }
+  }
+
   async issueAuthorizationCode(input: IssueAuthorizationCodeInput): Promise<{
     token: string
     authorizationCode: McpOAuthAuthorizationCode
@@ -138,6 +299,37 @@ export class McpOAuthTokenRepository {
         where: { codeHash },
       })
     })
+  }
+
+  /**
+   * Looks up a code without consuming it, including one that is already spent.
+   * Used only to detect replay after {@link consumeAuthorizationCode} refuses,
+   * so the grant's tokens can be revoked (OAuth 2.1 section 7.5).
+   */
+  async findAuthorizationCodeForReplay(
+    token: string
+  ): Promise<McpOAuthAuthorizationCode | null> {
+    return this.prisma.mcpOAuthAuthorizationCode.findUnique({
+      where: { codeHash: this.hash(token) },
+    })
+  }
+
+  async revokeGrantTokens(userId: string, clientId: string) {
+    const grant = await this.prisma.mcpOAuthGrant.findUnique({
+      where: { userId_clientId: { userId, clientId } },
+      select: { id: true },
+    })
+
+    if (!grant) {
+      return { revoked: 0 }
+    }
+
+    const revoked = await this.prisma.mcpOAuthRefreshToken.updateMany({
+      where: { grantId: grant.id, revokedAt: null },
+      data: { revokedAt: this.now() },
+    })
+
+    return { revoked: revoked.count, grantId: grant.id }
   }
 
   async issueRefreshToken(

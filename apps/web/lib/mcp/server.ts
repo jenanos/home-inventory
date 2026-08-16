@@ -1,74 +1,41 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
-import { z } from "zod"
 
-import {
-  MCP_DOMAINS,
-  MCP_PROTOCOL_VERSION,
-  MCP_SERVER_NAME,
-  MCP_SERVER_VERSION,
-} from "./constants"
+import type { McpSession } from "./auth/session"
+import { MCP_SERVER_NAME, MCP_SERVER_VERSION } from "./constants"
+import { createToolRegistry, type McpToolDefinition } from "./tools"
 
 type McpServerDependencies = {
+  session: McpSession
   now?: () => Date
+  tools?: McpToolDefinition[]
 }
 
-const serverInfoSchema = {
-  serverName: z.string(),
-  serverVersion: z.string(),
-  protocolVersion: z.string(),
-  transport: z.literal("streamable-http"),
-  responseMode: z.literal("json"),
-  sessionMode: z.literal("stateless"),
-  availableDomains: z.array(z.enum(MCP_DOMAINS)),
-  currentTime: z.string().datetime(),
-}
-
+/**
+ * Builds a server for exactly one request. The transport is stateless, so a
+ * fresh instance per request is not overhead we are avoiding — it is what lets
+ * the tool list be shaped by this token's scopes.
+ *
+ * Out-of-scope tools are registered and then disabled rather than skipped: the
+ * scope guard inside each tool still runs on `tools/call`, so filtering the
+ * list is presentation, not the security boundary.
+ */
 export function createMcpServer({
+  session,
   now = () => new Date(),
-}: McpServerDependencies = {}) {
+  tools = createToolRegistry(now),
+}: McpServerDependencies) {
   const server = new McpServer({
     name: MCP_SERVER_NAME,
     version: MCP_SERVER_VERSION,
   })
 
-  server.registerTool(
-    "get-server-info",
-    {
-      title: "Get server information",
-      description:
-        "Returns protocol and deployment metadata for diagnostics. It does not return household or user data.",
-      inputSchema: {},
-      outputSchema: serverInfoSchema,
-      annotations: {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false,
-      },
-    },
-    async () => {
-      const result = {
-        serverName: MCP_SERVER_NAME,
-        serverVersion: MCP_SERVER_VERSION,
-        protocolVersion: MCP_PROTOCOL_VERSION,
-        transport: "streamable-http" as const,
-        responseMode: "json" as const,
-        sessionMode: "stateless" as const,
-        availableDomains: [...MCP_DOMAINS],
-        currentTime: now().toISOString(),
-      }
+  for (const tool of tools) {
+    const registered = tool.register(server, session)
 
-      return {
-        structuredContent: result,
-        content: [
-          {
-            type: "text",
-            text: `${MCP_SERVER_NAME} ${MCP_SERVER_VERSION} uses MCP ${MCP_PROTOCOL_VERSION} over stateless Streamable HTTP.`,
-          },
-        ],
-      }
+    if (tool.scope !== null && !session.scopes.includes(tool.scope)) {
+      registered.disable()
     }
-  )
+  }
 
   return server
 }

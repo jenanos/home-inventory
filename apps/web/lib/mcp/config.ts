@@ -79,10 +79,30 @@ export type McpConfig =
       reason: "missing-or-invalid-configuration"
       issues: string[]
     }
+  | {
+      enabled: false
+      reason: "disabled-by-operator"
+    }
+
+/**
+ * The emergency switch from chapter 11 point 18. Setting it turns off MCP and
+ * the whole OAuth surface — every one of those routes reads this config — while
+ * the rest of Home Overview keeps serving. Anything other than the two
+ * documented off-values leaves MCP enabled, so a typo cannot silently disable
+ * the server.
+ */
+function isDisabledByOperator(environment: McpEnvironment) {
+  const value = environment.HOME_OVERVIEW_MCP_ENABLED?.trim().toLowerCase()
+  return value === "false" || value === "0"
+}
 
 export function loadMcpConfig(
   environment: McpEnvironment = process.env
 ): McpConfig {
+  if (isDisabledByOperator(environment)) {
+    return { enabled: false, reason: "disabled-by-operator" }
+  }
+
   const result = environmentSchema.safeParse(environment)
 
   if (!result.success) {

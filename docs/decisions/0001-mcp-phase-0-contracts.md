@@ -58,6 +58,11 @@ lokale HTTP-endepunktet for både initialisering og kall av
 
 ### Midlertidig lokal autentisering
 
+> **Erstattet av [ADR 0003](0003-mcp-read-only-tool-surface.md) (fase 4).**
+> `HOME_OVERVIEW_MCP_SPIKE_TOKEN` og `lib/mcp/spike-auth.ts` er fjernet fra
+> kodebasen. `/api/mcp` godtar nå kun OAuth bearer-tokens. Avsnittet under
+> beskriver hvordan fase 0 ble kjørt, og er historikk.
+
 Spiken kan bare aktiveres utenfor `NODE_ENV=production`, med en eksplisitt
 `HOME_OVERVIEW_MCP_SPIKE_TOKEN`. Produksjonsmodus svarer alltid `503`, selv om
 variabelen er satt. Dette er en midlertidig fase-0-mekanisme og erstattes

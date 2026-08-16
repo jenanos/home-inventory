@@ -6,6 +6,7 @@
       "dependsOn": ["^build"],
       "env": [
         "ADMIN_EMAIL",
+        "HOME_OVERVIEW_MCP_ENABLED",
         "HOME_OVERVIEW_MCP_OAUTH_SIGNING_SECRET",
         "HOME_OVERVIEW_MCP_ISSUER",
         "HOME_OVERVIEW_MCP_ACCESS_TOKEN_TTL_SECONDS",
