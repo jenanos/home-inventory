@@ -219,26 +219,83 @@ export function isPrivateIpAddress(address: string): boolean {
     return true
   }
 
-  const normalized = address.toLowerCase().replace(/^\[|\]$/g, "")
+  const groups = expandIPv6(address.toLowerCase().replace(/^\[|\]$/g, ""))
+  if (!groups) return true
 
-  // IPv4-mapped and IPv4-compatible addresses inherit the IPv4 rules.
-  const embeddedIpv4 = normalized.match(/(\d+\.\d+\.\d+\.\d+)$/)?.[1]
-  if (embeddedIpv4 && isIPv4(embeddedIpv4)) {
-    return isPrivateIpAddress(embeddedIpv4)
+  const [g0, g1, g2, g3, g4, g5, g6, g7] = groups as [
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+  ]
+  const embedded = (high: number, low: number) =>
+    `${high >> 8}.${high & 0xff}.${low >> 8}.${low & 0xff}`
+
+  // Address forms that carry an IPv4 address inherit the IPv4 rules. The check
+  // works on the expanded groups, not the text: `new URL()` and DNS both hand
+  // back `::ffff:7f00:1`, never the dotted `::ffff:127.0.0.1`.
+  const firstFiveZero = g0 === 0 && g1 === 0 && g2 === 0 && g3 === 0 && g4 === 0
+  // ::/96 covers ::, ::1 and the deprecated IPv4-compatible form, none of
+  // which is a public destination.
+  if (firstFiveZero && g5 === 0) return true
+  // ::ffff:0:0/96 IPv4-mapped.
+  if (firstFiveZero && g5 === 0xffff)
+    return isPrivateIpAddress(embedded(g6, g7))
+  // 64:ff9b::/96 and 64:ff9b:1::/48 NAT64 translate to the embedded IPv4.
+  if (g0 === 0x64 && g1 === 0xff9b) {
+    return g2 === 1 || isPrivateIpAddress(embedded(g6, g7))
   }
-
-  if (normalized === "::" || normalized === "::1") return true
-
-  const firstGroup = normalized.split(":")[0] ?? ""
-  const leading = parseInt(firstGroup.padStart(4, "0").slice(0, 2), 16)
+  // 2002::/16 6to4 embeds an IPv4 address in the next 32 bits.
+  if (g0 === 0x2002) return isPrivateIpAddress(embedded(g1, g2))
+  // 2001::/32 Teredo and 2001:db8::/32 documentation.
+  if (g0 === 0x2001 && (g1 === 0 || g1 === 0xdb8)) return true
 
   // fc00::/7 unique local, fe80::/10 link local, ff00::/8 multicast.
-  if ((leading & 0xfe) === 0xfc) return true
-  if ((leading & 0xff) === 0xfe) {
-    const second = parseInt(firstGroup.padStart(4, "0").slice(2, 3), 16)
-    if ((second & 0xc) === 0x8) return true
-  }
-  if (leading === 0xff) return true
+  if ((g0 & 0xfe00) === 0xfc00) return true
+  if ((g0 & 0xffc0) === 0xfe80) return true
+  if ((g0 & 0xff00) === 0xff00) return true
 
   return false
+}
+
+/**
+ * Expands an IPv6 literal (including a trailing dotted IPv4 part) into its
+ * eight 16-bit groups. Returns null for anything that is not a valid literal,
+ * which the caller treats as private.
+ */
+function expandIPv6(address: string): number[] | null {
+  let text = address.split("%")[0] ?? ""
+
+  const dotted = text.match(/(\d+\.\d+\.\d+\.\d+)$/)?.[1]
+  if (dotted) {
+    if (!isIPv4(dotted)) return null
+    const [a = 0, b = 0, c = 0, d = 0] = ipv4ToParts(dotted)
+    text =
+      text.slice(0, -dotted.length) +
+      `${((a << 8) | b).toString(16)}:${((c << 8) | d).toString(16)}`
+  }
+
+  const halves = text.split("::")
+  if (halves.length > 2) return null
+
+  const parse = (part: string) =>
+    part === ""
+      ? []
+      : part.split(":").map((group) => {
+          if (!/^[0-9a-f]{1,4}$/.test(group)) return Number.NaN
+          return parseInt(group, 16)
+        })
+
+  const head = parse(halves[0] ?? "")
+  const tail = halves.length === 2 ? parse(halves[1] ?? "") : []
+  const missing = 8 - head.length - tail.length
+
+  if (halves.length === 1 ? missing !== 0 : missing < 1) return null
+
+  const groups = [...head, ...Array<number>(missing).fill(0), ...tail]
+  return groups.some(Number.isNaN) ? null : groups
 }

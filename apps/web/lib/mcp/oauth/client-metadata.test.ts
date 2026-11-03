@@ -129,6 +129,22 @@ describe("isPrivateIpAddress", () => {
       "fe80::1",
       "ff02::1",
       "::ffff:127.0.0.1",
+      // The form `new URL()` and DNS actually produce for mapped addresses.
+      "::ffff:7f00:1",
+      "::ffff:a00:1",
+      "::ffff:c0a8:101",
+      "[::ffff:7f00:1]",
+      "0:0:0:0:0:ffff:7f00:1",
+      "::7f00:1",
+      "64:ff9b::a00:1",
+      "64:ff9b:1::1",
+      "2002:7f00:1::1",
+      "2001:0:4136:e378::1",
+      "2001:db8::1",
+      "fe80::1%eth0",
+      "febf::1",
+      "fc00::1",
+      "not:an:address::x",
     ]) {
       expect(isPrivateIpAddress(address), address).toBe(true)
     }
@@ -140,6 +156,10 @@ describe("isPrivateIpAddress", () => {
       "203.0.114.1",
       "8.8.8.8",
       "2606:4700::1",
+      "::ffff:808:808",
+      "64:ff9b::808:808",
+      "2002:808:808::1",
+      "2a01:4f9:c010::1",
     ]) {
       expect(isPrivateIpAddress(address), address).toBe(false)
     }

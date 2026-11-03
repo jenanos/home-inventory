@@ -220,8 +220,11 @@ export class McpOAuthClientRegistry {
       )
     }
 
-    const body = await response.text()
-    if (body.length > MAX_CLIENT_METADATA_BYTES) {
+    // Read incrementally and stop at the limit. The route is reachable without
+    // a session, so buffering a hostile multi-gigabyte (or highly compressed)
+    // body before checking its size would let anyone exhaust memory.
+    const body = await readBodyWithinLimit(response, MAX_CLIENT_METADATA_BYTES)
+    if (body === null) {
       throw new OAuthError(
         "invalid_client",
         "Klientens metadatadokument er for stort.",
@@ -337,3 +340,41 @@ export class McpOAuthClientRegistry {
 }
 
 export const clientRegistry = new McpOAuthClientRegistry()
+
+/**
+ * Returns the body as text, or null as soon as more than `maxBytes` (decoded)
+ * have arrived, cancelling the rest of the stream. A declared
+ * `content-length` over the limit is refused without reading anything.
+ */
+export async function readBodyWithinLimit(
+  response: Response,
+  maxBytes: number
+): Promise<string | null> {
+  const declared = Number(response.headers.get("content-length"))
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    await response.body?.cancel().catch(() => undefined)
+    return null
+  }
+
+  if (!response.body) {
+    return ""
+  }
+
+  const reader = response.body.getReader()
+  const chunks: Uint8Array[] = []
+  let received = 0
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    received += value.byteLength
+    if (received > maxBytes) {
+      await reader.cancel().catch(() => undefined)
+      return null
+    }
+    chunks.push(value)
+  }
+
+  return new TextDecoder().decode(Buffer.concat(chunks))
+}
