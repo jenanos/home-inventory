@@ -10,8 +10,8 @@ import {
   findExistingMaintenanceTasks,
   bulkImportMaintenanceTasksWithDuplicates,
   replaceMaintenanceTasks,
-  type ExistingMaintenanceTask,
 } from "@/lib/actions/maintenance-task"
+import type { ExistingMaintenanceTask } from "@/lib/application/maintenance/import"
 import {
   DuplicateFieldDiffCard,
   DuplicateSummary,

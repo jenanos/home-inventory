@@ -245,8 +245,6 @@ export async function replaceMaintenanceTasks(
 
 // ─── Duplicate Detection ────────────────────────────────────────
 
-export type { ExistingMaintenanceTask }
-
 export async function findExistingMaintenanceTasks(
   titles: string[]
 ): Promise<ExistingMaintenanceTask[]> {

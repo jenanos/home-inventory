@@ -25,8 +25,6 @@ import { requireHousehold } from "@/lib/session"
 import { getVisibleShoppingListsWhere } from "@/lib/shopping-list-access"
 import { revalidatePath } from "next/cache"
 
-export type { ExistingShoppingItem }
-
 // Thin adapters over the shopping write and import services. Items are always
 // reached through their list's visibility rule, so private lists stay private.
 

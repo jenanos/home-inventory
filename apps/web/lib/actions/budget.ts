@@ -42,14 +42,6 @@ import { assertBatchSize } from "@/lib/application/mutations"
 import { requireHousehold } from "@/lib/session"
 import { revalidatePath } from "next/cache"
 
-export type {
-  ExistingBudgetEntry,
-  ExistingBudgetItems,
-  ExistingBudgetLoan,
-  ExistingBudgetMember,
-  ExistingBudgetTrip,
-} from "@/lib/application/budget/import"
-
 /*
  * Thin adapters over the budget write services, which MCP uses too. The
  * browser context comes from the session; validation, the household boundary

@@ -92,7 +92,10 @@ Reference: https://ui.shadcn.com/docs/monorepo
   `findUnique({ id })` → check → `update({ id })`. Use `scopedWrite` from
   `lib/application/mutations.ts`, which also handles `expectedUpdatedAt`.
 - Server Actions in `lib/actions/` are thin adapters: `requireHousehold()` → service →
-  `revalidatePath()`.
+  `revalidatePath()`. A `"use server"` file must not contain re-export statements
+  (`export type { X }`, `export { … } from`): Next.js compiles them as value exports
+  and the whole module fails at runtime. Import types from `lib/application/` instead
+  (`lib/actions/use-server-exports.test.ts` guards this).
 - MCP tools live in `apps/web/lib/mcp/tools/` (`defineTool` for reads,
   `defineWriteTool` for writes, which also audits). Return whitelisted fields only.
   Full-replace actions (`replace*`) must stay outside `lib/application/`.
