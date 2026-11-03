@@ -4,23 +4,55 @@ import { Wrench, Clock } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@workspace/ui/components/button"
 import { Badge } from "@workspace/ui/components/badge"
-import { Card, CardContent, CardHeader, CardTitle } from "@workspace/ui/components/card"
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@workspace/ui/components/card"
 import { Progress } from "@workspace/ui/components/progress"
 import { MaintenanceStatsSummary } from "@/components/maintenance-stats-summary"
 import { CreateTaskDialog } from "./create-task-dialog"
 import { BotMessageSquare } from "lucide-react"
 
 const priorityConfig = {
-  HIGH: { label: "Høy", className: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400" },
-  MEDIUM: { label: "Medium", className: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400" },
-  LOW: { label: "Lav", className: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" },
+  HIGH: {
+    label: "Høy",
+    className: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
+  },
+  MEDIUM: {
+    label: "Medium",
+    className:
+      "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
+  },
+  LOW: {
+    label: "Lav",
+    className:
+      "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
+  },
 }
 
 const statusConfig = {
-  NOT_STARTED: { label: "Ikke startet", className: "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400" },
-  IN_PROGRESS: { label: "Pågår", className: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400" },
-  COMPLETED: { label: "Fullført", className: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" },
-  ON_HOLD: { label: "På vent", className: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400" },
+  NOT_STARTED: {
+    label: "Ikke startet",
+    className:
+      "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400",
+  },
+  IN_PROGRESS: {
+    label: "Pågår",
+    className:
+      "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
+  },
+  COMPLETED: {
+    label: "Fullført",
+    className:
+      "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
+  },
+  ON_HOLD: {
+    label: "På vent",
+    className:
+      "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400",
+  },
 }
 
 const formatCurrency = (amount: number) =>
@@ -31,11 +63,12 @@ const formatCurrency = (amount: number) =>
   }).format(amount)
 
 export default async function VedlikeholdPage() {
-  const { membership } = await requireHousehold()
-  const tasks = await getMaintenanceTasks(membership.householdId)
+  const { context } = await requireHousehold()
+  const tasks = await getMaintenanceTasks(context)
 
   const totalEstimate = tasks.reduce(
-    (sum, task) => sum + (task.estimatedPrice ? Number(task.estimatedPrice) : 0),
+    (sum, task) =>
+      sum + (task.estimatedPrice ? Number(task.estimatedPrice) : 0),
     0
   )
 
@@ -50,7 +83,7 @@ export default async function VedlikeholdPage() {
           <h1 className="font-heading text-2xl font-bold tracking-tight">
             Vedlikehold
           </h1>
-          <p className="text-muted-foreground text-sm">
+          <p className="text-sm text-muted-foreground">
             Oversikt over vedlikeholdsoppgaver for boligen
           </p>
         </div>
@@ -77,11 +110,11 @@ export default async function VedlikeholdPage() {
 
       {tasks.length === 0 ? (
         <Card className="flex flex-col items-center justify-center py-12">
-          <Wrench className="text-muted-foreground mb-4 h-12 w-12" />
+          <Wrench className="mb-4 h-12 w-12 text-muted-foreground" />
           <h3 className="font-heading text-lg font-medium">
             Ingen vedlikeholdsoppgaver ennå
           </h3>
-          <p className="text-muted-foreground mt-1 text-sm">
+          <p className="mt-1 text-sm text-muted-foreground">
             Legg til din første oppgave for å komme i gang
           </p>
         </Card>
@@ -100,7 +133,7 @@ export default async function VedlikeholdPage() {
 
             return (
               <Link key={task.id} href={`/vedlikehold/${task.id}`}>
-                <Card className="transition-colors hover:bg-muted/50 h-full">
+                <Card className="h-full transition-colors hover:bg-muted/50">
                   <CardHeader className="pb-3">
                     <div className="flex items-start justify-between gap-2">
                       <CardTitle className="text-base leading-tight">
@@ -114,7 +147,7 @@ export default async function VedlikeholdPage() {
                       </Badge>
                     </div>
                     {task.description && (
-                      <p className="text-muted-foreground line-clamp-2 text-sm">
+                      <p className="line-clamp-2 text-sm text-muted-foreground">
                         {task.description}
                       </p>
                     )}
@@ -147,15 +180,20 @@ export default async function VedlikeholdPage() {
                     )}
 
                     {selectedVendor && (
-                      <p className="text-muted-foreground text-xs">
-                        Valgt aktør: <span className="text-foreground font-medium">{selectedVendor.name}</span>
+                      <p className="text-xs text-muted-foreground">
+                        Valgt aktør:{" "}
+                        <span className="font-medium text-foreground">
+                          {selectedVendor.name}
+                        </span>
                       </p>
                     )}
 
                     {totalEntries > 0 && (
                       <div className="flex flex-col gap-1">
                         <div className="flex items-center justify-between text-xs">
-                          <span className="text-muted-foreground">Fremdrift</span>
+                          <span className="text-muted-foreground">
+                            Fremdrift
+                          </span>
                           <span className="font-medium">
                             {completedEntries}/{totalEntries}
                           </span>
@@ -165,7 +203,7 @@ export default async function VedlikeholdPage() {
                     )}
 
                     {task.vendors.length > 0 && (
-                      <p className="text-muted-foreground text-xs">
+                      <p className="text-xs text-muted-foreground">
                         {task.vendors.length}{" "}
                         {task.vendors.length === 1 ? "aktør" : "aktører"}
                       </p>

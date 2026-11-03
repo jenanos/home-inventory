@@ -2,7 +2,12 @@ import { notFound } from "next/navigation"
 import { requireHousehold } from "@/lib/session"
 import { getMaintenanceTask } from "@/lib/queries/maintenance"
 import { Badge } from "@workspace/ui/components/badge"
-import { Card, CardContent, CardHeader, CardTitle } from "@workspace/ui/components/card"
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@workspace/ui/components/card"
 import { Progress } from "@workspace/ui/components/progress"
 import { Separator } from "@workspace/ui/components/separator"
 import {
@@ -18,16 +23,43 @@ import { VendorSection } from "./vendor-section"
 import { ProgressSection } from "./progress-section"
 
 const priorityConfig = {
-  HIGH: { label: "Høy", className: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400" },
-  MEDIUM: { label: "Medium", className: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400" },
-  LOW: { label: "Lav", className: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" },
+  HIGH: {
+    label: "Høy",
+    className: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
+  },
+  MEDIUM: {
+    label: "Medium",
+    className:
+      "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
+  },
+  LOW: {
+    label: "Lav",
+    className:
+      "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
+  },
 }
 
 const statusConfig = {
-  NOT_STARTED: { label: "Ikke startet", className: "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400" },
-  IN_PROGRESS: { label: "Pågår", className: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400" },
-  COMPLETED: { label: "Fullført", className: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" },
-  ON_HOLD: { label: "På vent", className: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400" },
+  NOT_STARTED: {
+    label: "Ikke startet",
+    className:
+      "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400",
+  },
+  IN_PROGRESS: {
+    label: "Pågår",
+    className:
+      "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
+  },
+  COMPLETED: {
+    label: "Fullført",
+    className:
+      "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
+  },
+  ON_HOLD: {
+    label: "På vent",
+    className:
+      "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400",
+  },
 }
 
 const formatCurrency = (amount: number) =>
@@ -43,15 +75,17 @@ interface TaskPageProps {
 
 export default async function TaskPage({ params }: TaskPageProps) {
   const { id } = await params
-  const { membership } = await requireHousehold()
-  const task = await getMaintenanceTask(id, membership.householdId)
+  const { context } = await requireHousehold()
+  const task = await getMaintenanceTask(context, id)
 
   if (!task) {
     notFound()
   }
 
   const totalEntries = task.progressEntries.length
-  const completedEntries = task.progressEntries.filter((e) => e.completed).length
+  const completedEntries = task.progressEntries.filter(
+    (e) => e.completed
+  ).length
   const progressPercent =
     totalEntries > 0 ? Math.round((completedEntries / totalEntries) * 100) : 0
 
@@ -84,13 +118,13 @@ export default async function TaskPage({ params }: TaskPageProps) {
       <div className="flex items-start gap-3 sm:items-center sm:gap-4">
         <Link
           href="/vedlikehold"
-          className="text-muted-foreground hover:text-foreground mt-1 sm:mt-0 transition-colors shrink-0"
+          className="mt-1 shrink-0 text-muted-foreground transition-colors hover:text-foreground sm:mt-0"
         >
           <ArrowLeft className="h-5 w-5" />
         </Link>
-        <div className="flex-1 min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            <h1 className="font-heading text-xl sm:text-2xl font-bold tracking-tight">
+            <h1 className="font-heading text-xl font-bold tracking-tight sm:text-2xl">
               {task.title}
             </h1>
             <Badge
@@ -101,7 +135,7 @@ export default async function TaskPage({ params }: TaskPageProps) {
             </Badge>
           </div>
           {task.description && (
-            <p className="text-muted-foreground mt-1 text-sm">
+            <p className="mt-1 text-sm text-muted-foreground">
               {task.description}
             </p>
           )}
@@ -115,7 +149,9 @@ export default async function TaskPage({ params }: TaskPageProps) {
             priority: task.priority,
             status: task.status,
             estimatedDuration: task.estimatedDuration,
-            estimatedPrice: task.estimatedPrice ? Number(task.estimatedPrice) : null,
+            estimatedPrice: task.estimatedPrice
+              ? Number(task.estimatedPrice)
+              : null,
             dueDate: task.dueDate ? task.dueDate.toISOString() : null,
           }}
         />
@@ -124,12 +160,15 @@ export default async function TaskPage({ params }: TaskPageProps) {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardContent className="flex items-center gap-3 pt-6">
-            <div className="bg-primary/10 rounded-lg p-2">
-              <Wrench className="text-primary h-4 w-4" />
+            <div className="rounded-lg bg-primary/10 p-2">
+              <Wrench className="h-4 w-4 text-primary" />
             </div>
             <div>
-              <p className="text-muted-foreground text-xs">Prioritet</p>
-              <Badge variant="secondary" className={priorityConfig[task.priority].className}>
+              <p className="text-xs text-muted-foreground">Prioritet</p>
+              <Badge
+                variant="secondary"
+                className={priorityConfig[task.priority].className}
+              >
                 {priorityConfig[task.priority].label}
               </Badge>
             </div>
@@ -139,11 +178,11 @@ export default async function TaskPage({ params }: TaskPageProps) {
         {task.estimatedDuration && (
           <Card>
             <CardContent className="flex items-center gap-3 pt-6">
-              <div className="bg-primary/10 rounded-lg p-2">
-                <Clock className="text-primary h-4 w-4" />
+              <div className="rounded-lg bg-primary/10 p-2">
+                <Clock className="h-4 w-4 text-primary" />
               </div>
               <div>
-                <p className="text-muted-foreground text-xs">Antatt varighet</p>
+                <p className="text-xs text-muted-foreground">Antatt varighet</p>
                 <p className="text-sm font-medium">{task.estimatedDuration}</p>
               </div>
             </CardContent>
@@ -153,11 +192,11 @@ export default async function TaskPage({ params }: TaskPageProps) {
         {task.estimatedPrice != null && (
           <Card>
             <CardContent className="flex items-center gap-3 pt-6">
-              <div className="bg-primary/10 rounded-lg p-2">
-                <Wrench className="text-primary h-4 w-4" />
+              <div className="rounded-lg bg-primary/10 p-2">
+                <Wrench className="h-4 w-4 text-primary" />
               </div>
               <div>
-                <p className="text-muted-foreground text-xs">Estimert pris</p>
+                <p className="text-xs text-muted-foreground">Estimert pris</p>
                 <p className="text-sm font-medium tabular-nums">
                   {formatCurrency(Number(task.estimatedPrice))}
                 </p>
@@ -169,11 +208,11 @@ export default async function TaskPage({ params }: TaskPageProps) {
         {task.dueDate && (
           <Card>
             <CardContent className="flex items-center gap-3 pt-6">
-              <div className="bg-primary/10 rounded-lg p-2">
-                <CalendarIcon className="text-primary h-4 w-4" />
+              <div className="rounded-lg bg-primary/10 p-2">
+                <CalendarIcon className="h-4 w-4 text-primary" />
               </div>
               <div>
-                <p className="text-muted-foreground text-xs">Forfallsdato</p>
+                <p className="text-xs text-muted-foreground">Forfallsdato</p>
                 <p className="text-sm font-medium">
                   {new Date(task.dueDate).toLocaleDateString("nb-NO", {
                     day: "numeric",
@@ -195,7 +234,7 @@ export default async function TaskPage({ params }: TaskPageProps) {
                 <CheckCircle2 className="h-4 w-4" />
                 Fremdrift
               </CardTitle>
-              <span className="text-muted-foreground text-sm">
+              <span className="text-sm text-muted-foreground">
                 {completedEntries}/{totalEntries} ({progressPercent}%)
               </span>
             </div>

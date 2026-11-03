@@ -1,0 +1,47 @@
+import type { McpSession } from "../auth/session"
+import { budgetTools } from "./budget"
+import { budgetWriteTools } from "./budget-write"
+import type { McpToolDefinition } from "./define"
+import { gardenTools } from "./garden"
+import { gardenWriteTools } from "./garden-write"
+import { maintenanceTools } from "./maintenance"
+import { maintenanceWriteTools } from "./maintenance-write"
+import { createServerInfoTool } from "./server-info"
+import { shoppingTools } from "./shopping"
+import { shoppingWriteTools } from "./shopping-write"
+
+export type { McpToolDefinition } from "./define"
+
+/**
+ * The whole tool surface. Read tools go through the application read services;
+ * write tools go through the write services the web flow also uses, and are
+ * only visible with the matching `*:write` scope.
+ *
+ * Full-replace operations (`replaceShoppingItems`, `replaceBudget`,
+ * `replaceMaintenanceTasks`, `replacePlants`) stay server actions outside the
+ * application layer, so nothing here can reach them (plan 10.4).
+ */
+export function createToolRegistry(
+  now: () => Date = () => new Date()
+): McpToolDefinition[] {
+  return [
+    createServerInfoTool(now),
+    ...shoppingTools,
+    ...shoppingWriteTools,
+    ...budgetTools,
+    ...budgetWriteTools,
+    ...maintenanceTools,
+    ...maintenanceWriteTools,
+    ...gardenTools,
+    ...gardenWriteTools,
+  ]
+}
+
+export function toolsVisibleToSession(
+  tools: readonly McpToolDefinition[],
+  session: McpSession
+) {
+  return tools.filter(
+    (tool) => tool.scope === null || session.scopes.includes(tool.scope)
+  )
+}

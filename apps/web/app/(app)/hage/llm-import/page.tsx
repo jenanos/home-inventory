@@ -3,8 +3,8 @@ import { getPlants } from "@/lib/queries/plant"
 import { PlantLlmImportPageClient } from "../llm-import-page-client"
 
 export default async function HageLlmImportPage() {
-  const { membership } = await requireHousehold()
-  const plants = await getPlants(membership.householdId)
+  const { context, membership } = await requireHousehold()
+  const plants = await getPlants(context)
 
   return (
     <PlantLlmImportPageClient

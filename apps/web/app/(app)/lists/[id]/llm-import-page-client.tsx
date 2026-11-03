@@ -12,8 +12,8 @@ import {
   findExistingShoppingItems,
   bulkImportShoppingItemsWithDuplicates,
   replaceShoppingItems,
-  type ExistingShoppingItem,
 } from "@/lib/actions/shopping-item"
+import type { ExistingShoppingItem } from "@/lib/application/shopping/import"
 import { toast } from "sonner"
 import type { Priority, Phase } from "@workspace/db"
 import {

@@ -19,6 +19,38 @@ describe("isPublicPathname", () => {
     expect(isPublicPathname("/icon.svg")).toBe(true)
   })
 
+  it("allows only the exact MCP endpoint through middleware", () => {
+    expect(isPublicPathname("/api/mcp")).toBe(true)
+    expect(isPublicPathname("/api/mcp/anything")).toBe(false)
+    expect(isPublicPathname("/api/mcp-malicious")).toBe(false)
+  })
+
+  it("lets OAuth and discovery reach their route handlers", () => {
+    expect(isPublicPathname("/api/oauth/authorize")).toBe(true)
+    expect(isPublicPathname("/api/oauth/authorize/decision")).toBe(true)
+    expect(isPublicPathname("/api/oauth/token")).toBe(true)
+    expect(isPublicPathname("/api/oauth/register")).toBe(true)
+    expect(isPublicPathname("/api/oauth/revoke")).toBe(true)
+    expect(isPublicPathname("/.well-known/oauth-authorization-server")).toBe(
+      true
+    )
+    expect(isPublicPathname("/.well-known/oauth-protected-resource")).toBe(true)
+    expect(
+      isPublicPathname("/.well-known/oauth-protected-resource/api/mcp")
+    ).toBe(true)
+  })
+
+  it("does not let a prefix collision through", () => {
+    expect(isPublicPathname("/api/oauthfoo")).toBe(false)
+    expect(isPublicPathname("/api/oauth")).toBe(false)
+    expect(isPublicPathname("/.well-knownfoo")).toBe(false)
+  })
+
+  it("keeps the consent page behind login", () => {
+    // The consent screen must know who is approving, so it stays protected.
+    expect(isPublicPathname("/oauth/consent")).toBe(false)
+  })
+
   it("keeps protected app routes private", () => {
     expect(isPublicPathname("/")).toBe(false)
     expect(isPublicPathname("/lists")).toBe(false)

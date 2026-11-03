@@ -8,8 +8,8 @@ import { PlantCard } from "./plant-card"
 import { PlantFormDialog } from "./plant-form-dialog"
 
 export default async function HagePage() {
-  const { membership } = await requireHousehold()
-  const plants = await getPlants(membership.householdId)
+  const { context } = await requireHousehold()
+  const plants = await getPlants(context)
 
   return (
     <div className="flex flex-col gap-6">
@@ -18,7 +18,7 @@ export default async function HagePage() {
           <h1 className="font-heading text-2xl font-bold tracking-tight">
             Hage
           </h1>
-          <p className="text-muted-foreground text-sm">
+          <p className="text-sm text-muted-foreground">
             Oversikt over plantene i hagen og hvordan de skal stelles
           </p>
         </div>
@@ -42,11 +42,11 @@ export default async function HagePage() {
 
       {plants.length === 0 ? (
         <Card className="flex flex-col items-center justify-center py-12">
-          <Flower2 className="text-muted-foreground mb-4 h-12 w-12" />
+          <Flower2 className="mb-4 h-12 w-12 text-muted-foreground" />
           <h3 className="font-heading text-lg font-medium">
             Ingen planter ennå
           </h3>
-          <p className="text-muted-foreground mt-1 text-sm">
+          <p className="mt-1 text-sm text-muted-foreground">
             Legg til din første plante, eller importer flere med LLM-import
           </p>
         </Card>

@@ -17,13 +17,9 @@ interface ListPageProps {
 
 export default async function ListPage({ params }: ListPageProps) {
   const { id } = await params
-  const { session, membership } = await requireHousehold()
+  const { context } = await requireHousehold()
 
-  const list = await getShoppingList(
-    id,
-    membership.householdId,
-    session.user.id
-  )
+  const list = await getShoppingList(context, id)
 
   if (!list) {
     notFound()
@@ -150,7 +146,7 @@ export default async function ListPage({ params }: ListPageProps) {
         itemCount={items.length}
         purchasedCount={items.filter((i) => i.status === "PURCHASED").length}
         isPrivate={list.isPrivate}
-        canManagePrivacy={canManageShoppingListPrivacy(list, session.user.id)}
+        canManagePrivacy={canManageShoppingListPrivacy(list, context.userId)}
         shareLinks={list.shareLinks.map((sl) => ({
           id: sl.id,
           token: sl.token,

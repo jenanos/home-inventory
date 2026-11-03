@@ -9,11 +9,13 @@ import {
   findExistingBudgetItems,
   bulkImportBudgetWithDuplicates,
   replaceBudget,
-  type ExistingBudgetMember,
-  type ExistingBudgetLoan,
-  type ExistingBudgetTrip,
-  type ExistingBudgetEntry,
 } from "@/lib/actions/budget"
+import type {
+  ExistingBudgetMember,
+  ExistingBudgetLoan,
+  ExistingBudgetTrip,
+  ExistingBudgetEntry,
+} from "@/lib/application/budget/import"
 import {
   calculateLoanMonthlyAmounts,
   type BudgetLoanRepaymentType,
@@ -472,8 +474,7 @@ function buildLoanDiffs(
       label: "Nedbetalingstype",
       existingValue: existing.repaymentType,
       newValue: imported.repaymentType,
-      format: (v) =>
-        String(v) === "SERIAL" ? "Serielån" : "Annuitetslån",
+      format: (v) => (String(v) === "SERIAL" ? "Serielån" : "Annuitetslån"),
     },
     {
       key: "principalAmount",

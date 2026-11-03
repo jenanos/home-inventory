@@ -1,71 +1,19 @@
 import { db } from "@workspace/db"
-import { getVisibleShoppingListsWhere } from "@/lib/shopping-list-access"
+import type { ApplicationContext } from "@/lib/application/context"
+import {
+  getShoppingList as readShoppingList,
+  listShoppingLists,
+} from "@/lib/application/shopping/read"
 
-export async function getShoppingLists(householdId: string, userId: string) {
-  const lists = await db.shoppingList.findMany({
-    where: getVisibleShoppingListsWhere(householdId, userId),
-    include: {
-      items: {
-        select: {
-          id: true,
-          status: true,
-          estimatedPrice: true,
-          alternatives: {
-            select: { price: true },
-            orderBy: { rank: "asc" },
-            take: 1,
-          },
-        },
-      },
-    },
-    orderBy: { updatedAt: "desc" },
-  })
-
-  return lists
+export async function getShoppingLists(context: ApplicationContext) {
+  return listShoppingLists(context)
 }
 
 export async function getShoppingList(
-  listId: string,
-  householdId: string,
-  userId: string
+  context: ApplicationContext,
+  listId: string
 ) {
-  const list = await db.shoppingList.findFirst({
-    where: {
-      id: listId,
-      ...getVisibleShoppingListsWhere(householdId, userId),
-    },
-    include: {
-      items: {
-        include: {
-          category: true,
-          assignedTo: true,
-          alternatives: {
-            orderBy: { rank: "asc" },
-          },
-        },
-        orderBy: [
-          { status: "asc" },
-          { priority: "asc" },
-          { createdAt: "desc" },
-        ],
-      },
-      shareLinks: {
-        where: { isActive: true },
-      },
-      household: {
-        include: {
-          members: {
-            include: { user: true },
-          },
-          categories: {
-            orderBy: { name: "asc" },
-          },
-        },
-      },
-    },
-  })
-
-  return list ?? null
+  return readShoppingList(context, listId)
 }
 
 export async function getSharedList(token: string) {

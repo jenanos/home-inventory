@@ -56,11 +56,16 @@ describe("calculateShoppingStats", () => {
 
 describe("calculateBudgetStats", () => {
   it("returns a disabled state when no budget exists", () => {
-    expect(calculateBudgetStats(null)).toEqual({ hasBudget: false })
+    expect(calculateBudgetStats(null)).toEqual({
+      hasBudget: false,
+      currency: "NOK",
+    })
   })
 
-  it("aggregates budget totals", () => {
+  it("delegates dashboard totals to the complete budget calculation", () => {
     const stats = calculateBudgetStats({
+      taxDeductionPercent: "22",
+      categories: [],
       members: [
         { grossMonthlyIncome: "50000", taxPercent: "30" },
         { grossMonthlyIncome: "30000", taxPercent: "20" },
@@ -74,20 +79,23 @@ describe("calculateBudgetStats", () => {
           monthlyFees: "100",
         },
       ],
+      trips: [],
       entries: [
-        { type: "EXPENSE", monthlyAmount: "12000" },
-        { type: "DEDUCTION", monthlyAmount: "1500" },
-        { type: "EXPENSE", monthlyAmount: "800" },
+        { type: "EXPENSE", monthlyAmount: "12000", category: null },
+        { type: "DEDUCTION", monthlyAmount: "1500", category: null },
+        { type: "EXPENSE", monthlyAmount: "800", category: null },
       ],
     })
 
-    expect(stats).toEqual({
+    expect(stats).toMatchObject({
       hasBudget: true,
+      currency: "NOK",
       totalGrossIncome: 80000,
       totalNetIncome: 59000,
       totalLoanPayments: 5100,
-      totalExpenses: 12800,
+      totalExpenses: 17900,
       totalDeductions: 1500,
+      disposable: 42600,
       memberCount: 2,
       loanCount: 1,
       entryCount: 3,

@@ -53,7 +53,12 @@ export function UsersSection({ users, currentUserId }: UsersSectionProps) {
   }
 
   function handleDelete(userId: string) {
-    if (!confirm("Er du sikker på at du vil slette denne brukeren?")) return
+    if (
+      !confirm(
+        "Er du sikker på at du vil slette denne brukeren? Brukerens private handlelister slettes også."
+      )
+    )
+      return
     startTransition(async () => {
       try {
         await deleteUser(userId)
@@ -87,7 +92,7 @@ export function UsersSection({ users, currentUserId }: UsersSectionProps) {
             )}
           </Button>
         </div>
-        <p className="text-muted-foreground text-xs">
+        <p className="text-xs text-muted-foreground">
           Brukeren vil kunne logge inn med magisk lenke etter at de er lagt til.
         </p>
       </form>
@@ -125,7 +130,7 @@ export function UsersSection({ users, currentUserId }: UsersSectionProps) {
                         .join(", ")
                     : "Ingen"}
                 </TableCell>
-                <TableCell className="text-muted-foreground text-sm">
+                <TableCell className="text-sm text-muted-foreground">
                   {new Date(user.createdAt).toLocaleDateString("nb-NO")}
                 </TableCell>
                 <TableCell>

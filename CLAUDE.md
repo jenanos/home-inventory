@@ -11,10 +11,12 @@ pnpm dev          # Start Next.js dev server with Turbopack
 pnpm build        # Production build (via Turbo)
 pnpm lint         # ESLint across all workspaces
 pnpm format       # Prettier across all workspaces
+pnpm test         # Vitest across workspaces
 pnpm typecheck    # TypeScript type checking (tsc --noEmit)
 ```
 
-All commands are orchestrated by Turbo. No test framework is configured yet.
+All commands are orchestrated by Turbo. Unit tests use Vitest. Database
+integration tests use the separate PostgreSQL service described below.
 
 ## Local Development
 
@@ -23,6 +25,8 @@ All commands are orchestrated by Turbo. No test framework is configured yet.
 - Reset database: `docker compose down -v` (sletter all data)
 - Run migrations: `pnpm db:migrate`
 - Setup database + seed: `pnpm db:setup`
+- Start and migrate test database: `pnpm db:test:prepare`
+- Test database: PostgreSQL on port 5436, configured by `.env.test`
 
 ## Architecture
 
@@ -77,6 +81,27 @@ Reference: https://ui.shadcn.com/docs/monorepo
 - Caddy håndterer TLS og reverse proxy
 - Watchtower auto-puller nye images hvert 5. minutt
 - Prisma-migrasjoner kjøres automatisk ved container-oppstart
+
+## Application Layer & MCP
+
+- Domain logic lives in `apps/web/lib/application/<domain>/` (`read.ts`, `write.ts`,
+  `import.ts`). Services take an `ApplicationContext`, never import from `next/*`,
+  React or the MCP SDK, and throw `ApplicationError` with a stable code.
+- Ownership is part of the write's `where` (`{ id, householdId }`, or via the parent
+  for child rows; `getVisibleShoppingListsWhere` for shopping). Never
+  `findUnique({ id })` → check → `update({ id })`. Use `scopedWrite` from
+  `lib/application/mutations.ts`, which also handles `expectedUpdatedAt`.
+- Server Actions in `lib/actions/` are thin adapters: `requireHousehold()` → service →
+  `revalidatePath()`. A `"use server"` file must not contain re-export statements
+  (`export type { X }`, `export { … } from`): Next.js compiles them as value exports
+  and the whole module fails at runtime. Import types from `lib/application/` instead
+  (`lib/actions/use-server-exports.test.ts` guards this).
+- MCP tools live in `apps/web/lib/mcp/tools/` (`defineTool` for reads,
+  `defineWriteTool` for writes, which also audits). Return whitelisted fields only.
+  Full-replace actions (`replace*`) must stay outside `lib/application/`.
+- Design decisions: `docs/decisions/` (ADRs). Operations: `docs/runbooks/`.
+- Integration tests (`*.integration.test.ts`) need the test database
+  (`pnpm db:test:prepare`); use `lib/test/household-fixtures.ts`.
 
 ## Code Conventions
 

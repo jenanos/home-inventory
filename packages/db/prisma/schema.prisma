@@ -19,12 +19,16 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  accounts         Account[]
-  sessions         Session[]
-  householdMembers HouseholdMember[]
-  assignedItems    ShoppingItem[]    @relation("AssignedItems")
-  createdLists     ShoppingList[]    @relation("CreatedShoppingLists")
-  createdLinks     ShareLink[]
+  accounts                 Account[]
+  sessions                 Session[]
+  householdMembers         HouseholdMember[]
+  assignedItems            ShoppingItem[]                 @relation("AssignedItems")
+  createdLists             ShoppingList[]                 @relation("CreatedShoppingLists")
+  createdLinks             ShareLink[]
+  mcpAuthorizationRequests McpOAuthAuthorizationRequest[]
+  mcpAuthorizationCodes    McpOAuthAuthorizationCode[]
+  mcpGrants                McpOAuthGrant[]
+  mcpAuditEvents           McpAuditEvent[]
 }
 
 model Account {
@@ -57,7 +61,7 @@ model Session {
 
 model VerificationToken {
   identifier String
-  token      String @unique
+  token      String   @unique
   expires    DateTime
 
   @@unique([identifier, token])
@@ -107,10 +111,13 @@ model Household {
   maintenanceTasks MaintenanceTask[]
   plants           Plant[]
   budget           Budget?
+  mcpAuditEvents   McpAuditEvent[]
 }
 
 model HouseholdMember {
-  userId      String @db.Uuid
+  /// Home Overview currently supports exactly one active household per user.
+  /// Supporting multiple households requires an explicit active-household concept.
+  userId      String @unique @db.Uuid
   householdId String @db.Uuid
   role        Role   @default(MEMBER)
 
@@ -120,6 +127,161 @@ model HouseholdMember {
   @@id([userId, householdId])
 }
 
+// ─── MCP OAuth models ───────────────────────────────────────────
+
+enum McpOAuthClientRegistrationSource {
+  CLIENT_ID_METADATA
+  DYNAMIC
+  ADMIN
+}
+
+enum McpOAuthClientStatus {
+  ACTIVE
+  REVOKED
+}
+
+model McpOAuthClient {
+  id                 String                           @id @db.VarChar(512)
+  name               String                           @db.VarChar(200)
+  redirectUris       String[]
+  grantTypes         String[]
+  responseTypes      String[]
+  clientSecretHash   String?                          @unique @db.Char(64)
+  registrationSource McpOAuthClientRegistrationSource
+  status             McpOAuthClientStatus             @default(ACTIVE)
+  createdAt          DateTime                         @default(now())
+  lastUsedAt         DateTime?
+  expiresAt          DateTime?
+  revokedAt          DateTime?
+
+  authorizationRequests McpOAuthAuthorizationRequest[]
+  authorizationCodes    McpOAuthAuthorizationCode[]
+  grants                McpOAuthGrant[]
+
+  @@index([expiresAt])
+  @@index([status, revokedAt])
+}
+
+model McpOAuthAuthorizationRequest {
+  id                  String    @id @default(uuid()) @db.Uuid
+  requestTokenHash    String    @unique @db.Char(64)
+  clientId            String    @db.VarChar(512)
+  userId              String?   @db.Uuid
+  redirectUri         String    @db.Text
+  codeChallenge       String    @db.VarChar(128)
+  codeChallengeMethod String    @db.VarChar(16)
+  requestedScopes     String[]
+  resource            String    @db.Text
+  state               String?   @db.Text
+  createdAt           DateTime  @default(now())
+  expiresAt           DateTime
+  consumedAt          DateTime?
+  approvedAt          DateTime?
+  rejectedAt          DateTime?
+
+  client McpOAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user   User?          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, expiresAt])
+  @@index([userId, expiresAt])
+  @@index([expiresAt])
+}
+
+model McpOAuthAuthorizationCode {
+  id                  String    @id @default(uuid()) @db.Uuid
+  codeHash            String    @unique @db.Char(64)
+  clientId            String    @db.VarChar(512)
+  userId              String    @db.Uuid
+  redirectUri         String    @db.Text
+  scopes              String[]
+  resource            String    @db.Text
+  codeChallenge       String    @db.VarChar(128)
+  codeChallengeMethod String    @db.VarChar(16)
+  createdAt           DateTime  @default(now())
+  expiresAt           DateTime
+  consumedAt          DateTime?
+
+  client McpOAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user   User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, expiresAt])
+  @@index([userId, expiresAt])
+  @@index([expiresAt])
+}
+
+model McpOAuthGrant {
+  id         String    @id @default(uuid()) @db.Uuid
+  clientId   String    @db.VarChar(512)
+  userId     String    @db.Uuid
+  scopes     String[]
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+
+  client        McpOAuthClient         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user          User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokens McpOAuthRefreshToken[]
+
+  // Re-consent updates this row; a user/client pair never has two active grants.
+  @@unique([userId, clientId])
+  @@index([userId, revokedAt])
+  @@index([clientId, revokedAt])
+}
+
+model McpOAuthRefreshToken {
+  id           String    @id @default(uuid()) @db.Uuid
+  tokenHash    String    @unique @db.Char(64)
+  grantId      String    @db.Uuid
+  familyId     String    @db.Uuid
+  replacedById String?   @unique @db.Uuid
+  createdAt    DateTime  @default(now())
+  expiresAt    DateTime
+  lastUsedAt   DateTime?
+  consumedAt   DateTime?
+  revokedAt    DateTime?
+
+  grant      McpOAuthGrant         @relation(fields: [grantId], references: [id], onDelete: Cascade)
+  replacedBy McpOAuthRefreshToken? @relation("McpRefreshTokenRotation", fields: [replacedById], references: [id], onDelete: SetNull)
+  replaces   McpOAuthRefreshToken? @relation("McpRefreshTokenRotation")
+
+  @@index([grantId, revokedAt])
+  @@index([familyId, revokedAt])
+  @@index([expiresAt])
+}
+
+/// One row per MCP mutation attempt (chapter 12 of the MCP plan). Deliberately
+/// holds no tool input, no before/after copies and no free text: only who, which
+/// client, which tool, which resource and how it went. Rows are removed by the
+/// periodic cleanup after the retention period, and with the user or household.
+model McpAuditEvent {
+  id            String   @id @default(uuid()) @db.Uuid
+  createdAt     DateTime @default(now())
+  userId        String   @db.Uuid
+  householdId   String   @db.Uuid
+  /// Not a foreign key: the trail should survive a client being removed.
+  clientId      String   @db.VarChar(512)
+  toolName      String   @db.VarChar(100)
+  resourceType  String   @db.VarChar(50)
+  resourceId    String?  @db.Uuid
+  /// `success`, `dry_run` or a lowercased application error code.
+  outcome       String   @db.VarChar(32)
+  correlationId String?  @db.Uuid
+  durationMs    Int
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  @@index([householdId, createdAt])
+  @@index([clientId, createdAt])
+  @@index([createdAt])
+}
+
+/// Database-only invariant, not expressible in Prisma (migration
+/// 20260427141000): `CHECK (NOT "isPrivate" OR "createdById" IS NOT NULL)`.
+/// A private list always has an owner, so `createdBy`'s `SetNull` would fail for
+/// private lists; deleting a user removes their private lists first
+/// (`lib/application/users/delete.ts`).
 model ShoppingList {
   id          String   @id @default(uuid()) @db.Uuid
   name        String
@@ -365,23 +527,23 @@ model Budget {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  household Household      @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  members   BudgetMember[]
-  loans     BudgetLoan[]
-  trips     BudgetTrip[]
+  household  Household             @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  members    BudgetMember[]
+  loans      BudgetLoan[]
+  trips      BudgetTrip[]
   categories BudgetEntryCategory[]
-  entries   BudgetEntry[]
+  entries    BudgetEntry[]
 }
 
 model BudgetEntryCategory {
   id        String   @id @default(uuid()) @db.Uuid
-  budgetId   String   @db.Uuid
+  budgetId  String   @db.Uuid
   name      String
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  budget  Budget       @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  budget  Budget        @relation(fields: [budgetId], references: [id], onDelete: Cascade)
   entries BudgetEntry[]
 
   @@unique([budgetId, name])
@@ -389,12 +551,12 @@ model BudgetEntryCategory {
 }
 
 model BudgetMember {
-  id                 String  @id @default(uuid()) @db.Uuid
-  budgetId           String  @db.Uuid
+  id                 String   @id @default(uuid()) @db.Uuid
+  budgetId           String   @db.Uuid
   name               String
-  grossMonthlyIncome Decimal @db.Decimal(10, 2)
-  taxPercent         Decimal @db.Decimal(5, 2)
-  sortOrder          Int     @default(0)
+  grossMonthlyIncome Decimal  @db.Decimal(10, 2)
+  taxPercent         Decimal  @db.Decimal(5, 2)
+  sortOrder          Int      @default(0)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
@@ -424,18 +586,18 @@ model BudgetLoan {
 }
 
 model BudgetTrip {
-  id               String            @id @default(uuid()) @db.Uuid
-  budgetId         String            @db.Uuid
-  name             String
-  transportType    TripTransportType
-  annualTrips      Int               @default(1)
-  ticketPerTrip    Decimal?          @db.Decimal(10, 2)
-  tollPerTrip      Decimal?          @db.Decimal(10, 2)
-  ferryPerTrip     Decimal?          @db.Decimal(10, 2)
-  fuelPerTrip      Decimal?          @db.Decimal(10, 2)
-  sortOrder        Int               @default(0)
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+  id            String            @id @default(uuid()) @db.Uuid
+  budgetId      String            @db.Uuid
+  name          String
+  transportType TripTransportType
+  annualTrips   Int               @default(1)
+  ticketPerTrip Decimal?          @db.Decimal(10, 2)
+  tollPerTrip   Decimal?          @db.Decimal(10, 2)
+  ferryPerTrip  Decimal?          @db.Decimal(10, 2)
+  fuelPerTrip   Decimal?          @db.Decimal(10, 2)
+  sortOrder     Int               @default(0)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
 
   budget Budget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
 
@@ -443,17 +605,17 @@ model BudgetTrip {
 }
 
 model BudgetEntry {
-  id            String              @id @default(uuid()) @db.Uuid
-  budgetId      String              @db.Uuid
+  id            String          @id @default(uuid()) @db.Uuid
+  budgetId      String          @db.Uuid
   name          String
-  categoryId    String?             @db.Uuid
+  categoryId    String?         @db.Uuid
   type          BudgetEntryType
-  monthlyAmount Decimal             @db.Decimal(10, 2)
-  sortOrder     Int                 @default(0)
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
+  monthlyAmount Decimal         @db.Decimal(10, 2)
+  sortOrder     Int             @default(0)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
 
-  budget   Budget              @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  budget   Budget               @relation(fields: [budgetId], references: [id], onDelete: Cascade)
   category BudgetEntryCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
   @@index([budgetId, sortOrder])

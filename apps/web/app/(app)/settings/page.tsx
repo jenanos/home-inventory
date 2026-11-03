@@ -5,20 +5,29 @@ import { db } from "@workspace/db"
 import {
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
 import { Button } from "@workspace/ui/components/button"
-import { Separator } from "@workspace/ui/components/separator"
+import { listConnectedApps } from "@/lib/queries/connected-apps"
 import { ProfileForm } from "./profile-form"
 import { MembersSection } from "./members-section"
 import { CategoriesSection } from "./categories-section"
+import { ConnectedAppsSection } from "./connected-apps-section"
+
+// Explicit time zone: the server runs in UTC, the household does not.
+const dateFormatter = new Intl.DateTimeFormat("nb-NO", {
+  dateStyle: "medium",
+  timeStyle: "short",
+  timeZone: "Europe/Oslo",
+})
 
 export default async function SettingsPage() {
   const { session, membership } = await requireHousehold()
   const isAdmin = await isCurrentUserAdmin()
 
-  const [user, members, categories] = await Promise.all([
+  const [user, members, categories, grants] = await Promise.all([
     db.user.findUnique({ where: { id: session.user.id } }),
     db.householdMember.findMany({
       where: { householdId: membership.householdId },
@@ -28,9 +37,30 @@ export default async function SettingsPage() {
       where: { householdId: membership.householdId },
       orderBy: { name: "asc" },
     }),
+    listConnectedApps(session.user.id),
   ])
 
   const isOwner = membership.role === "OWNER"
+  const connectedApps = grants.map((grant) => ({
+    grantId: grant.grantId,
+    clientName: grant.clientName,
+    scopes: grant.scopes,
+    connectedAt: dateFormatter.format(grant.connectedAt),
+    lastUsedAt: grant.lastUsedAt
+      ? dateFormatter.format(grant.lastUsedAt)
+      : null,
+    recentChanges: grant.recentChanges.map((change) => ({
+      id: change.id,
+      toolName: change.toolName,
+      result:
+        change.outcome === "success"
+          ? ("saved" as const)
+          : change.outcome === "dry_run"
+            ? ("preview" as const)
+            : ("rejected" as const),
+      createdAt: dateFormatter.format(change.createdAt),
+    })),
+  }))
 
   return (
     <div className="space-y-6 sm:space-y-8">
@@ -41,10 +71,7 @@ export default async function SettingsPage() {
           <CardTitle>Profil</CardTitle>
         </CardHeader>
         <CardContent>
-          <ProfileForm
-            name={user?.name ?? ""}
-            email={user?.email ?? ""}
-          />
+          <ProfileForm name={user?.name ?? ""} email={user?.email ?? ""} />
         </CardContent>
       </Card>
 
@@ -81,6 +108,20 @@ export default async function SettingsPage() {
               isDefault: c.isDefault,
             }))}
           />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Tilkoblede apper</CardTitle>
+          <CardDescription>
+            Apper som kan lese eller endre data på dine vegne via MCP. Å trekke
+            tilbake tilgangen stopper fornying umiddelbart; et allerede utstedt
+            tilgangstoken kan leve til det utløper.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ConnectedAppsSection apps={connectedApps} />
         </CardContent>
       </Card>
 

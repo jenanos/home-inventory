@@ -1,26 +1,43 @@
 "use server"
 
 import { db, type Priority, type TaskStatus } from "@workspace/db"
+import {
+  bulkImportMaintenanceTasks as bulkImportMaintenanceTasksService,
+  bulkImportMaintenanceTasksWithDuplicates as bulkImportMaintenanceTasksWithDuplicatesService,
+  findExistingMaintenanceTasks as findExistingMaintenanceTasksService,
+  toMaintenanceTaskCreateData,
+  type BulkMaintenanceTaskInput,
+  type ExistingMaintenanceTask,
+  type MaintenanceTaskFieldUpdate,
+} from "@/lib/application/maintenance/import"
+import {
+  addProgressEntry,
+  addTaskVendor,
+  createMaintenanceTask as createMaintenanceTaskService,
+  deleteMaintenanceTask as deleteMaintenanceTaskService,
+  deleteProgressEntry as deleteProgressEntryService,
+  deleteTaskVendor as deleteTaskVendorService,
+  setSelectedVendor,
+  updateMaintenanceTask as updateMaintenanceTaskService,
+  updateProgressEntry as updateProgressEntryService,
+  updateTaskVendor as updateTaskVendorService,
+} from "@/lib/application/maintenance/write"
+import { assertBatchSize } from "@/lib/application/mutations"
 import { requireHousehold } from "@/lib/session"
 import { revalidatePath } from "next/cache"
 
-function sanitizeUrl(
-  url: string | undefined | null
-): string | undefined | null {
-  if (!url) return url
-  try {
-    const parsed = new URL(url)
-    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
-      return url
-    }
-  } catch {
-    // invalid URL
-  }
-  return undefined
-}
+// Thin adapters: the browser context comes from the session, while the rules
+// and the ownership boundary live in the maintenance services shared with MCP.
+// Decimals are converted to numbers here because a Prisma `Decimal` cannot
+// cross the server action boundary.
 
-function formatDateToIsoDate(date: Date): string {
-  return date.toISOString().slice(0, 10)
+function withNumericPrice<
+  T extends { estimatedPrice: { toString(): string } | null },
+>(row: T) {
+  return {
+    ...row,
+    estimatedPrice: row.estimatedPrice ? Number(row.estimatedPrice) : null,
+  }
 }
 
 // --- MaintenanceTask actions ---
@@ -35,25 +52,11 @@ interface CreateMaintenanceTaskInput {
 }
 
 export async function createMaintenanceTask(input: CreateMaintenanceTaskInput) {
-  const { membership } = await requireHousehold()
-
-  const task = await db.maintenanceTask.create({
-    data: {
-      title: input.title,
-      description: input.description,
-      priority: input.priority ?? "MEDIUM",
-      estimatedDuration: input.estimatedDuration,
-      estimatedPrice: input.estimatedPrice,
-      dueDate: input.dueDate,
-      householdId: membership.householdId,
-    },
-  })
+  const { context } = await requireHousehold()
+  const task = await createMaintenanceTaskService(context, input)
 
   revalidatePath("/vedlikehold")
-  return {
-    ...task,
-    estimatedPrice: task.estimatedPrice ? Number(task.estimatedPrice) : null,
-  }
+  return withNumericPrice(task)
 }
 
 interface UpdateMaintenanceTaskInput {
@@ -68,42 +71,18 @@ interface UpdateMaintenanceTaskInput {
 }
 
 export async function updateMaintenanceTask(input: UpdateMaintenanceTaskInput) {
-  const { membership } = await requireHousehold()
-
-  const task = await db.maintenanceTask.findUnique({
-    where: { id: input.id },
-  })
-  if (!task || task.householdId !== membership.householdId) {
-    throw new Error("Task not found")
-  }
-
-  const { id, ...data } = input
-  const updated = await db.maintenanceTask.update({
-    where: { id },
-    data,
-  })
+  const { context } = await requireHousehold()
+  const { id, ...fields } = input
+  const updated = await updateMaintenanceTaskService(context, id, fields)
 
   revalidatePath("/vedlikehold")
   revalidatePath(`/vedlikehold/${id}`)
-  return {
-    ...updated,
-    estimatedPrice: updated.estimatedPrice
-      ? Number(updated.estimatedPrice)
-      : null,
-  }
+  return withNumericPrice(updated)
 }
 
 export async function deleteMaintenanceTask(taskId: string) {
-  const { membership } = await requireHousehold()
-
-  const task = await db.maintenanceTask.findUnique({
-    where: { id: taskId },
-  })
-  if (!task || task.householdId !== membership.householdId) {
-    throw new Error("Task not found")
-  }
-
-  await db.maintenanceTask.delete({ where: { id: taskId } })
+  const { context } = await requireHousehold()
+  await deleteMaintenanceTaskService(context, taskId)
 
   revalidatePath("/vedlikehold")
 }
@@ -122,35 +101,12 @@ interface CreateTaskVendorInput {
 }
 
 export async function createTaskVendor(input: CreateTaskVendorInput) {
-  const { membership } = await requireHousehold()
+  const { context } = await requireHousehold()
+  const { taskId, ...fields } = input
+  const vendor = await addTaskVendor(context, taskId, fields)
 
-  const task = await db.maintenanceTask.findUnique({
-    where: { id: input.taskId },
-  })
-  if (!task || task.householdId !== membership.householdId) {
-    throw new Error("Task not found")
-  }
-
-  const vendor = await db.taskVendor.create({
-    data: {
-      name: input.name,
-      description: input.description,
-      phone: input.phone,
-      email: input.email,
-      website: sanitizeUrl(input.website),
-      estimatedPrice: input.estimatedPrice,
-      notes: input.notes,
-      taskId: input.taskId,
-    },
-  })
-
-  revalidatePath(`/vedlikehold/${input.taskId}`)
-  return {
-    ...vendor,
-    estimatedPrice: vendor.estimatedPrice
-      ? Number(vendor.estimatedPrice)
-      : null,
-  }
+  revalidatePath(`/vedlikehold/${taskId}`)
+  return withNumericPrice(vendor)
 }
 
 interface UpdateTaskVendorInput {
@@ -162,75 +118,38 @@ interface UpdateTaskVendorInput {
   website?: string | null
   estimatedPrice?: number | null
   notes?: string | null
-  isSelected?: boolean
 }
 
 export async function updateTaskVendor(input: UpdateTaskVendorInput) {
-  const { membership } = await requireHousehold()
+  const { context } = await requireHousehold()
+  const { id, ...fields } = input
+  const updated = await updateTaskVendorService(context, id, fields)
 
-  const vendor = await db.taskVendor.findUnique({
-    where: { id: input.id },
-    include: { task: true },
-  })
-  if (!vendor || vendor.task.householdId !== membership.householdId) {
-    throw new Error("Vendor not found")
-  }
-
-  const { id, website, ...rest } = input
-  const updated = await db.taskVendor.update({
-    where: { id },
-    data: {
-      ...rest,
-      ...(website !== undefined && { website: sanitizeUrl(website) }),
-    },
-  })
-
-  revalidatePath(`/vedlikehold/${vendor.taskId}`)
-  return {
-    ...updated,
-    estimatedPrice: updated.estimatedPrice
-      ? Number(updated.estimatedPrice)
-      : null,
-  }
+  revalidatePath(`/vedlikehold/${updated.taskId}`)
+  return withNumericPrice(updated)
 }
 
 export async function deleteTaskVendor(vendorId: string) {
-  const { membership } = await requireHousehold()
-
-  const vendor = await db.taskVendor.findUnique({
-    where: { id: vendorId },
-    include: { task: true },
-  })
-  if (!vendor || vendor.task.householdId !== membership.householdId) {
-    throw new Error("Vendor not found")
-  }
-
-  await db.taskVendor.delete({ where: { id: vendorId } })
+  const { context } = await requireHousehold()
+  const vendor = await deleteTaskVendorService(context, vendorId)
 
   revalidatePath(`/vedlikehold/${vendor.taskId}`)
 }
 
 export async function selectTaskVendor(vendorId: string) {
-  const { membership } = await requireHousehold()
+  const { context } = await requireHousehold()
 
-  const vendor = await db.taskVendor.findUnique({
-    where: { id: vendorId },
-    include: { task: true },
+  // The UI only knows the vendor id. Its task is looked up through the
+  // household boundary; `setSelectedVendor` then checks again in its writes.
+  const vendor = await db.taskVendor.findFirst({
+    where: { id: vendorId, task: { householdId: context.householdId } },
+    select: { taskId: true },
   })
-  if (!vendor || vendor.task.householdId !== membership.householdId) {
+  if (!vendor) {
     throw new Error("Vendor not found")
   }
 
-  await db.$transaction([
-    db.taskVendor.updateMany({
-      where: { taskId: vendor.taskId },
-      data: { isSelected: false },
-    }),
-    db.taskVendor.update({
-      where: { id: vendorId },
-      data: { isSelected: true },
-    }),
-  ])
+  await setSelectedVendor(context, vendor.taskId, vendorId)
 
   revalidatePath(`/vedlikehold/${vendor.taskId}`)
 }
@@ -246,26 +165,11 @@ interface CreateProgressEntryInput {
 }
 
 export async function createProgressEntry(input: CreateProgressEntryInput) {
-  const { membership } = await requireHousehold()
+  const { context } = await requireHousehold()
+  const { taskId, ...fields } = input
+  const entry = await addProgressEntry(context, taskId, fields)
 
-  const task = await db.maintenanceTask.findUnique({
-    where: { id: input.taskId },
-  })
-  if (!task || task.householdId !== membership.householdId) {
-    throw new Error("Task not found")
-  }
-
-  const entry = await db.taskProgressEntry.create({
-    data: {
-      title: input.title,
-      description: input.description,
-      dueDate: input.dueDate,
-      sortOrder: input.sortOrder ?? 0,
-      taskId: input.taskId,
-    },
-  })
-
-  revalidatePath(`/vedlikehold/${input.taskId}`)
+  revalidatePath(`/vedlikehold/${taskId}`)
   return entry
 }
 
@@ -279,71 +183,22 @@ interface UpdateProgressEntryInput {
 }
 
 export async function updateProgressEntry(input: UpdateProgressEntryInput) {
-  const { membership } = await requireHousehold()
+  const { context } = await requireHousehold()
+  const { id, ...fields } = input
+  const updated = await updateProgressEntryService(context, id, fields)
 
-  const entry = await db.taskProgressEntry.findUnique({
-    where: { id: input.id },
-    include: { task: true },
-  })
-  if (!entry || entry.task.householdId !== membership.householdId) {
-    throw new Error("Progress entry not found")
-  }
-
-  const { id, completed, ...rest } = input
-  const updated = await db.taskProgressEntry.update({
-    where: { id },
-    data: {
-      ...rest,
-      ...(completed !== undefined && {
-        completed,
-        completedAt: completed ? new Date() : null,
-      }),
-    },
-  })
-
-  revalidatePath(`/vedlikehold/${entry.taskId}`)
+  revalidatePath(`/vedlikehold/${updated.taskId}`)
   return updated
 }
 
 export async function deleteProgressEntry(entryId: string) {
-  const { membership } = await requireHousehold()
-
-  const entry = await db.taskProgressEntry.findUnique({
-    where: { id: entryId },
-    include: { task: true },
-  })
-  if (!entry || entry.task.householdId !== membership.householdId) {
-    throw new Error("Progress entry not found")
-  }
-
-  await db.taskProgressEntry.delete({ where: { id: entryId } })
+  const { context } = await requireHousehold()
+  const entry = await deleteProgressEntryService(context, entryId)
 
   revalidatePath(`/vedlikehold/${entry.taskId}`)
 }
 
 // ─── Bulk Import ────────────────────────────────────────────────
-
-interface BulkMaintenanceTaskInput {
-  title: string
-  description?: string
-  priority?: string
-  estimatedDuration?: string
-  estimatedPrice?: number
-  dueDate?: string
-  vendors?: {
-    name: string
-    description?: string
-    phone?: string
-    email?: string
-    website?: string
-    estimatedPrice?: number
-    notes?: string
-  }[]
-  progressEntries?: {
-    title: string
-    description?: string
-  }[]
-}
 
 interface BulkMaintenanceImportInput {
   tasks: BulkMaintenanceTaskInput[]
@@ -352,108 +207,35 @@ interface BulkMaintenanceImportInput {
 export async function bulkImportMaintenanceTasks(
   input: BulkMaintenanceImportInput
 ) {
-  const { membership } = await requireHousehold()
-
-  const validPriorities = new Set(["HIGH", "MEDIUM", "LOW"])
-
-  const results = await db.$transaction(
-    input.tasks.map((task) =>
-      db.maintenanceTask.create({
-        data: {
-          title: task.title,
-          description: task.description || undefined,
-          priority: (task.priority &&
-          validPriorities.has(task.priority.toUpperCase())
-            ? task.priority.toUpperCase()
-            : "MEDIUM") as Priority,
-          estimatedDuration: task.estimatedDuration || undefined,
-          estimatedPrice: task.estimatedPrice ?? undefined,
-          dueDate: task.dueDate ? new Date(task.dueDate) : undefined,
-          householdId: membership.householdId,
-          vendors:
-            task.vendors && task.vendors.length > 0
-              ? {
-                  create: task.vendors.map((v) => ({
-                    name: v.name,
-                    description: v.description || undefined,
-                    phone: v.phone || undefined,
-                    email: v.email || undefined,
-                    website: sanitizeUrl(v.website),
-                    estimatedPrice: v.estimatedPrice ?? undefined,
-                    notes: v.notes || undefined,
-                  })),
-                }
-              : undefined,
-          progressEntries:
-            task.progressEntries && task.progressEntries.length > 0
-              ? {
-                  create: task.progressEntries.map((pe, i) => ({
-                    title: pe.title,
-                    description: pe.description || undefined,
-                    sortOrder: i,
-                  })),
-                }
-              : undefined,
-        },
-      })
-    )
-  )
+  const { context } = await requireHousehold()
+  const result = await bulkImportMaintenanceTasksService(context, input.tasks)
 
   revalidatePath("/vedlikehold")
-  return { count: results.length }
+  return result
 }
 
+/**
+ * Full replacement stays a server action and is deliberately kept out of the
+ * application layer, so no MCP tool can ever reach it (plan 10.4). It applies
+ * the same per-task rules as the import service.
+ */
 export async function replaceMaintenanceTasks(
   input: BulkMaintenanceImportInput
 ) {
-  const { membership } = await requireHousehold()
+  const { context } = await requireHousehold()
+  assertBatchSize(input.tasks.length, "Oppgaver", { allowEmpty: true })
 
-  const validPriorities = new Set(["HIGH", "MEDIUM", "LOW"])
+  const data = input.tasks.map((task) =>
+    toMaintenanceTaskCreateData(task, context.householdId)
+  )
 
   await db.$transaction(async (tx) => {
     await tx.maintenanceTask.deleteMany({
-      where: { householdId: membership.householdId },
+      where: { householdId: context.householdId },
     })
 
-    for (const task of input.tasks) {
-      await tx.maintenanceTask.create({
-        data: {
-          title: task.title,
-          description: task.description || undefined,
-          priority: (task.priority &&
-          validPriorities.has(task.priority.toUpperCase())
-            ? task.priority.toUpperCase()
-            : "MEDIUM") as Priority,
-          estimatedDuration: task.estimatedDuration || undefined,
-          estimatedPrice: task.estimatedPrice ?? undefined,
-          dueDate: task.dueDate ? new Date(task.dueDate) : undefined,
-          householdId: membership.householdId,
-          vendors:
-            task.vendors && task.vendors.length > 0
-              ? {
-                  create: task.vendors.map((vendor) => ({
-                    name: vendor.name,
-                    description: vendor.description || undefined,
-                    phone: vendor.phone || undefined,
-                    email: vendor.email || undefined,
-                    website: sanitizeUrl(vendor.website),
-                    estimatedPrice: vendor.estimatedPrice ?? undefined,
-                    notes: vendor.notes || undefined,
-                  })),
-                }
-              : undefined,
-          progressEntries:
-            task.progressEntries && task.progressEntries.length > 0
-              ? {
-                  create: task.progressEntries.map((entry, index) => ({
-                    title: entry.title,
-                    description: entry.description || undefined,
-                    sortOrder: index,
-                  })),
-                }
-              : undefined,
-        },
-      })
+    for (const task of data) {
+      await tx.maintenanceTask.create({ data: task })
     }
   })
 
@@ -463,61 +245,14 @@ export async function replaceMaintenanceTasks(
 
 // ─── Duplicate Detection ────────────────────────────────────────
 
-export interface ExistingMaintenanceTask {
-  id: string
-  title: string
-  description: string | null
-  priority: string
-  estimatedDuration: string | null
-  estimatedPrice: number | null
-  dueDate: string | null
-  vendorCount: number
-  progressEntryCount: number
-}
-
 export async function findExistingMaintenanceTasks(
   titles: string[]
 ): Promise<ExistingMaintenanceTask[]> {
-  const { membership } = await requireHousehold()
-
-  const lowerTitles = titles.map((t) => t.toLowerCase())
-
-  const existing = await db.maintenanceTask.findMany({
-    where: {
-      householdId: membership.householdId,
-    },
-    include: {
-      _count: { select: { vendors: true, progressEntries: true } },
-    },
-  })
-
-  return existing
-    .filter((task) => lowerTitles.includes(task.title.toLowerCase()))
-    .map((task) => ({
-      id: task.id,
-      title: task.title,
-      description: task.description,
-      priority: task.priority,
-      estimatedDuration: task.estimatedDuration,
-      estimatedPrice: task.estimatedPrice ? Number(task.estimatedPrice) : null,
-      dueDate: task.dueDate ? formatDateToIsoDate(task.dueDate) : null,
-      vendorCount: task._count.vendors,
-      progressEntryCount: task._count.progressEntries,
-    }))
+  const { context } = await requireHousehold()
+  return findExistingMaintenanceTasksService(context, titles)
 }
 
 // ─── Bulk Import With Duplicate Handling ────────────────────────
-
-interface MaintenanceTaskFieldUpdate {
-  id: string
-  fields: {
-    description?: string
-    priority?: string
-    estimatedDuration?: string
-    estimatedPrice?: number
-    dueDate?: string
-  }
-}
 
 interface BulkMaintenanceImportWithDuplicatesInput {
   newTasks: BulkMaintenanceTaskInput[]
@@ -527,97 +262,12 @@ interface BulkMaintenanceImportWithDuplicatesInput {
 export async function bulkImportMaintenanceTasksWithDuplicates(
   input: BulkMaintenanceImportWithDuplicatesInput
 ) {
-  const { membership } = await requireHousehold()
-
-  const validPriorities = new Set(["HIGH", "MEDIUM", "LOW"])
-  let count = 0
-
-  // Create new tasks
-  if (input.newTasks.length > 0) {
-    const results = await db.$transaction(
-      input.newTasks.map((task) =>
-        db.maintenanceTask.create({
-          data: {
-            title: task.title,
-            description: task.description || undefined,
-            priority: (task.priority &&
-            validPriorities.has(task.priority.toUpperCase())
-              ? task.priority.toUpperCase()
-              : "MEDIUM") as Priority,
-            estimatedDuration: task.estimatedDuration || undefined,
-            estimatedPrice: task.estimatedPrice ?? undefined,
-            dueDate: task.dueDate ? new Date(task.dueDate) : undefined,
-            householdId: membership.householdId,
-            vendors:
-              task.vendors && task.vendors.length > 0
-                ? {
-                    create: task.vendors.map((v) => ({
-                      name: v.name,
-                      description: v.description || undefined,
-                      phone: v.phone || undefined,
-                      email: v.email || undefined,
-                      website: sanitizeUrl(v.website),
-                      estimatedPrice: v.estimatedPrice ?? undefined,
-                      notes: v.notes || undefined,
-                    })),
-                  }
-                : undefined,
-            progressEntries:
-              task.progressEntries && task.progressEntries.length > 0
-                ? {
-                    create: task.progressEntries.map((pe, i) => ({
-                      title: pe.title,
-                      description: pe.description || undefined,
-                      sortOrder: i,
-                    })),
-                  }
-                : undefined,
-          },
-        })
-      )
-    )
-    count += results.length
-  }
-
-  // Update existing tasks with selected fields
-  if (input.updates.length > 0) {
-    const updateOps = input.updates.map((update) => {
-      const data: {
-        description?: string
-        priority?: Priority
-        estimatedDuration?: string
-        estimatedPrice?: number
-        dueDate?: Date | null
-      } = {}
-      if (update.fields.description !== undefined) {
-        data.description = update.fields.description ?? undefined
-      }
-      if (update.fields.priority !== undefined) {
-        const p = update.fields.priority.toUpperCase()
-        if (validPriorities.has(p)) data.priority = p as Priority
-      }
-      if (update.fields.estimatedDuration !== undefined) {
-        data.estimatedDuration = update.fields.estimatedDuration ?? undefined
-      }
-      if (update.fields.estimatedPrice !== undefined) {
-        data.estimatedPrice = update.fields.estimatedPrice
-      }
-      if (update.fields.dueDate !== undefined) {
-        data.dueDate = update.fields.dueDate
-          ? new Date(update.fields.dueDate)
-          : null
-      }
-
-      return db.maintenanceTask.update({
-        where: { id: update.id, householdId: membership.householdId },
-        data,
-      })
-    })
-
-    await db.$transaction(updateOps)
-    count += input.updates.length
-  }
+  const { context } = await requireHousehold()
+  const result = await bulkImportMaintenanceTasksWithDuplicatesService(
+    context,
+    input
+  )
 
   revalidatePath("/vedlikehold")
-  return { count }
+  return result
 }

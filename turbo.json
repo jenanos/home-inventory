@@ -1,10 +1,20 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "ui": "tui",
+  "globalPassThroughEnv": ["NEXT_RUNTIME"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "env": ["ADMIN_EMAIL"],
+      "env": [
+        "ADMIN_EMAIL",
+        "HOME_OVERVIEW_MCP_ENABLED",
+        "HOME_OVERVIEW_MCP_OAUTH_SIGNING_SECRET",
+        "HOME_OVERVIEW_MCP_ISSUER",
+        "HOME_OVERVIEW_MCP_ACCESS_TOKEN_TTL_SECONDS",
+        "HOME_OVERVIEW_MCP_REFRESH_TOKEN_TTL_SECONDS",
+        "HOME_OVERVIEW_MCP_CLOCK_SKEW_SECONDS",
+        "HOME_OVERVIEW_MCP_WRITE_DOMAINS"
+      ],
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
       "outputs": [".next/**", "!.next/cache/**", "node_modules/.prisma/**"]
     },
@@ -13,6 +23,10 @@
     },
     "format": {
       "dependsOn": ["^format"]
+    },
+    "test": {
+      "dependsOn": ["^test"],
+      "cache": false
     },
     "typecheck": {
       "dependsOn": ["^typecheck"]

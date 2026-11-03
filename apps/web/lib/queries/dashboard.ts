@@ -1,52 +1,22 @@
-import { db } from "@workspace/db"
 import {
-  calculateBudgetStats,
   calculateMaintenanceStats,
   calculateShoppingStats,
 } from "../dashboard-stats"
-import { getVisibleShoppingListsWhere } from "../shopping-list-access"
+import type { ApplicationContext } from "@/lib/application/context"
+import { calculateBudgetStats } from "@/lib/application/budget/calculations"
+import { getBudget } from "@/lib/application/budget/read"
+import { listMaintenanceTasks } from "@/lib/application/maintenance/read"
+import {
+  listShoppingCategories,
+  listShoppingListsForDashboard,
+} from "@/lib/application/shopping/read"
 
-export async function getDashboardData(householdId: string, userId: string) {
+export async function getDashboardData(context: ApplicationContext) {
   const [lists, categories, budget, maintenanceTasks] = await Promise.all([
-    db.shoppingList.findMany({
-      where: getVisibleShoppingListsWhere(householdId, userId),
-      include: {
-        items: {
-          include: {
-            category: true,
-            assignedTo: true,
-            alternatives: {
-              orderBy: { rank: "asc" },
-            },
-          },
-        },
-      },
-      orderBy: { updatedAt: "desc" },
-    }),
-    db.category.findMany({
-      where: { householdId },
-      orderBy: { name: "asc" },
-    }),
-    db.budget.findUnique({
-      where: { householdId },
-      include: {
-        members: { orderBy: { sortOrder: "asc" } },
-        loans: { orderBy: { sortOrder: "asc" } },
-        entries: { orderBy: { sortOrder: "asc" } },
-      },
-    }),
-    db.maintenanceTask.findMany({
-      where: { householdId },
-      include: {
-        vendors: {
-          orderBy: [{ isSelected: "desc" }, { name: "asc" }],
-        },
-        progressEntries: {
-          orderBy: { sortOrder: "asc" },
-        },
-      },
-      orderBy: { createdAt: "desc" },
-    }),
+    listShoppingListsForDashboard(context),
+    listShoppingCategories(context),
+    getBudget(context),
+    listMaintenanceTasks(context),
   ])
 
   const householdLists = lists.filter((list) => !list.isPrivate)
