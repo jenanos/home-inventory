@@ -25,7 +25,10 @@ const mocks = vi.hoisted(() => ({
   plantFindFirst: vi.fn(),
 }))
 
-vi.mock("@workspace/db", () => ({
+vi.mock("@workspace/db", async (importOriginal) => ({
+  // The real module supplies the runtime enums the write services validate
+  // against; only the client is replaced.
+  ...(await importOriginal<typeof import("@workspace/db")>()),
   db: {
     shoppingList: {
       count: mocks.shoppingListCount,
@@ -113,6 +116,10 @@ async function callTool(name: string, args: unknown = {}, scopes?: McpScope[]) {
   return { result, structured }
 }
 
+function isReadOnly(entry: McpToolDefinition) {
+  return entry.annotations.readOnlyHint === true
+}
+
 function expectMatchesOutputSchema(name: string, structured: unknown) {
   const parsed = z.object(tool(name).outputSchema).safeParse(structured)
 
@@ -193,6 +200,7 @@ beforeEach(() => {
           storeName: null,
           notes: null,
           rank: 0,
+          updatedAt: new Date("2026-02-02T00:00:00Z"),
         },
       ],
       _count: { alternatives: 1 },
@@ -210,7 +218,14 @@ beforeEach(() => {
     taxDeductionPercent: decimal("22"),
     createdAt: new Date("2026-01-01T00:00:00Z"),
     updatedAt: new Date("2026-02-01T00:00:00Z"),
-    categories: [{ id: "bc-1", name: "Bolig", sortOrder: 0 }],
+    categories: [
+      {
+        id: "bc-1",
+        name: "Bolig",
+        sortOrder: 0,
+        updatedAt: new Date("2026-02-02T00:00:00Z"),
+      },
+    ],
     members: [
       {
         id: "bm-1",
@@ -218,6 +233,7 @@ beforeEach(() => {
         grossMonthlyIncome: decimal("60000"),
         taxPercent: decimal("35"),
         sortOrder: 0,
+        updatedAt: new Date("2026-02-02T00:00:00Z"),
       },
     ],
     loans: [
@@ -232,6 +248,7 @@ beforeEach(() => {
         termMonths: 300,
         monthlyFees: decimal("65"),
         sortOrder: 0,
+        updatedAt: new Date("2026-02-02T00:00:00Z"),
       },
     ],
     trips: [
@@ -245,6 +262,7 @@ beforeEach(() => {
         ferryPerTrip: null,
         fuelPerTrip: decimal("500"),
         sortOrder: 0,
+        updatedAt: new Date("2026-02-02T00:00:00Z"),
       },
     ],
     entries: [
@@ -254,6 +272,7 @@ beforeEach(() => {
         type: "EXPENSE",
         monthlyAmount: decimal("1500"),
         sortOrder: 0,
+        updatedAt: new Date("2026-02-02T00:00:00Z"),
         category: { id: "bc-1", name: "Bolig" },
       },
     ],
@@ -312,6 +331,7 @@ beforeEach(() => {
         estimatedPrice: decimal("4800"),
         notes: null,
         isSelected: true,
+        updatedAt: new Date("2026-02-02T00:00:00Z"),
       },
     ],
     progressEntries: [
@@ -323,6 +343,7 @@ beforeEach(() => {
         completed: true,
         completedAt: new Date("2026-01-05T10:00:00Z"),
         sortOrder: 0,
+        updatedAt: new Date("2026-02-02T00:00:00Z"),
       },
     ],
   })
@@ -391,7 +412,9 @@ const HAPPY_PATH_ARGS: Array<[string, Record<string, unknown>]> = [
 
 describe("level 1 tool contracts", () => {
   it("registers exactly the documented level 1 surface, all read-only", () => {
-    expect(registry.map((entry) => entry.name)).toEqual(
+    const readTools = registry.filter((entry) => isReadOnly(entry))
+
+    expect(readTools.map((entry) => entry.name)).toEqual(
       HAPPY_PATH_ARGS.map(([name]) => name)
     )
   })

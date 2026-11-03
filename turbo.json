@@ -1,6 +1,7 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "ui": "tui",
+  "globalPassThroughEnv": ["NEXT_RUNTIME"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
@@ -11,7 +12,8 @@
         "HOME_OVERVIEW_MCP_ISSUER",
         "HOME_OVERVIEW_MCP_ACCESS_TOKEN_TTL_SECONDS",
         "HOME_OVERVIEW_MCP_REFRESH_TOKEN_TTL_SECONDS",
-        "HOME_OVERVIEW_MCP_CLOCK_SKEW_SECONDS"
+        "HOME_OVERVIEW_MCP_CLOCK_SKEW_SECONDS",
+        "HOME_OVERVIEW_MCP_WRITE_DOMAINS"
       ],
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
       "outputs": [".next/**", "!.next/cache/**", "node_modules/.prisma/**"]

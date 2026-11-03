@@ -288,6 +288,7 @@ export async function listShoppingItemsPage(
                 storeName: true,
                 notes: true,
                 rank: true,
+                updatedAt: true,
               },
               orderBy: { rank: "asc" },
             }

@@ -16,6 +16,8 @@ export type McpSession = {
   scopes: McpScope[]
   clientId: string
   tokenId: string
+  /** Request correlation id, set by the route. Links audit rows to log lines. */
+  correlationId?: string
 }
 
 export async function createMcpSession(input: {

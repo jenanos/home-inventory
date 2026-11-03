@@ -16,6 +16,12 @@ export interface ConnectedAppView {
   scopes: string[]
   connectedAt: string
   lastUsedAt: string | null
+  recentChanges: Array<{
+    id: string
+    toolName: string
+    result: "saved" | "preview" | "rejected"
+    createdAt: string
+  }>
 }
 
 function scopeLabel(scope: string) {
@@ -92,6 +98,28 @@ export function ConnectedAppsSection({ apps }: { apps: ConnectedAppView[] }) {
                   ? ` · sist brukt ${app.lastUsedAt}`
                   : " · ikke brukt ennå"}
               </p>
+
+              {app.recentChanges.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Siste endringer
+                  </p>
+                  <ul className="space-y-0.5 text-xs text-muted-foreground">
+                    {app.recentChanges.map((change) => (
+                      <li key={change.id} className="flex flex-wrap gap-x-2">
+                        <span className="font-mono">{change.toolName}</span>
+                        <span>{change.createdAt}</span>
+                        {change.result === "preview" && (
+                          <span>forhåndsvisning</span>
+                        )}
+                        {change.result === "rejected" && (
+                          <span className="text-destructive">avvist</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
 
             <Button

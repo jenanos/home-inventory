@@ -18,7 +18,7 @@ export function createServerInfoTool(now: () => Date = () => new Date()) {
     scope: null,
     title: "Get server information",
     description:
-      "Returns protocol and deployment metadata plus the scopes this token was granted. Useful for diagnosing why a tool is missing. It returns no household or personal data.",
+      "Returns protocol and deployment metadata plus the scopes this token was granted and which domains it can read and change. Useful for diagnosing why a tool is missing. It returns no household or personal data.",
     inputSchema: {},
     outputSchema: {
       serverName: z.string(),
@@ -30,6 +30,11 @@ export function createServerInfoTool(now: () => Date = () => new Date()) {
       availableDomains: z
         .array(z.enum(MCP_DOMAINS))
         .describe("Domains this token can currently read."),
+      writableDomains: z
+        .array(z.enum(MCP_DOMAINS))
+        .describe(
+          "Domains this token can currently change. Empty when the token has no write scope or the server has writes switched off for those domains."
+        ),
       grantedScopes: z
         .array(z.enum(MCP_SCOPES))
         .describe("Effective scopes, with write scopes already implying read."),
@@ -46,6 +51,9 @@ export function createServerInfoTool(now: () => Date = () => new Date()) {
         responseMode: "json" as const,
         sessionMode: "stateless" as const,
         availableDomains: domainsForScopes(session.scopes),
+        writableDomains: MCP_DOMAINS.filter((domain) =>
+          session.scopes.some((scope) => scope === `${domain}:write`)
+        ),
         grantedScopes: session.scopes,
         maxPageSize: MCP_MAX_PAGE_SIZE,
         currentTime: now().toISOString(),

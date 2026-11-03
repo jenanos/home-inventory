@@ -1,18 +1,25 @@
 import type { McpSession } from "../auth/session"
 import { budgetTools } from "./budget"
+import { budgetWriteTools } from "./budget-write"
 import type { McpToolDefinition } from "./define"
 import { gardenTools } from "./garden"
+import { gardenWriteTools } from "./garden-write"
 import { maintenanceTools } from "./maintenance"
+import { maintenanceWriteTools } from "./maintenance-write"
 import { createServerInfoTool } from "./server-info"
 import { shoppingTools } from "./shopping"
+import { shoppingWriteTools } from "./shopping-write"
 
 export type { McpToolDefinition } from "./define"
 
 /**
- * The whole level 1 surface. Nothing here mutates: every tool is annotated
- * read-only and reaches the database through the application read services,
- * which is what keeps `replaceShoppingItems` and `replaceBudget` structurally
- * unreachable from MCP (chapter 10.4).
+ * The whole tool surface. Read tools go through the application read services;
+ * write tools go through the write services the web flow also uses, and are
+ * only visible with the matching `*:write` scope.
+ *
+ * Full-replace operations (`replaceShoppingItems`, `replaceBudget`,
+ * `replaceMaintenanceTasks`, `replacePlants`) stay server actions outside the
+ * application layer, so nothing here can reach them (plan 10.4).
  */
 export function createToolRegistry(
   now: () => Date = () => new Date()
@@ -20,9 +27,13 @@ export function createToolRegistry(
   return [
     createServerInfoTool(now),
     ...shoppingTools,
+    ...shoppingWriteTools,
     ...budgetTools,
+    ...budgetWriteTools,
     ...maintenanceTools,
+    ...maintenanceWriteTools,
     ...gardenTools,
+    ...gardenWriteTools,
   ]
 }
 

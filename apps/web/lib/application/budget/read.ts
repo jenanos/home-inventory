@@ -1,9 +1,19 @@
-import { db } from "@workspace/db"
+import { db, type Prisma } from "@workspace/db"
 
 import type { ApplicationContext } from "../context"
 
-export async function getBudget(context: ApplicationContext) {
-  return db.budget.findUnique({
+export type BudgetDbClient = Prisma.TransactionClient | typeof db
+
+/**
+ * The whole budget graph the shared calculation needs. Takes a client so the
+ * write services can recompute the summary inside their own transaction,
+ * which is what makes a dry run report exactly what a real write would.
+ */
+export async function getBudget(
+  context: ApplicationContext,
+  client: BudgetDbClient = db
+) {
+  return client.budget.findUnique({
     where: { householdId: context.householdId },
     include: {
       categories: { orderBy: { sortOrder: "asc" } },
@@ -99,6 +109,7 @@ export async function getBudgetDetails(
               type: true,
               monthlyAmount: true,
               sortOrder: true,
+              updatedAt: true,
               category: { select: { id: true, name: true } },
             },
             orderBy: [{ sortOrder: "asc" }, { id: "asc" }],

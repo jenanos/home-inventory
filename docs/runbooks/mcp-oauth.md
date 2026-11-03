@@ -13,6 +13,7 @@ migrasjon og rollback av databaseskjemaet, se `mcp-oauth-migration.md`.
 | `HOME_OVERVIEW_MCP_ACCESS_TOKEN_TTL_SECONDS`  | nei     | 900–3600, standard 1800                          |
 | `HOME_OVERVIEW_MCP_REFRESH_TOKEN_TTL_SECONDS` | nei     | Maks 2592000 (30 dager), standard 30 dager       |
 | `HOME_OVERVIEW_MCP_CLOCK_SKEW_SECONDS`        | nei     | 0–60, standard 30                                |
+| `HOME_OVERVIEW_MCP_WRITE_DOMAINS`             | nei     | Domener som tar imot skriving: `shopping,budget,maintenance,garden` eller `all`. Standard: ingen |
 
 Generer signeringssecreten med:
 
@@ -119,8 +120,73 @@ curl -s -X POST "$BASE/api/mcp" \
 budsjettverktøyene» — mangler `budget:read` i `grantedScopes`, må brukeren
 godkjenne scopet på nytt.
 
-Fase 4 er **read-only**. Ingen verktøy kan endre data, og `tools/list` skal aldri
-inneholde et verktøy som ikke starter med `list-` eller `get-`.
+`tools/list` viser bare skriveverktøy for domener der tokenet har `*:write`
+**og** domenet er slått på i `HOME_OVERVIEW_MCP_WRITE_DOMAINS`.
+`get-server-info` svarer med `writableDomains`, som er det raskeste svaret på
+«hvorfor kan ikke klienten endre noe».
+
+## Slå på skriving
+
+Skriving er av til den slås på, ett domene av gangen (planens kapittel 16):
+
+1. Kjør read-only en periode og følg med på `mcp.request`-loggen.
+2. Sett `HOME_OVERVIEW_MCP_WRITE_DOMAINS=garden` (lavest risiko) og gjenskap
+   containeren.
+3. Kontroller at discovery nå annonserer `garden:write`:
+
+   ```bash
+   curl -s "$BASE/.well-known/oauth-protected-resource/api/mcp" | jq .scopes_supported
+   ```
+
+4. Godkjenn klienten på nytt med det nye scopet, test en endring, og sjekk at den
+   havner i revisjonsloggen (under).
+5. Legg til neste domene: `garden,maintenance`, deretter `shopping`, og
+   `budget` sist — budsjettet er de mest sensitive dataene.
+
+Å fjerne et domene fra listen virker umiddelbart for alle tokens, også de som
+ble godkjent mens det var på. Grants røres ikke, så å slå det på igjen krever
+ikke nytt samtykke. Et ukjent domenenavn gjør konfigurasjonen ugyldig og gir
+`503` — sjekk stavemåten hvis MCP plutselig er nede etter en endring.
+
+## Revisjonslogg for endringer
+
+Hvert skriveforsøk som passerte scope-sjekken gir én rad i `McpAuditEvent`. Raden
+har ingen input og ingen data, bare hvem, hvilken klient, hvilket verktøy,
+hvilken ressurs og utfallet:
+
+```sql
+-- Siste endringer i en husstand
+SELECT a."createdAt", u.email, a."clientId", a."toolName",
+       a."resourceType", a."resourceId", a.outcome, a."correlationId"
+FROM "McpAuditEvent" a
+JOIN "User" u ON u.id = a."userId"
+WHERE a."householdId" = '<household-id>'
+ORDER BY a."createdAt" DESC
+LIMIT 50;
+
+-- Avviste skriveforsøk siste døgn per klient og utfall
+SELECT "clientId", outcome, COUNT(*)
+FROM "McpAuditEvent"
+WHERE outcome <> 'success' AND "createdAt" > now() - interval '1 day'
+GROUP BY 1, 2 ORDER BY 3 DESC;
+```
+
+`correlationId` er den samme som i `mcp.request`-loggen, så en rad kan følges
+til logglinjen. Brukeren ser selv de fem siste endringene per klient under
+Innstillinger → «Tilkoblede apper».
+
+Rader eldre enn 180 dager slettes automatisk. Står det
+`"event":"mcp.audit_failed"` i loggen, ble en endring utført uten at den ble
+revidert. Det skal undersøkes.
+
+### Når en klient har gjort en uønsket endring
+
+1. Finn radene i revisjonsloggen. `resourceType` og `resourceId` sier hva som ble
+   endret.
+2. Trekk tilbake klientens tilgang, eller slå av domenet med
+   `HOME_OVERVIEW_MCP_WRITE_DOMAINS` hvis det gjelder flere klienter.
+3. Rett dataene i webappen. Revisjonsloggen har bevisst ingen før-kopi; trengs
+   den gamle verdien, må den hentes fra databasebackupen.
 
 ## Se aktive klienter og grants uten å lese tokens
 
@@ -209,12 +275,22 @@ opake tokens, og CSRF-tokenet på samtykkesiden. Rotasjon invaliderer derfor
 
 ## Rydde utløpte OAuth-data
 
-`McpOAuthTokenRepository.cleanupExpiredRows(deleteFinalizedBefore)` sletter
-utløpte authorization requests og codes, ferdigbrukte refresh tokens etter
-karantenetiden, og klientregistreringer som aldri ble tatt i bruk.
+Oppryddingen kjører automatisk i appen (`lib/mcp/cleanup.ts`, startet fra
+`instrumentation.ts`): ett minutt etter oppstart og deretter hver sjette time.
+Den sletter
 
-Jobben er idempotent og ikke nødvendig for korrekthet — kun for plassbruk.
-Utløpte rader kan aldri brukes, fordi hvert oppslag filtrerer på `expiresAt`.
+- utløpte authorization requests og codes
+- konsumerte og revokerte refresh tokens eldre enn én refresh-token-levetid
+  (reuse-deteksjonen trenger dem fram til da)
+- klientregistreringer som aldri ble tatt i bruk
+- revisjonsrader eldre enn 180 dager
+
+Hver kjøring gir én logglinje med `"event":"mcp.cleanup"` og antall slettede
+rader. Mangler den over et døgn, eller står det `mcp.cleanup_failed`, kjører ikke
+jobben. Jobben er idempotent og ikke nødvendig for korrekthet — kun for
+plassbruk. Utløpte rader kan aldri brukes, fordi hvert oppslag filtrerer på
+`expiresAt`. Med flere replikaer kjører den i hver av dem; det er bortkastet,
+men trygt.
 
 ## Diagnostisere feil klokke, issuer eller audience
 
@@ -318,14 +394,66 @@ første tegn på at et `limit` bør ned.
 ## Backup og restore
 
 Tabellene `McpOAuthClient`, `McpOAuthGrant`, `McpOAuthRefreshToken`,
-`McpOAuthAuthorizationRequest` og `McpOAuthAuthorizationCode` må være med i
-databasebackupen. Verifiser en restore med:
+`McpOAuthAuthorizationRequest`, `McpOAuthAuthorizationCode` og
+`McpAuditEvent` må være med i databasebackupen.
 
-```sql
-SELECT COUNT(*) FROM "McpOAuthClient";
-SELECT COUNT(*) FROM "McpOAuthGrant" WHERE "revokedAt" IS NULL;
-```
+### Restore-test
+
+Gjøres minst én gang før skriving slås på, og etter hver endring av
+backupoppsettet:
+
+1. Restore siste backup til en midlertidig database, aldri over produksjon:
+
+   ```bash
+   createdb home_overview_restore_test
+   pg_restore --no-owner -d home_overview_restore_test <backupfil>
+   ```
+
+2. Kontroller at migrasjonene er komplette og at tabellene har innhold:
+
+   ```bash
+   DATABASE_URL=postgresql://…/home_overview_restore_test \
+     pnpm --filter @workspace/db prisma migrate status
+   ```
+
+   ```sql
+   SELECT COUNT(*) FROM "McpOAuthClient";
+   SELECT COUNT(*) FROM "McpOAuthGrant" WHERE "revokedAt" IS NULL;
+   SELECT MAX("createdAt") FROM "McpAuditEvent";
+   SELECT COUNT(*) FROM "Household";
+   ```
+
+3. Noter dato og resultat, og slett testdatabasen.
 
 Restore av en backup som er eldre enn en secret-rotasjon gir refresh tokens som
 ikke lenger kan hashes tilbake. De er da uleselige og må ryddes med SQL-en i
 rotasjonsavsnittet.
+
+## Overvåking
+
+Det finnes ingen dashboards ennå; loggen er JSON per linje og kan tas inn i det
+verktøyet serveren ellers bruker. Disse signalene bør ha en alarm eller i det
+minste en ukentlig titt:
+
+| Signal | Kilde | Hva det betyr |
+| ------ | ----- | ------------- |
+| `refresh token reuse detected` | applikasjonslogg | Mulig lekket token. Følg «Ved mistanke om tokenlekkasje» |
+| `authorization code replay detected` | applikasjonslogg | Samme |
+| `mcp.audit_failed` | applikasjonslogg | En endring ble ikke revidert |
+| `mcp.cleanup_failed`, eller ingen `mcp.cleanup` på et døgn | applikasjonslogg | Opprydding kjører ikke |
+| Økning i `outcome: "rate_limited"` | `mcp.request` | Misbruk, eller en klient i løkke |
+| Økning i `forbidden`/`not_found` i `McpAuditEvent` | database | En klient gjetter ID-er eller har gammel tilstand |
+| `durationMs` p95 per `toolName` | `mcp.request` | Trege verktøy; første kandidat er store sider |
+
+## Last- og misbrukstest
+
+Ikke kjørt ennå. Rate limiteren er prosesslokal, så testen må gå mot ett
+kjørende instans, helst en kopi av produksjon:
+
+1. `POST /api/oauth/register` over 5 ganger per time fra samme adresse → `429`.
+2. `POST /api/mcp` med gyldig token i en løkke → `429` etter 120 kall per minutt,
+   med `Retry-After`.
+3. `get-shopping-list` og `get-budget-details` med `limit: 100` på den største
+   husstanden: noter `responseBytes` og `durationMs`.
+4. `add-shopping-items` med 100 varer: skal fullføre godt under
+   request-grensen på 64 KiB, og 101 varer skal avvises med `VALIDATION_ERROR`.

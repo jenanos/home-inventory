@@ -19,6 +19,8 @@ kontrolleres på nytt før OAuth-fasen og før første produksjonsaktivering.
 ### SDK, protokoll og adapter
 
 - `@modelcontextprotocol/sdk` er låst til nøyaktig versjon `1.29.0`.
+  _Oppgradert til `1.32.2` i [ADR 0004](0004-mcp-write-tools.md); fortsatt
+  eksakt låst og samme protokollversjon._
 - Zod er låst til `3.25.76`, som er støttet av SDK-en og allerede brukes i
   monorepoet.
 - MCP-protokollversjon `2025-11-25` er målversjonen. Det er siste stabile

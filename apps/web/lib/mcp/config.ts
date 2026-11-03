@@ -1,5 +1,7 @@
 import { z } from "zod"
 
+import { MCP_DOMAINS, type McpDomain } from "./constants"
+
 const DEFAULT_ACCESS_TOKEN_TTL_SECONDS = 30 * 60
 const DEFAULT_REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60
 const DEFAULT_CLOCK_SKEW_SECONDS = 30
@@ -54,6 +56,41 @@ const environmentSchema = z.object({
     .positive()
     .max(DEFAULT_REFRESH_TOKEN_TTL_SECONDS)
     .default(DEFAULT_REFRESH_TOKEN_TTL_SECONDS),
+  /**
+   * Which domains accept writes, as a comma-separated list such as
+   * `shopping,garden`, or `all`. Unset or empty means none: the deploy order in
+   * plan chapter 16 turns writes on one domain at a time, after the read-only
+   * surface has been observed. An unknown name makes the whole configuration
+   * invalid, so a typo is loud instead of silently leaving a domain off.
+   */
+  HOME_OVERVIEW_MCP_WRITE_DOMAINS: z
+    .string()
+    .optional()
+    .transform((value, context): McpDomain[] => {
+      const names = (value ?? "")
+        .split(",")
+        .map((name) => name.trim().toLowerCase())
+        .filter(Boolean)
+
+      if (names.length === 1 && names[0] === "all") {
+        return [...MCP_DOMAINS]
+      }
+
+      const domains: McpDomain[] = []
+      for (const name of names) {
+        const domain = MCP_DOMAINS.find((candidate) => candidate === name)
+        if (!domain) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Unknown MCP write domain: ${name}`,
+          })
+          return z.NEVER
+        }
+        if (!domains.includes(domain)) domains.push(domain)
+      }
+
+      return MCP_DOMAINS.filter((domain) => domains.includes(domain))
+    }),
   HOME_OVERVIEW_MCP_CLOCK_SKEW_SECONDS: z.coerce
     .number()
     .int()
@@ -73,6 +110,8 @@ export type McpConfig =
       accessTokenTtlSeconds: number
       refreshTokenTtlSeconds: number
       clockSkewSeconds: number
+      /** Domains whose `*:write` scope is advertised, granted and honoured. */
+      writeDomains: McpDomain[]
     }
   | {
       enabled: false
@@ -123,6 +162,7 @@ export function loadMcpConfig(
     refreshTokenTtlSeconds:
       result.data.HOME_OVERVIEW_MCP_REFRESH_TOKEN_TTL_SECONDS,
     clockSkewSeconds: result.data.HOME_OVERVIEW_MCP_CLOCK_SKEW_SECONDS,
+    writeDomains: result.data.HOME_OVERVIEW_MCP_WRITE_DOMAINS,
   }
 }
 

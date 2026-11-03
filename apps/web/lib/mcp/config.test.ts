@@ -24,6 +24,33 @@ describe("loadMcpConfig", () => {
       accessTokenTtlSeconds: 1800,
       refreshTokenTtlSeconds: 2592000,
       clockSkewSeconds: 30,
+      writeDomains: [],
+    })
+  })
+
+  it.each([
+    ["", []],
+    ["garden", ["garden"]],
+    [" Budget , shopping,budget", ["shopping", "budget"]],
+    ["all", ["shopping", "budget", "maintenance", "garden"]],
+  ])("parses write domains %j", (value, expected) => {
+    expect(
+      loadMcpConfig({
+        ...validEnvironment,
+        HOME_OVERVIEW_MCP_WRITE_DOMAINS: value,
+      })
+    ).toMatchObject({ enabled: true, writeDomains: expected })
+  })
+
+  it("treats an unknown write domain as invalid configuration, not as off", () => {
+    expect(
+      loadMcpConfig({
+        ...validEnvironment,
+        HOME_OVERVIEW_MCP_WRITE_DOMAINS: "shopping,budgett",
+      })
+    ).toMatchObject({
+      enabled: false,
+      reason: "missing-or-invalid-configuration",
     })
   })
 

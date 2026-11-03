@@ -56,3 +56,31 @@ Dette sletter alle OAuth-grants og refresh tokens, og kan derfor ikke angres
 uten backup. Etter en databaserollback må migrasjonen markeres eller repareres
 i Prisma migration history før en senere deploy. Ikke bruk
 `prisma migrate reset` i produksjon.
+
+## Revisjonsloggen (`20261103181712_add_mcp_audit_events`)
+
+Migrasjonen er rent additiv: én ny tabell, `McpAuditEvent`, med fremmednøkler mot
+`User` og `Household` (`ON DELETE CASCADE`). Den rører ingen eksisterende rader
+og trenger ingen sjekk før deploy.
+
+En eldre applikasjonsversjon fungerer med tabellen på plass; den skriver bare
+ikke til den. Foretrukket rollback er derfor å rulle tilbake applikasjonen og la
+tabellen stå. Skal den likevel fjernes:
+
+```sql
+DROP TABLE IF EXISTS "McpAuditEvent";
+```
+
+og marker migrasjonen som rullet tilbake:
+
+```bash
+pnpm --filter @workspace/db prisma migrate resolve \
+  --rolled-back 20261103181712_add_mcp_audit_events
+```
+
+Merk: migrasjonen ble generert mot en database der `BudgetEntryCategory.id` og
+`Plant.id` har en database-default som schemaet ikke beskriver. Prisma foreslo å
+fjerne de to defaultene; det er tatt ut av migrasjonen fordi det ikke hører til
+denne endringen og ikke har noen effekt for appen, som alltid setter ID-en selv.
+Avviket vil dukke opp igjen ved neste `prisma migrate dev` og bør ryddes i en egen
+migrasjon.

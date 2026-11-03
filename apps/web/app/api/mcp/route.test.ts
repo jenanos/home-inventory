@@ -26,6 +26,7 @@ const config = {
   accessTokenTtlSeconds: 1800,
   refreshTokenTtlSeconds: 2592000,
   clockSkewSeconds: 30,
+  writeDomains: ["shopping", "budget", "maintenance", "garden"],
 } satisfies Extract<McpConfig, { enabled: true }>
 
 const context: ApplicationContext = {
@@ -46,7 +47,9 @@ function stubTools(): McpToolDefinition[] {
     {
       name: "get-server-info",
       scope: null,
+      inputSchema: {},
       outputSchema: {},
+      annotations: { readOnlyHint: true },
       register: (server) =>
         server.registerTool(
           "get-server-info",
@@ -58,7 +61,9 @@ function stubTools(): McpToolDefinition[] {
     {
       name: "list-plants",
       scope: "garden:read",
+      inputSchema: {},
       outputSchema: {},
+      annotations: { readOnlyHint: true },
       register: (server, session) =>
         server.registerTool(
           "list-plants",
@@ -367,6 +372,25 @@ describe("authenticated MCP route", () => {
     // garden:write implies garden:read, so the read tool is reachable.
     expect(toolCalls).toEqual([
       { name: "list-plants", scopes: ["garden:read", "garden:write"] },
+    ])
+  })
+
+  it("drops a write scope whose domain is switched off, but keeps the read it implies", async () => {
+    await handleMcpPostRequest(
+      mcpRequest(
+        {
+          jsonrpc: "2.0",
+          id: 5,
+          method: "tools/call",
+          params: { name: "list-plants", arguments: {} },
+        },
+        { token: token(["garden:write"]) }
+      ),
+      dependencies({ config: { ...config, writeDomains: [] } })
+    )
+
+    expect(toolCalls).toEqual([
+      { name: "list-plants", scopes: ["garden:read"] },
     ])
   })
 

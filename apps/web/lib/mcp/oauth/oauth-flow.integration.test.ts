@@ -21,6 +21,9 @@ process.env.HOME_OVERVIEW_MCP_ISSUER = ISSUER
 process.env.HOME_OVERVIEW_MCP_OAUTH_SIGNING_SECRET = SIGNING_SECRET
 process.env.HOME_OVERVIEW_MCP_ACCESS_TOKEN_TTL_SECONDS = "900"
 process.env.HOME_OVERVIEW_MCP_REFRESH_TOKEN_TTL_SECONDS = "2592000"
+// The flow tests exercise write-scope consent, so the shopping domain is on.
+// Budget stays off to prove a switched-off write scope is dropped, not refused.
+process.env.HOME_OVERVIEW_MCP_WRITE_DOMAINS = "shopping,maintenance,garden"
 
 const currentSession: { userId: string | null; email: string } = {
   userId: null,

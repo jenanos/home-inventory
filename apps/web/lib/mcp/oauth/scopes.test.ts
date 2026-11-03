@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest"
 
 import {
   domainsForScopes,
+  enabledScopes,
   expandEffectiveScopes,
   formatScopeParameter,
   hasScope,
   MCP_SCOPES,
   MCP_SCOPE_DESCRIPTIONS,
   parseScopeParameter,
+  restrictToEnabledScopes,
 } from "./scopes"
 
 describe("parseScopeParameter", () => {
@@ -73,5 +75,26 @@ describe("formatScopeParameter", () => {
     expect(formatScopeParameter(["budget:read", "shopping:read"])).toBe(
       "shopping:read budget:read"
     )
+  })
+})
+
+describe("write domain switch", () => {
+  it("offers every read scope and only the switched-on write scopes", () => {
+    expect(enabledScopes(["garden"])).toEqual([
+      "shopping:read",
+      "budget:read",
+      "maintenance:read",
+      "garden:read",
+      "garden:write",
+    ])
+  })
+
+  it("drops write scopes of switched-off domains from a granted token", () => {
+    expect(
+      restrictToEnabledScopes(
+        ["budget:read", "budget:write", "garden:write"],
+        ["garden"]
+      )
+    ).toEqual(["budget:read", "garden:write"])
   })
 })

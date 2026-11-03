@@ -51,6 +51,159 @@ const statusKey = {
   SKIPPED: "skipped",
 } as const
 
+// ─── Shared resource shapes ─────────────────────────────────────
+//
+// One shape per resource: the read tools and every shopping write tool return
+// exactly these, so a client never has to reconcile two views of one item.
+
+export const shoppingListSummarySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  color: z.string().nullable(),
+  isPrivate: z
+    .boolean()
+    .describe("Private lists are visible only to their creator."),
+  createdAt: timestampSchema,
+  updatedAt: timestampSchema,
+})
+
+type ShoppingListSummaryRow = {
+  id: string
+  name: string
+  color: string | null
+  isPrivate: boolean
+  createdAt: Date
+  updatedAt: Date
+}
+
+export function serializeShoppingListSummary(
+  list: ShoppingListSummaryRow
+): z.infer<typeof shoppingListSummarySchema> {
+  return {
+    id: list.id,
+    name: list.name,
+    color: list.color,
+    isPrivate: list.isPrivate,
+    createdAt: timestamp(list.createdAt),
+    updatedAt: timestamp(list.updatedAt),
+  }
+}
+
+export const productAlternativeSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  price: storedMoneySchema,
+  url: z.string().nullable(),
+  storeName: z.string().nullable(),
+  notes: z.string().nullable(),
+  rank: z
+    .number()
+    .int()
+    .describe(
+      "0 is the preferred alternative; its price is the item's effective price."
+    ),
+  updatedAt: timestampSchema,
+})
+
+type DecimalValue = { toString(): string; toNumber(): number }
+
+type ProductAlternativeRow = {
+  id: string
+  name: string
+  price: DecimalValue | null
+  url: string | null
+  storeName: string | null
+  notes: string | null
+  rank: number
+  updatedAt: Date
+}
+
+export function serializeProductAlternative(
+  alternative: ProductAlternativeRow
+): z.infer<typeof productAlternativeSchema> {
+  return {
+    id: alternative.id,
+    name: alternative.name,
+    price: money(alternative.price),
+    url: alternative.url,
+    storeName: alternative.storeName,
+    notes: alternative.notes,
+    rank: alternative.rank,
+    updatedAt: timestamp(alternative.updatedAt),
+  }
+}
+
+export const shoppingItemSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  status: z.enum(ITEM_STATUSES),
+  priority: z.enum(PRIORITIES),
+  phase: z.enum(PHASES).nullable(),
+  dueDate: calendarDateOutputSchema,
+  estimatedPrice: storedMoneySchema,
+  url: z.string().nullable(),
+  storeName: z.string().nullable(),
+  purchasedAt: timestampSchema.nullable(),
+  category: z.object({ id: z.string(), name: z.string() }).nullable(),
+  alternativeCount: z.number().int(),
+  alternatives: z
+    .array(productAlternativeSchema)
+    .nullable()
+    .describe("Null unless alternatives were requested."),
+  createdAt: timestampSchema,
+  updatedAt: timestampSchema,
+})
+
+export type ShoppingItemRow = {
+  id: string
+  name: string
+  description: string | null
+  status: (typeof ITEM_STATUSES)[number]
+  priority: (typeof PRIORITIES)[number]
+  phase: (typeof PHASES)[number] | null
+  dueDate: Date | null
+  estimatedPrice: DecimalValue | null
+  url: string | null
+  storeName: string | null
+  purchasedAt: Date | null
+  createdAt: Date
+  updatedAt: Date
+  category: { id: string; name: string } | null
+  alternatives?: ProductAlternativeRow[]
+  _count: { alternatives: number }
+}
+
+/**
+ * Field-by-field whitelist. `assignedTo` (another member's user record) and
+ * `imageUrl` are never part of the contract.
+ */
+export function serializeShoppingItem(
+  item: ShoppingItemRow,
+  includeAlternatives: boolean
+): z.infer<typeof shoppingItemSchema> {
+  return {
+    id: item.id,
+    name: item.name,
+    description: item.description,
+    status: item.status,
+    priority: item.priority,
+    phase: item.phase,
+    dueDate: calendarDate(item.dueDate),
+    estimatedPrice: money(item.estimatedPrice),
+    url: item.url,
+    storeName: item.storeName,
+    purchasedAt: optionalTimestamp(item.purchasedAt),
+    category: item.category,
+    alternativeCount: item._count.alternatives,
+    alternatives: includeAlternatives
+      ? (item.alternatives ?? []).map(serializeProductAlternative)
+      : null,
+    createdAt: timestamp(item.createdAt),
+    updatedAt: timestamp(item.updatedAt),
+  }
+}
+
 export const listShoppingListsTool = defineTool({
   name: "list-shopping-lists",
   scope: "shopping:read",
@@ -151,50 +304,11 @@ export const getShoppingListTool = defineTool({
     ...paginationInputSchema,
   },
   outputSchema: {
-    list: z.object({
-      id: z.string(),
-      name: z.string(),
-      color: z.string().nullable(),
-      isPrivate: z.boolean(),
-      createdAt: timestampSchema,
-      updatedAt: timestampSchema,
-    }),
+    list: shoppingListSummarySchema,
     itemCounts: itemCountsSchema.describe(
       "Counts for the whole list, unaffected by the status filter or paging."
     ),
-    items: z.array(
-      z.object({
-        id: z.string(),
-        name: z.string(),
-        description: z.string().nullable(),
-        status: z.enum(ITEM_STATUSES),
-        priority: z.enum(PRIORITIES),
-        phase: z.enum(PHASES).nullable(),
-        dueDate: calendarDateOutputSchema,
-        estimatedPrice: storedMoneySchema,
-        url: z.string().nullable(),
-        storeName: z.string().nullable(),
-        purchasedAt: timestampSchema.nullable(),
-        category: z.object({ id: z.string(), name: z.string() }).nullable(),
-        alternativeCount: z.number().int(),
-        alternatives: z
-          .array(
-            z.object({
-              id: z.string(),
-              name: z.string(),
-              price: storedMoneySchema,
-              url: z.string().nullable(),
-              storeName: z.string().nullable(),
-              notes: z.string().nullable(),
-              rank: z.number().int(),
-            })
-          )
-          .nullable()
-          .describe("Null unless includeAlternatives was set."),
-        createdAt: timestampSchema,
-        updatedAt: timestampSchema,
-      })
-    ),
+    items: z.array(shoppingItemSchema),
     pageInfo: pageInfoSchema,
   },
   annotations: READ_ONLY_ANNOTATIONS,
@@ -226,46 +340,14 @@ export const getShoppingListTool = defineTool({
     }
 
     // `assignedTo` is intentionally absent: it is another household member's
-    // user record, and no level 1 tool has a reason to expose people.
-    const items = itemPage.items.map((item) => ({
-      id: item.id,
-      name: item.name,
-      description: item.description,
-      status: item.status,
-      priority: item.priority,
-      phase: item.phase,
-      dueDate: calendarDate(item.dueDate),
-      estimatedPrice: money(item.estimatedPrice),
-      url: item.url,
-      storeName: item.storeName,
-      purchasedAt: optionalTimestamp(item.purchasedAt),
-      category: item.category,
-      alternativeCount: item._count.alternatives,
-      alternatives: includeAlternatives
-        ? (item.alternatives ?? []).map((alternative) => ({
-            id: alternative.id,
-            name: alternative.name,
-            price: money(alternative.price),
-            url: alternative.url,
-            storeName: alternative.storeName,
-            notes: alternative.notes,
-            rank: alternative.rank,
-          }))
-        : null,
-      createdAt: timestamp(item.createdAt),
-      updatedAt: timestamp(item.updatedAt),
-    }))
+    // user record, and no tool has a reason to expose people.
+    const items = itemPage.items.map((item) =>
+      serializeShoppingItem(item, includeAlternatives)
+    )
 
     return toolSuccess(
       {
-        list: {
-          id: list.id,
-          name: list.name,
-          color: list.color,
-          isPrivate: list.isPrivate,
-          createdAt: timestamp(list.createdAt),
-          updatedAt: timestamp(list.updatedAt),
-        },
+        list: serializeShoppingListSummary(list),
         itemCounts: counts,
         items,
         pageInfo: buildPageInfo(page, items.length, itemPage.totalCount),

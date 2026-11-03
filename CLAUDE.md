@@ -82,6 +82,24 @@ Reference: https://ui.shadcn.com/docs/monorepo
 - Watchtower auto-puller nye images hvert 5. minutt
 - Prisma-migrasjoner kjøres automatisk ved container-oppstart
 
+## Application Layer & MCP
+
+- Domain logic lives in `apps/web/lib/application/<domain>/` (`read.ts`, `write.ts`,
+  `import.ts`). Services take an `ApplicationContext`, never import from `next/*`,
+  React or the MCP SDK, and throw `ApplicationError` with a stable code.
+- Ownership is part of the write's `where` (`{ id, householdId }`, or via the parent
+  for child rows; `getVisibleShoppingListsWhere` for shopping). Never
+  `findUnique({ id })` → check → `update({ id })`. Use `scopedWrite` from
+  `lib/application/mutations.ts`, which also handles `expectedUpdatedAt`.
+- Server Actions in `lib/actions/` are thin adapters: `requireHousehold()` → service →
+  `revalidatePath()`.
+- MCP tools live in `apps/web/lib/mcp/tools/` (`defineTool` for reads,
+  `defineWriteTool` for writes, which also audits). Return whitelisted fields only.
+  Full-replace actions (`replace*`) must stay outside `lib/application/`.
+- Design decisions: `docs/decisions/` (ADRs). Operations: `docs/runbooks/`.
+- Integration tests (`*.integration.test.ts`) need the test database
+  (`pnpm db:test:prepare`); use `lib/test/household-fixtures.ts`.
+
 ## Code Conventions
 
 - TypeScript everywhere, avoid `any` — use proper types

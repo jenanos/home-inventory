@@ -2,6 +2,13 @@ import { z } from "zod"
 
 import { ApplicationError } from "../../application/errors"
 import {
+  MAX_LONG_TEXT_LENGTH,
+  MAX_MONEY_AMOUNT,
+  MAX_NAME_LENGTH,
+  MAX_SHORT_TEXT_LENGTH,
+  MAX_URL_LENGTH,
+} from "../../application/mutations"
+import {
   formatDateToIsoDate,
   parseCalendarDate,
   serializeCalculatedMoney,
@@ -144,4 +151,60 @@ export function assertId(value: string, fieldName: string) {
   }
 
   return value
+}
+
+// ─── Write input schemas ────────────────────────────────────────
+//
+// Shape checks only. Length, range and enum rules are enforced again by the
+// application write services, which are the contract for web and MCP alike;
+// the limits here mirror them so a client learns about a violation from the
+// schema before it reaches the service.
+
+export const nameInputSchema = z.string().trim().min(1).max(MAX_NAME_LENGTH)
+
+/** Optional text field. Omit to leave unchanged; `null` or "" clears it. */
+export const shortTextInputSchema = z
+  .string()
+  .max(MAX_SHORT_TEXT_LENGTH)
+  .nullable()
+  .optional()
+
+export const longTextInputSchema = z
+  .string()
+  .max(MAX_LONG_TEXT_LENGTH)
+  .nullable()
+  .optional()
+
+export const urlInputSchema = z
+  .string()
+  .max(MAX_URL_LENGTH)
+  .nullable()
+  .optional()
+  .describe(
+    "Absolute http(s) URL, stored as data. The server never fetches it."
+  )
+
+export const moneyInputSchema = z
+  .number()
+  .nonnegative()
+  .max(MAX_MONEY_AMOUNT)
+  .describe("Amount in NOK. Rounded to two decimals.")
+
+export const calendarDateInputSchema = calendarDateSchema
+
+export const timestampInputSchema = z
+  .string()
+  .datetime({ offset: true })
+  .describe("ISO 8601 timestamp, e.g. 2026-05-01T08:00:00Z.")
+
+export const expectedUpdatedAtSchema = z
+  .string()
+  .datetime({ offset: true })
+  .optional()
+  .describe(
+    "The updatedAt value from your last read. If the resource has changed since, the call fails with CONFLICT instead of overwriting the newer change."
+  )
+
+export function parseExpectedUpdatedAt(value: string | undefined) {
+  return value ? new Date(value) : undefined
 }

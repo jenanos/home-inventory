@@ -5,6 +5,8 @@
 - Omfang: Fase 4 i `docs/plans/mcp-server-implementasjonsplan.md`
 - Bygger på: [ADR 0001](0001-mcp-phase-0-contracts.md),
   [ADR 0002](0002-mcp-dynamic-client-registration.md)
+- Utvidet av: [ADR 0004](0004-mcp-write-tools.md) (skriveverktøy). Lesekontraktene
+  under gjelder uendret.
 
 ## Kontekst
 

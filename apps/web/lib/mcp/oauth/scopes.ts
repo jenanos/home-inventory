@@ -1,4 +1,4 @@
-import { MCP_DOMAINS } from "../constants"
+import { MCP_DOMAINS, type McpDomain } from "../constants"
 
 export const MCP_SCOPES = [
   "shopping:read",
@@ -141,4 +141,31 @@ export function domainsForScopes(
   return MCP_DOMAINS.filter((domain) =>
     effective.some((scope) => scope.startsWith(`${domain}:`))
   )
+}
+
+/**
+ * The scopes this deployment offers: every read scope, plus the write scope of
+ * each domain the operator has switched on (`HOME_OVERVIEW_MCP_WRITE_DOMAINS`).
+ */
+export function enabledScopes(writeDomains: readonly McpDomain[]): McpScope[] {
+  return MCP_SCOPES.filter((scope) => {
+    const [domain, action] = scope.split(":")
+    return (
+      action === "read" ||
+      writeDomains.some((writeDomain) => writeDomain === domain)
+    )
+  })
+}
+
+/**
+ * Drops scopes the deployment does not currently offer. Applied to every
+ * token on use, so switching a write domain off takes effect immediately for
+ * grants that were approved while it was on.
+ */
+export function restrictToEnabledScopes(
+  scopes: readonly McpScope[],
+  writeDomains: readonly McpDomain[]
+): McpScope[] {
+  const allowed = enabledScopes(writeDomains)
+  return scopes.filter((scope) => allowed.includes(scope))
 }

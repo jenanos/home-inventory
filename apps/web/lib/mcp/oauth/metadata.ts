@@ -1,5 +1,5 @@
 import type { McpConfig } from "../config"
-import { MCP_SCOPES } from "./scopes"
+import { enabledScopes } from "./scopes"
 import { SUPPORTED_CODE_CHALLENGE_METHODS } from "./pkce"
 import {
   SUPPORTED_GRANT_TYPES,
@@ -38,7 +38,7 @@ export function buildProtectedResourceMetadata(config: EnabledConfig) {
     resource: config.resource,
     resource_name: "Home Overview",
     authorization_servers: [config.issuer],
-    scopes_supported: [...MCP_SCOPES],
+    scopes_supported: enabledScopes(config.writeDomains),
     bearer_methods_supported: ["header"],
   }
 }
@@ -54,7 +54,7 @@ export function buildAuthorizationServerMetadata(config: EnabledConfig) {
     token_endpoint: oauthEndpointUrl(config, "token"),
     registration_endpoint: oauthEndpointUrl(config, "register"),
     revocation_endpoint: oauthEndpointUrl(config, "revoke"),
-    scopes_supported: [...MCP_SCOPES],
+    scopes_supported: enabledScopes(config.writeDomains),
     response_types_supported: [...SUPPORTED_RESPONSE_TYPES],
     response_modes_supported: ["query"],
     grant_types_supported: [...SUPPORTED_GRANT_TYPES],

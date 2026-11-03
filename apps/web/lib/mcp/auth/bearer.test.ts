@@ -18,6 +18,7 @@ const config = {
   accessTokenTtlSeconds: 1800,
   refreshTokenTtlSeconds: 2592000,
   clockSkewSeconds: 30,
+  writeDomains: [],
 } satisfies Extract<McpConfig, { enabled: true }>
 
 function request(authorization?: string) {

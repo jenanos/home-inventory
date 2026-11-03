@@ -1,3 +1,4 @@
+import type { Plant } from "@workspace/db"
 import { z } from "zod"
 
 import { getPlant, listPlantsPage } from "../../application/garden/read"
@@ -90,6 +91,76 @@ export const listPlantsTool = defineTool({
   },
 })
 
+/**
+ * The full plant card: what get-plant returns and what every plant write tool
+ * returns after saving, so a client sees one shape for one resource.
+ */
+export const plantCardSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  species: z.string().nullable(),
+  location: z.string().nullable(),
+  description: z.string().nullable(),
+  careInstructions: z.string().nullable(),
+  plantType: z.enum(PLANT_TYPES).nullable(),
+  lifecycle: z.enum(LIFECYCLES).nullable(),
+  wateringNeed: z.enum(WATERING_NEEDS).nullable(),
+  wateringMethod: z.enum(WATERING_METHODS).nullable(),
+  sunNeed: z.enum(SUN_NEEDS).nullable(),
+  soilType: z.string().nullable(),
+  fertilizer: z.string().nullable(),
+  hardinessZone: z.string().nullable(),
+  bloomTime: z.string().nullable(),
+  pruningSeason: z.string().nullable(),
+  pests: z.string().nullable(),
+  notes: z.string().nullable(),
+  isToxic: z.boolean(),
+  toxicityNotes: z.string().nullable(),
+  plantedAt: calendarDateOutputSchema,
+  lastWateredAt: timestampSchema.nullable(),
+  lastPrunedAt: timestampSchema.nullable(),
+  // `imageUrl` and `sourceUrl` are returned as data only. The server never
+  // fetches them (chapter 11 point 17).
+  imageUrl: z.string().nullable(),
+  sourceUrl: z.string().nullable(),
+  createdAt: timestampSchema,
+  updatedAt: timestampSchema,
+})
+
+export function serializePlantCard(
+  plant: Plant
+): z.infer<typeof plantCardSchema> {
+  return {
+    id: plant.id,
+    name: plant.name,
+    species: plant.species,
+    location: plant.location,
+    description: plant.description,
+    careInstructions: plant.careInstructions,
+    plantType: plant.plantType,
+    lifecycle: plant.lifecycle,
+    wateringNeed: plant.wateringNeed,
+    wateringMethod: plant.wateringMethod,
+    sunNeed: plant.sunNeed,
+    soilType: plant.soilType,
+    fertilizer: plant.fertilizer,
+    hardinessZone: plant.hardinessZone,
+    bloomTime: plant.bloomTime,
+    pruningSeason: plant.pruningSeason,
+    pests: plant.pests,
+    notes: plant.notes,
+    isToxic: plant.isToxic,
+    toxicityNotes: plant.toxicityNotes,
+    plantedAt: calendarDate(plant.plantedAt),
+    lastWateredAt: optionalTimestamp(plant.lastWateredAt),
+    lastPrunedAt: optionalTimestamp(plant.lastPrunedAt),
+    imageUrl: plant.imageUrl,
+    sourceUrl: plant.sourceUrl,
+    createdAt: timestamp(plant.createdAt),
+    updatedAt: timestamp(plant.updatedAt),
+  }
+}
+
 export const getPlantTool = defineTool({
   name: "get-plant",
   scope: "garden:read",
@@ -100,37 +171,7 @@ export const getPlantTool = defineTool({
     plantId: idSchema.describe("Id from list-plants."),
   },
   outputSchema: {
-    plant: z.object({
-      id: z.string(),
-      name: z.string(),
-      species: z.string().nullable(),
-      location: z.string().nullable(),
-      description: z.string().nullable(),
-      careInstructions: z.string().nullable(),
-      plantType: z.enum(PLANT_TYPES).nullable(),
-      lifecycle: z.enum(LIFECYCLES).nullable(),
-      wateringNeed: z.enum(WATERING_NEEDS).nullable(),
-      wateringMethod: z.enum(WATERING_METHODS).nullable(),
-      sunNeed: z.enum(SUN_NEEDS).nullable(),
-      soilType: z.string().nullable(),
-      fertilizer: z.string().nullable(),
-      hardinessZone: z.string().nullable(),
-      bloomTime: z.string().nullable(),
-      pruningSeason: z.string().nullable(),
-      pests: z.string().nullable(),
-      notes: z.string().nullable(),
-      isToxic: z.boolean(),
-      toxicityNotes: z.string().nullable(),
-      plantedAt: calendarDateOutputSchema,
-      lastWateredAt: timestampSchema.nullable(),
-      lastPrunedAt: timestampSchema.nullable(),
-      // `imageUrl` and `sourceUrl` are returned as data only. The server never
-      // fetches them (chapter 11 point 17).
-      imageUrl: z.string().nullable(),
-      sourceUrl: z.string().nullable(),
-      createdAt: timestampSchema,
-      updatedAt: timestampSchema,
-    }),
+    plant: plantCardSchema,
   },
   annotations: READ_ONLY_ANNOTATIONS,
   handler: async (args, session) => {
@@ -142,37 +183,7 @@ export const getPlantTool = defineTool({
     }
 
     return toolSuccess(
-      {
-        plant: {
-          id: plant.id,
-          name: plant.name,
-          species: plant.species,
-          location: plant.location,
-          description: plant.description,
-          careInstructions: plant.careInstructions,
-          plantType: plant.plantType,
-          lifecycle: plant.lifecycle,
-          wateringNeed: plant.wateringNeed,
-          wateringMethod: plant.wateringMethod,
-          sunNeed: plant.sunNeed,
-          soilType: plant.soilType,
-          fertilizer: plant.fertilizer,
-          hardinessZone: plant.hardinessZone,
-          bloomTime: plant.bloomTime,
-          pruningSeason: plant.pruningSeason,
-          pests: plant.pests,
-          notes: plant.notes,
-          isToxic: plant.isToxic,
-          toxicityNotes: plant.toxicityNotes,
-          plantedAt: calendarDate(plant.plantedAt),
-          lastWateredAt: optionalTimestamp(plant.lastWateredAt),
-          lastPrunedAt: optionalTimestamp(plant.lastPrunedAt),
-          imageUrl: plant.imageUrl,
-          sourceUrl: plant.sourceUrl,
-          createdAt: timestamp(plant.createdAt),
-          updatedAt: timestamp(plant.updatedAt),
-        },
-      },
+      { plant: serializePlantCard(plant) },
       `${plant.name}${plant.location ? ` (${plant.location})` : ""}.`
     )
   },

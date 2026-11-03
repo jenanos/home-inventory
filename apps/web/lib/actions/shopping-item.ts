@@ -1,17 +1,45 @@
 "use server"
 
-import { db, type Priority, type Phase, type ItemStatus } from "@workspace/db"
+import { db, type ItemStatus, type Phase, type Priority } from "@workspace/db"
+import { assertBatchSize, notFound } from "@/lib/application/mutations"
+import {
+  assertCategoryMapInHousehold,
+  bulkCreateShoppingItems as bulkCreateShoppingItemsService,
+  bulkImportShoppingItemsWithDuplicates as bulkImportWithDuplicatesService,
+  findExistingShoppingItems as findExistingShoppingItemsService,
+  toNewShoppingItem,
+  type ExistingShoppingItem,
+  type ImportItemFieldUpdate,
+  type ImportItemInput,
+} from "@/lib/application/shopping/import"
+import {
+  createShoppingItem as createShoppingItemService,
+  deleteShoppingItem as deleteShoppingItemService,
+  insertShoppingItems,
+  toggleShoppingItemPurchased,
+  updateShoppingItem as updateShoppingItemService,
+  type ProductAlternativeFields,
+  type ShoppingItemResult,
+} from "@/lib/application/shopping/write"
 import { requireHousehold } from "@/lib/session"
-import { isShoppingListAccessible } from "@/lib/shopping-list-access"
+import { getVisibleShoppingListsWhere } from "@/lib/shopping-list-access"
 import { revalidatePath } from "next/cache"
 
-interface CreateAlternativeInput {
-  name: string
-  price?: number
-  url?: string
-  imageUrl?: string
-  storeName?: string
-  notes?: string
+export type { ExistingShoppingItem }
+
+// Thin adapters over the shopping write and import services. Items are always
+// reached through their list's visibility rule, so private lists stay private.
+
+/** Server actions cannot return `Decimal`; the browser gets plain numbers. */
+function toClientItem(item: ShoppingItemResult) {
+  return {
+    ...item,
+    estimatedPrice: item.estimatedPrice ? item.estimatedPrice.toNumber() : null,
+    alternatives: item.alternatives.map((alternative) => ({
+      ...alternative,
+      price: alternative.price ? alternative.price.toNumber() : null,
+    })),
+  }
 }
 
 interface CreateItemInput {
@@ -26,56 +54,15 @@ interface CreateItemInput {
   storeName?: string
   assignedToId?: string
   listId: string
-  alternatives?: CreateAlternativeInput[]
+  alternatives?: ProductAlternativeFields[]
 }
 
 export async function createShoppingItem(input: CreateItemInput) {
-  const { session, membership } = await requireHousehold()
-
-  const list = await db.shoppingList.findUnique({
-    where: { id: input.listId },
-  })
-  if (
-    !isShoppingListAccessible(list, membership.householdId, session.user.id)
-  ) {
-    throw new Error("List not found")
-  }
-
-  const item = await db.shoppingItem.create({
-    data: {
-      name: input.name,
-      description: input.description,
-      categoryId: input.categoryId,
-      priority: input.priority ?? "MEDIUM",
-      phase: input.phase,
-      dueDate: input.dueDate,
-      estimatedPrice: input.estimatedPrice,
-      url: input.url,
-      storeName: input.storeName,
-      assignedToId: input.assignedToId,
-      listId: input.listId,
-      alternatives:
-        input.alternatives && input.alternatives.length > 0
-          ? {
-              create: input.alternatives.map((alt, index) => ({
-                name: alt.name,
-                price: alt.price ?? undefined,
-                url: alt.url || undefined,
-                imageUrl: alt.imageUrl || undefined,
-                storeName: alt.storeName || undefined,
-                notes: alt.notes || undefined,
-                rank: index,
-              })),
-            }
-          : undefined,
-    },
-  })
+  const { context } = await requireHousehold()
+  const item = await createShoppingItemService(context, input)
 
   revalidatePath(`/lists/${input.listId}`)
-  return {
-    ...item,
-    estimatedPrice: item.estimatedPrice ? Number(item.estimatedPrice) : null,
-  }
+  return toClientItem(item)
 }
 
 interface UpdateItemInput {
@@ -94,303 +81,95 @@ interface UpdateItemInput {
 }
 
 export async function updateShoppingItem(input: UpdateItemInput) {
-  const { session, membership } = await requireHousehold()
+  const { context } = await requireHousehold()
+  const { id, ...fields } = input
+  const updated = await updateShoppingItemService(context, id, fields)
 
-  const item = await db.shoppingItem.findUnique({
-    where: { id: input.id },
-    include: { list: true },
-  })
-  if (
-    !item ||
-    !isShoppingListAccessible(
-      item.list,
-      membership.householdId,
-      session.user.id
-    )
-  ) {
-    throw new Error("Item not found")
-  }
-
-  const { id, ...data } = input
-  const updated = await db.shoppingItem.update({
-    where: { id },
-    data: {
-      ...data,
-      purchasedAt:
-        input.status === "PURCHASED" && item.status !== "PURCHASED"
-          ? new Date()
-          : input.status !== "PURCHASED"
-            ? null
-            : undefined,
-    },
-  })
-
-  revalidatePath(`/lists/${item.listId}`)
-  return {
-    ...updated,
-    estimatedPrice: updated.estimatedPrice
-      ? Number(updated.estimatedPrice)
-      : null,
-  }
+  revalidatePath(`/lists/${updated.listId}`)
+  return toClientItem(updated)
 }
 
 export async function deleteShoppingItem(itemId: string) {
-  const { session, membership } = await requireHousehold()
+  const { context } = await requireHousehold()
+  const { listId } = await deleteShoppingItemService(context, itemId)
 
-  const item = await db.shoppingItem.findUnique({
-    where: { id: itemId },
-    include: { list: true },
-  })
-  if (
-    !item ||
-    !isShoppingListAccessible(
-      item.list,
-      membership.householdId,
-      session.user.id
-    )
-  ) {
-    throw new Error("Item not found")
-  }
+  revalidatePath(`/lists/${listId}`)
+}
 
-  await db.shoppingItem.delete({ where: { id: itemId } })
+export async function toggleItemPurchased(itemId: string) {
+  const { context } = await requireHousehold()
+  const item = await toggleShoppingItemPurchased(context, itemId)
 
   revalidatePath(`/lists/${item.listId}`)
 }
 
-interface BulkCreateAlternativeInput {
-  name: string
-  price?: number
-  url?: string
-  imageUrl?: string
-  storeName?: string
-  notes?: string
-}
-
-interface BulkCreateItemInput {
-  name: string
-  description?: string
-  categoryName?: string
-  priority?: Priority
-  phase?: Phase
-  estimatedPrice?: number
-  url?: string
-  imageUrl?: string
-  storeName?: string
-  alternatives?: BulkCreateAlternativeInput[]
-}
+// ─── LLM import ─────────────────────────────────────────────────
 
 interface BulkCreateInput {
-  items: BulkCreateItemInput[]
+  items: ImportItemInput[]
   listId: string
   categoryMap: Record<string, string> // categoryName -> categoryId
 }
 
 export async function bulkCreateShoppingItems(input: BulkCreateInput) {
-  const { session, membership } = await requireHousehold()
+  const { context } = await requireHousehold()
+  const result = await bulkCreateShoppingItemsService(context, input)
 
-  const list = await db.shoppingList.findUnique({
-    where: { id: input.listId },
-  })
-  if (
-    !isShoppingListAccessible(list, membership.householdId, session.user.id)
-  ) {
-    throw new Error("List not found")
-  }
+  revalidatePath(`/lists/${input.listId}`)
+  return result
+}
 
-  const validPriorities = new Set(["HIGH", "MEDIUM", "LOW"])
-  const validPhases = new Set([
-    "BEFORE_MOVE",
-    "FIRST_WEEK",
-    "CAN_WAIT",
-    "NO_RUSH",
-  ])
+/**
+ * Full replace stays a web-only action outside the application layer, so no
+ * MCP tool can ever reach it (plan 10.4). It shares the import's boundary
+ * checks: the list must be visible and every category id the household's.
+ */
+export async function replaceShoppingItems(input: BulkCreateInput) {
+  const { context } = await requireHousehold()
+  assertBatchSize(input.items.length, "Varer", { allowEmpty: true })
 
-  const results = await db.$transaction(
-    input.items.map((item) =>
-      db.shoppingItem.create({
-        data: {
-          name: item.name,
-          description: item.description || undefined,
-          categoryId: item.categoryName
-            ? (input.categoryMap[item.categoryName] ?? undefined)
-            : undefined,
-          priority: (item.priority && validPriorities.has(item.priority)
-            ? item.priority
-            : "MEDIUM") as Priority,
-          phase: (item.phase && validPhases.has(item.phase)
-            ? item.phase
-            : undefined) as Phase | undefined,
-          estimatedPrice: item.estimatedPrice ?? undefined,
-          url: item.url || undefined,
-          imageUrl: item.imageUrl || undefined,
-          storeName: item.storeName || undefined,
-          listId: input.listId,
-          alternatives:
-            item.alternatives && item.alternatives.length > 0
-              ? {
-                  create: item.alternatives.map((alt, index) => ({
-                    name: alt.name,
-                    price: alt.price ?? undefined,
-                    url: alt.url || undefined,
-                    imageUrl: alt.imageUrl || undefined,
-                    storeName: alt.storeName || undefined,
-                    notes: alt.notes || undefined,
-                    rank: index,
-                  })),
-                }
-              : undefined,
+  await db.$transaction(
+    async (tx) => {
+      const list = await tx.shoppingList.findFirst({
+        where: {
+          ...getVisibleShoppingListsWhere(context.householdId, context.userId),
+          id: input.listId,
         },
+        select: { id: true },
       })
-    )
+      if (!list) throw notFound("handleliste")
+
+      await assertCategoryMapInHousehold(tx, context, input.categoryMap)
+      await tx.shoppingItem.deleteMany({ where: { listId: input.listId } })
+
+      if (input.items.length > 0) {
+        await insertShoppingItems(
+          tx,
+          context,
+          input.listId,
+          input.items.map((item) => toNewShoppingItem(item, input.categoryMap)),
+          { onDuplicate: "create" }
+        )
+      }
+    },
+    { timeout: 30_000, maxWait: 5_000 }
   )
 
   revalidatePath(`/lists/${input.listId}`)
-  return { count: results.length }
-}
-
-export async function replaceShoppingItems(input: BulkCreateInput) {
-  const { session, membership } = await requireHousehold()
-
-  const list = await db.shoppingList.findUnique({
-    where: { id: input.listId },
-  })
-  if (
-    !isShoppingListAccessible(list, membership.householdId, session.user.id)
-  ) {
-    throw new Error("List not found")
-  }
-
-  const validPriorities = new Set(["HIGH", "MEDIUM", "LOW"])
-  const validPhases = new Set([
-    "BEFORE_MOVE",
-    "FIRST_WEEK",
-    "CAN_WAIT",
-    "NO_RUSH",
-  ])
-
-  await db.$transaction(async (tx) => {
-    await tx.shoppingItem.deleteMany({
-      where: { listId: input.listId },
-    })
-
-    for (const item of input.items) {
-      await tx.shoppingItem.create({
-        data: {
-          name: item.name,
-          description: item.description || undefined,
-          categoryId: item.categoryName
-            ? (input.categoryMap[item.categoryName] ?? undefined)
-            : undefined,
-          priority: (item.priority && validPriorities.has(item.priority)
-            ? item.priority
-            : "MEDIUM") as Priority,
-          phase: (item.phase && validPhases.has(item.phase)
-            ? item.phase
-            : undefined) as Phase | undefined,
-          estimatedPrice: item.estimatedPrice ?? undefined,
-          url: item.url || undefined,
-          imageUrl: item.imageUrl || undefined,
-          storeName: item.storeName || undefined,
-          listId: input.listId,
-          alternatives:
-            item.alternatives && item.alternatives.length > 0
-              ? {
-                  create: item.alternatives.map((alt, index) => ({
-                    name: alt.name,
-                    price: alt.price ?? undefined,
-                    url: alt.url || undefined,
-                    imageUrl: alt.imageUrl || undefined,
-                    storeName: alt.storeName || undefined,
-                    notes: alt.notes || undefined,
-                    rank: index,
-                  })),
-                }
-              : undefined,
-        },
-      })
-    }
-  })
-
-  revalidatePath(`/lists/${input.listId}`)
   return { count: input.items.length }
-}
-
-// ─── Duplicate Detection ────────────────────────────────────────
-
-export interface ExistingShoppingItem {
-  id: string
-  name: string
-  description: string | null
-  categoryId: string | null
-  priority: string
-  phase: string | null
-  estimatedPrice: number | null
-  url: string | null
-  imageUrl: string | null
-  storeName: string | null
-  alternativeCount: number
 }
 
 export async function findExistingShoppingItems(
   listId: string,
   names: string[]
 ): Promise<ExistingShoppingItem[]> {
-  const { session, membership } = await requireHousehold()
-
-  const list = await db.shoppingList.findUnique({
-    where: { id: listId },
-  })
-  if (
-    !isShoppingListAccessible(list, membership.householdId, session.user.id)
-  ) {
-    throw new Error("List not found")
-  }
-
-  const lowerNames = names.map((n) => n.toLowerCase())
-
-  const existing = await db.shoppingItem.findMany({
-    where: { listId },
-    include: {
-      _count: { select: { alternatives: true } },
-    },
-  })
-
-  return existing
-    .filter((item) => lowerNames.includes(item.name.toLowerCase()))
-    .map((item) => ({
-      id: item.id,
-      name: item.name,
-      description: item.description,
-      categoryId: item.categoryId,
-      priority: item.priority,
-      phase: item.phase,
-      estimatedPrice: item.estimatedPrice ? Number(item.estimatedPrice) : null,
-      url: item.url,
-      imageUrl: item.imageUrl,
-      storeName: item.storeName,
-      alternativeCount: item._count.alternatives,
-    }))
-}
-
-// ─── Bulk Import With Duplicate Handling ────────────────────────
-
-interface ShoppingItemFieldUpdate {
-  id: string
-  fields: {
-    description?: string
-    categoryId?: string | null
-    priority?: Priority
-    phase?: Phase | null
-    estimatedPrice?: number
-    url?: string
-    imageUrl?: string
-    storeName?: string
-  }
+  const { context } = await requireHousehold()
+  return findExistingShoppingItemsService(context, listId, names)
 }
 
 interface BulkImportShoppingItemsWithDuplicatesInput {
-  newItems: BulkCreateItemInput[]
-  updates: ShoppingItemFieldUpdate[]
+  newItems: ImportItemInput[]
+  updates: ImportItemFieldUpdate[]
   listId: string
   categoryMap: Record<string, string>
 }
@@ -398,147 +177,9 @@ interface BulkImportShoppingItemsWithDuplicatesInput {
 export async function bulkImportShoppingItemsWithDuplicates(
   input: BulkImportShoppingItemsWithDuplicatesInput
 ) {
-  const { session, membership } = await requireHousehold()
-
-  const list = await db.shoppingList.findUnique({
-    where: { id: input.listId },
-  })
-  if (
-    !isShoppingListAccessible(list, membership.householdId, session.user.id)
-  ) {
-    throw new Error("List not found")
-  }
-
-  const validPriorities = new Set(["HIGH", "MEDIUM", "LOW"])
-  const validPhases = new Set([
-    "BEFORE_MOVE",
-    "FIRST_WEEK",
-    "CAN_WAIT",
-    "NO_RUSH",
-  ])
-  let count = 0
-
-  // Create new items
-  if (input.newItems.length > 0) {
-    const results = await db.$transaction(
-      input.newItems.map((item) =>
-        db.shoppingItem.create({
-          data: {
-            name: item.name,
-            description: item.description || undefined,
-            categoryId: item.categoryName
-              ? (input.categoryMap[item.categoryName] ?? undefined)
-              : undefined,
-            priority: (item.priority && validPriorities.has(item.priority)
-              ? item.priority
-              : "MEDIUM") as Priority,
-            phase: (item.phase && validPhases.has(item.phase)
-              ? item.phase
-              : undefined) as Phase | undefined,
-            estimatedPrice: item.estimatedPrice ?? undefined,
-            url: item.url || undefined,
-            imageUrl: item.imageUrl || undefined,
-            storeName: item.storeName || undefined,
-            listId: input.listId,
-            alternatives:
-              item.alternatives && item.alternatives.length > 0
-                ? {
-                    create: item.alternatives.map((alt, index) => ({
-                      name: alt.name,
-                      price: alt.price ?? undefined,
-                      url: alt.url || undefined,
-                      imageUrl: alt.imageUrl || undefined,
-                      storeName: alt.storeName || undefined,
-                      notes: alt.notes || undefined,
-                      rank: index,
-                    })),
-                  }
-                : undefined,
-          },
-        })
-      )
-    )
-    count += results.length
-  }
-
-  // Update existing items with selected fields
-  if (input.updates.length > 0) {
-    const updateOps = input.updates.map((update) => {
-      const data: {
-        description?: string
-        categoryId?: string | null
-        priority?: Priority
-        phase?: Phase | null
-        estimatedPrice?: number
-        url?: string
-        imageUrl?: string
-        storeName?: string
-      } = {}
-      if (update.fields.description !== undefined)
-        data.description = update.fields.description ?? undefined
-      if (update.fields.categoryId !== undefined)
-        data.categoryId = update.fields.categoryId
-      if (update.fields.priority !== undefined) {
-        if (validPriorities.has(update.fields.priority))
-          data.priority = update.fields.priority
-      }
-      if (update.fields.phase !== undefined) {
-        if (
-          update.fields.phase === null ||
-          validPhases.has(update.fields.phase)
-        )
-          data.phase = update.fields.phase
-      }
-      if (update.fields.estimatedPrice !== undefined)
-        data.estimatedPrice = update.fields.estimatedPrice
-      if (update.fields.url !== undefined)
-        data.url = update.fields.url || undefined
-      if (update.fields.imageUrl !== undefined)
-        data.imageUrl = update.fields.imageUrl || undefined
-      if (update.fields.storeName !== undefined)
-        data.storeName = update.fields.storeName || undefined
-
-      return db.shoppingItem.update({
-        where: { id: update.id },
-        data,
-      })
-    })
-
-    await db.$transaction(updateOps)
-    count += input.updates.length
-  }
+  const { context } = await requireHousehold()
+  const result = await bulkImportWithDuplicatesService(context, input)
 
   revalidatePath(`/lists/${input.listId}`)
-  return { count }
-}
-
-export async function toggleItemPurchased(itemId: string) {
-  const { session, membership } = await requireHousehold()
-
-  const item = await db.shoppingItem.findUnique({
-    where: { id: itemId },
-    include: { list: true },
-  })
-  if (
-    !item ||
-    !isShoppingListAccessible(
-      item.list,
-      membership.householdId,
-      session.user.id
-    )
-  ) {
-    throw new Error("Item not found")
-  }
-
-  const newStatus = item.status === "PURCHASED" ? "PENDING" : "PURCHASED"
-
-  await db.shoppingItem.update({
-    where: { id: itemId },
-    data: {
-      status: newStatus,
-      purchasedAt: newStatus === "PURCHASED" ? new Date() : null,
-    },
-  })
-
-  revalidatePath(`/lists/${item.listId}`)
+  return result
 }

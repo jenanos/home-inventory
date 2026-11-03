@@ -21,6 +21,7 @@ import {
   rateLimitKeyFromRequest,
 } from "@/lib/mcp/oauth/rate-limit"
 import { createOAuthTokenRepository } from "@/lib/mcp/oauth/repository"
+import { enabledScopes } from "@/lib/mcp/oauth/scopes"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -72,7 +73,12 @@ export async function GET(request: Request) {
   let validated
   try {
     const client = await clientRegistry.resolveClient(params.clientId)
-    validated = validateAuthorizeRequest(params, client, mcpConfig.resource)
+    validated = validateAuthorizeRequest(
+      params,
+      client,
+      mcpConfig.resource,
+      enabledScopes(mcpConfig.writeDomains)
+    )
   } catch (error) {
     return toBrowserError(error)
   }

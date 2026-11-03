@@ -28,6 +28,124 @@ import {
   timestampSchema,
 } from "./shared"
 
+// ─── Shared resource shapes ─────────────────────────────────────
+//
+// The whitelisted objects get-maintenance-task returns. The write tools return
+// the same shapes after saving, so a client sees one form per resource.
+
+type DecimalValue = Parameters<typeof money>[0]
+
+export const maintenanceTaskSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  description: z.string().nullable(),
+  status: z.enum(TASK_STATUSES),
+  priority: z.enum(PRIORITIES),
+  estimatedDuration: z.string().nullable(),
+  estimatedPrice: storedMoneySchema,
+  dueDate: calendarDateOutputSchema,
+  createdAt: timestampSchema,
+  updatedAt: timestampSchema,
+})
+
+export function serializeMaintenanceTask(task: {
+  id: string
+  title: string
+  description: string | null
+  status: (typeof TASK_STATUSES)[number]
+  priority: (typeof PRIORITIES)[number]
+  estimatedDuration: string | null
+  estimatedPrice: DecimalValue
+  dueDate: Date | null
+  createdAt: Date
+  updatedAt: Date
+}): z.infer<typeof maintenanceTaskSchema> {
+  return {
+    id: task.id,
+    title: task.title,
+    description: task.description,
+    status: task.status,
+    priority: task.priority,
+    estimatedDuration: task.estimatedDuration,
+    estimatedPrice: money(task.estimatedPrice),
+    dueDate: calendarDate(task.dueDate),
+    createdAt: timestamp(task.createdAt),
+    updatedAt: timestamp(task.updatedAt),
+  }
+}
+
+export const taskVendorSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  phone: z.string().nullable(),
+  email: z.string().nullable(),
+  website: z.string().nullable(),
+  estimatedPrice: storedMoneySchema,
+  notes: z.string().nullable(),
+  isSelected: z.boolean(),
+  updatedAt: timestampSchema,
+})
+
+export function serializeTaskVendor(vendor: {
+  id: string
+  name: string
+  description: string | null
+  phone: string | null
+  email: string | null
+  website: string | null
+  estimatedPrice: DecimalValue
+  notes: string | null
+  isSelected: boolean
+  updatedAt: Date
+}): z.infer<typeof taskVendorSchema> {
+  return {
+    id: vendor.id,
+    name: vendor.name,
+    description: vendor.description,
+    phone: vendor.phone,
+    email: vendor.email,
+    website: vendor.website,
+    estimatedPrice: money(vendor.estimatedPrice),
+    notes: vendor.notes,
+    isSelected: vendor.isSelected,
+    updatedAt: timestamp(vendor.updatedAt),
+  }
+}
+
+export const progressEntrySchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  description: z.string().nullable(),
+  dueDate: calendarDateOutputSchema,
+  completed: z.boolean(),
+  completedAt: timestampSchema.nullable(),
+  sortOrder: z.number().int(),
+  updatedAt: timestampSchema,
+})
+
+export function serializeProgressEntry(entry: {
+  id: string
+  title: string
+  description: string | null
+  dueDate: Date | null
+  completed: boolean
+  completedAt: Date | null
+  sortOrder: number
+  updatedAt: Date
+}): z.infer<typeof progressEntrySchema> {
+  return {
+    id: entry.id,
+    title: entry.title,
+    description: entry.description,
+    dueDate: calendarDate(entry.dueDate),
+    completed: entry.completed,
+    completedAt: optionalTimestamp(entry.completedAt),
+    sortOrder: entry.sortOrder,
+    updatedAt: timestamp(entry.updatedAt),
+  }
+}
+
 export const listMaintenanceTasksTool = defineTool({
   name: "list-maintenance-tasks",
   scope: "maintenance:read",
@@ -111,42 +229,9 @@ export const getMaintenanceTaskTool = defineTool({
     taskId: idSchema.describe("Id from list-maintenance-tasks."),
   },
   outputSchema: {
-    task: z.object({
-      id: z.string(),
-      title: z.string(),
-      description: z.string().nullable(),
-      status: z.enum(TASK_STATUSES),
-      priority: z.enum(PRIORITIES),
-      estimatedDuration: z.string().nullable(),
-      estimatedPrice: storedMoneySchema,
-      dueDate: calendarDateOutputSchema,
-      createdAt: timestampSchema,
-      updatedAt: timestampSchema,
-    }),
-    vendors: z.array(
-      z.object({
-        id: z.string(),
-        name: z.string(),
-        description: z.string().nullable(),
-        phone: z.string().nullable(),
-        email: z.string().nullable(),
-        website: z.string().nullable(),
-        estimatedPrice: storedMoneySchema,
-        notes: z.string().nullable(),
-        isSelected: z.boolean(),
-      })
-    ),
-    progressEntries: z.array(
-      z.object({
-        id: z.string(),
-        title: z.string(),
-        description: z.string().nullable(),
-        dueDate: calendarDateOutputSchema,
-        completed: z.boolean(),
-        completedAt: timestampSchema.nullable(),
-        sortOrder: z.number().int(),
-      })
-    ),
+    task: maintenanceTaskSchema,
+    vendors: z.array(taskVendorSchema),
+    progressEntries: z.array(progressEntrySchema),
   },
   annotations: READ_ONLY_ANNOTATIONS,
   handler: async (args, session) => {
@@ -159,31 +244,9 @@ export const getMaintenanceTaskTool = defineTool({
 
     return toolSuccess(
       {
-        task: {
-          id: task.id,
-          title: task.title,
-          description: task.description,
-          status: task.status,
-          priority: task.priority,
-          estimatedDuration: task.estimatedDuration,
-          estimatedPrice: money(task.estimatedPrice),
-          dueDate: calendarDate(task.dueDate),
-          createdAt: timestamp(task.createdAt),
-          updatedAt: timestamp(task.updatedAt),
-        },
-        vendors: task.vendors.map((vendor) => ({
-          ...vendor,
-          estimatedPrice: money(vendor.estimatedPrice),
-        })),
-        progressEntries: task.progressEntries.map((entry) => ({
-          id: entry.id,
-          title: entry.title,
-          description: entry.description,
-          dueDate: calendarDate(entry.dueDate),
-          completed: entry.completed,
-          completedAt: optionalTimestamp(entry.completedAt),
-          sortOrder: entry.sortOrder,
-        })),
+        task: serializeMaintenanceTask(task),
+        vendors: task.vendors.map(serializeTaskVendor),
+        progressEntries: task.progressEntries.map(serializeProgressEntry),
       },
       `${task.title} (${task.status}) med ${task.vendors.length} leverandør(er) og ${task.progressEntries.length} fremdriftspunkt(er).`
     )

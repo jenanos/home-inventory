@@ -3,7 +3,7 @@ import { createHmac, timingSafeEqual } from "node:crypto"
 import { OAuthError, type OAuthErrorCode } from "./errors"
 import { isSupportedCodeChallengeMethod, isValidCodeChallenge } from "./pkce"
 import { matchRedirectUri } from "./redirect-uri"
-import { parseScopeParameter, type McpScope } from "./scopes"
+import { MCP_SCOPES, parseScopeParameter, type McpScope } from "./scopes"
 
 /** Lifetime of the consent request row and its browser cookie. */
 export const AUTHORIZATION_REQUEST_TTL_MS = 10 * 60 * 1000
@@ -122,7 +122,8 @@ export function resourceMatchesCanonical(value: string, canonical: string) {
 export function validateAuthorizeRequest(
   params: AuthorizeRequestParams,
   client: { redirectUris: string[] },
-  canonicalResource: string
+  canonicalResource: string,
+  offeredScopes: readonly McpScope[] = MCP_SCOPES
 ): AuthorizeValidationResult {
   if (!params.redirectUri) {
     throw new OAuthError("invalid_request", "redirect_uri er påkrevd.", 400)
@@ -186,10 +187,16 @@ export function validateAuthorizeRequest(
     )
   }
 
-  const { scopes, unknown } = parseScopeParameter(params.scope)
+  const { scopes: requested, unknown } = parseScopeParameter(params.scope)
   if (unknown.length > 0) {
     return fail("invalid_scope", "Forespørselen inneholder ukjente scopes.")
   }
+
+  // A known scope this deployment does not offer right now — a write scope
+  // whose domain is switched off — is dropped rather than refused. RFC 6749
+  // 3.3 lets the server grant less than was asked, and the token response
+  // reports what was actually granted.
+  const scopes = requested.filter((scope) => offeredScopes.includes(scope))
 
   return {
     kind: "ok",

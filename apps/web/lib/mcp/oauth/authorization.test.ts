@@ -13,6 +13,7 @@ import {
   validateAuthorizeRequest,
 } from "./authorization"
 import { OAuthError } from "./errors"
+import { enabledScopes } from "./scopes"
 
 const CANONICAL_RESOURCE = "https://home.jenanos.xyz/api/mcp"
 const CLIENT = { redirectUris: ["https://client.example/callback"] }
@@ -50,6 +51,20 @@ describe("validateAuthorizeRequest", () => {
         codeChallengeMethod: "S256",
         resource: CANONICAL_RESOURCE,
       },
+    })
+  })
+
+  it("drops a write scope the deployment does not offer instead of refusing", () => {
+    const result = validateAuthorizeRequest(
+      params({ scope: "budget:read budget:write garden:write" }),
+      CLIENT,
+      CANONICAL_RESOURCE,
+      enabledScopes(["garden"])
+    )
+
+    expect(result).toMatchObject({
+      kind: "ok",
+      request: { scopes: ["budget:read", "garden:write"] },
     })
   })
 

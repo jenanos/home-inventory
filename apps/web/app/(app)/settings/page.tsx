@@ -16,9 +16,11 @@ import { MembersSection } from "./members-section"
 import { CategoriesSection } from "./categories-section"
 import { ConnectedAppsSection } from "./connected-apps-section"
 
+// Explicit time zone: the server runs in UTC, the household does not.
 const dateFormatter = new Intl.DateTimeFormat("nb-NO", {
   dateStyle: "medium",
   timeStyle: "short",
+  timeZone: "Europe/Oslo",
 })
 
 export default async function SettingsPage() {
@@ -47,6 +49,17 @@ export default async function SettingsPage() {
     lastUsedAt: grant.lastUsedAt
       ? dateFormatter.format(grant.lastUsedAt)
       : null,
+    recentChanges: grant.recentChanges.map((change) => ({
+      id: change.id,
+      toolName: change.toolName,
+      result:
+        change.outcome === "success"
+          ? ("saved" as const)
+          : change.outcome === "dry_run"
+            ? ("preview" as const)
+            : ("rejected" as const),
+      createdAt: dateFormatter.format(change.createdAt),
+    })),
   }))
 
   return (

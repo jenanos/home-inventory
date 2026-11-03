@@ -25,6 +25,10 @@ import {
   rateLimitedResponse,
   rateLimitKeyFromRequest,
 } from "@/lib/mcp/oauth/rate-limit"
+import {
+  expandEffectiveScopes,
+  restrictToEnabledScopes,
+} from "@/lib/mcp/oauth/scopes"
 import { createMcpServer } from "@/lib/mcp/server"
 
 export const runtime = "nodejs"
@@ -109,7 +113,14 @@ async function authenticate(
       userId: claims.sub,
       clientId: claims.client_id,
       tokenId: claims.jti,
-      scopes,
+      // Write scopes for a domain the operator has switched off are dropped
+      // on every request, including grants approved while it was on.
+      // Expanded first, so an approved `*:write` keeps implying `*:read`
+      // while its write half is switched off.
+      scopes: restrictToEnabledScopes(
+        expandEffectiveScopes(scopes),
+        config.writeDomains
+      ),
     })
 
     return {
@@ -230,7 +241,10 @@ export async function handleMcpPostRequest(
     })
   }
 
-  const { session, clientId, userId } = authentication
+  const { clientId, userId } = authentication
+  // The audit trail for write tools carries the same id as this request's log
+  // line, so one can be followed to the other.
+  const session: McpSession = { ...authentication.session, correlationId }
 
   const tokenLimit = enforceMcpRateLimit("mcpToken", session.context.userId)
   if (!tokenLimit.allowed) {

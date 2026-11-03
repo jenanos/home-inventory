@@ -3,6 +3,33 @@
 Dato: 2026-07-29. Revidert 2026-07-30 etter kvalitetssikring mot kodebasen;
 funnene er innarbeidet i kapitlene under, særlig 3.2, 3.4, 7, 10.2, 10.4 og 14.0.
 
+## Status (2026-11-03)
+
+| Fase | Status | Beslutninger |
+| ---- | ------ | ------------ |
+| 0 – kontrakter og spike | levert | [ADR 0001](../decisions/0001-mcp-phase-0-contracts.md) |
+| 1 – lesetjenester | levert | ADR 0001 |
+| 2 – OAuth-datamodell | levert | [runbook](../runbooks/mcp-oauth-migration.md) |
+| 3 – OAuth og samtykke | levert | [ADR 0002](../decisions/0002-mcp-dynamic-client-registration.md) |
+| 4 – read-only MCP | levert | [ADR 0003](../decisions/0003-mcp-read-only-tool-surface.md) |
+| 5 – innkjøp, skriving | levert, av i produksjon til slått på | [ADR 0004](../decisions/0004-mcp-write-tools.md) |
+| 6 – budsjett, skriving | levert, av i produksjon til slått på | ADR 0004 |
+| 7 – vedlikehold og hage | levert, av i produksjon til slått på | ADR 0004 |
+| 8 – hardening | kode levert; last-/misbrukstest, alarmer og restore-test gjenstår som driftsoppgaver | ADR 0004, [runbook](../runbooks/mcp-oauth.md) |
+
+Planen beskriver fortsatt målbildet og begrunnelsene. Der implementasjonen
+bevisst avviker — verktøyflaten i 10.3–10.4, preview/apply for budsjett,
+idempotensnøkler og utrulling av skriving — er det ADR 0004 som gjelder. De
+viktigste endringene:
+
+- Skriving slås på per domene med `HOME_OVERVIEW_MCP_WRITE_DOMAINS` (standard:
+  ingen), slik kapittel 16 forutsetter.
+- Budsjettendringer forhåndsvises med `dryRun` i stedet for et preview-/apply-par.
+- Brukersletting (3.2) er avklart: private lister slettes sammen med brukeren.
+- Gjennomgangen fant tilgangsfeil i eksisterende duplikat-import og
+  produktalternativer som var mer alvorlige enn check-then-act-mønsteret i 3.4.
+  De er rettet; se tabellen i ADR 0004.
+
 ## 1. Mål og avgrensning
 
 Målet er å gjøre data og arbeidsflyter i Home Overview tilgjengelige for
@@ -126,7 +153,8 @@ utvei, ikke automatisk neste steg.
   avvise medlemskap i en ny husstand. Hvis produktet senere skal støtte flere
   husstander, må det i stedet innføres et eksplisitt, servervalidert valg av
   aktiv husstand før MCP kan bruke denne modellen.
-- **Sletting av bruker må avklares før fase 4.** Migrasjonen
+- **Sletting av bruker må avklares før fase 4.** _Avklart 2026-11-03: private
+  lister slettes sammen med brukeren, se ADR 0004._ Migrasjonen
   `20260427141000_add_private_shopping_lists` legger på en check-constraint som
   Prisma ikke modellerer, og som derfor er usynlig i `schema.prisma`:
 
@@ -750,6 +778,8 @@ implementasjon.
 
 ### 10.3 Nivå 2: trygge og idempotente mutasjoner
 
+_Den implementerte flaten avviker noe fra tabellen under; se ADR 0004._
+
 | Domene      | Verktøy                                                                                                                                                                                             |
 | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Innkjøp     | `create-shopping-list`, `add-shopping-item`, `update-shopping-item`, `set-shopping-item-status`, `add-product-alternative`, `update-product-alternative`, `set-preferred-alternative`               |
@@ -890,6 +920,8 @@ Følg med på:
 - databasefeil og store svar
 
 ### 13.2 Opprydding
+
+_Implementert i `lib/mcp/cleanup.ts`, startet fra `instrumentation.ts`._
 
 Lag en idempotent jobb eller administrativ funksjon som sletter:
 
@@ -1220,6 +1252,8 @@ serverkonfigurasjonen og ikke antas ut fra `docker-compose.yml` her, som bare er
 dev-databasen.
 
 ### Deployrekkefølge
+
+Punkt 5–6 styres med `HOME_OVERVIEW_MCP_WRITE_DOMAINS`; se runbooken.
 
 1. Deploy databasemigrasjon og kode med MCP feature flag avslått.
 2. Verifiser at webappen fungerer og at MCP-ruter gir kontrollert deaktivert
