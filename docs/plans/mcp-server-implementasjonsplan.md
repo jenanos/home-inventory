@@ -15,7 +15,7 @@ funnene er innarbeidet i kapitlene under, særlig 3.2, 3.4, 7, 10.2, 10.4 og 14.
 | 5 – innkjøp, skriving | levert, av i produksjon til slått på | [ADR 0004](../decisions/0004-mcp-write-tools.md) |
 | 6 – budsjett, skriving | levert, av i produksjon til slått på | ADR 0004 |
 | 7 – vedlikehold og hage | levert, av i produksjon til slått på | ADR 0004 |
-| 8 – hardening | kode levert; last-/misbrukstest, alarmer og restore-test gjenstår som driftsoppgaver | ADR 0004, [runbook](../runbooks/mcp-oauth.md) |
+| 8 – hardening | kode levert; restore-test og last-/misbrukstest kjørt 2026-11-03 mot en kopi av produksjon; alarmer og test med en ekte målklient gjenstår | ADR 0004, [runbook](../runbooks/mcp-oauth.md) |
 
 Planen beskriver fortsatt målbildet og begrunnelsene. Der implementasjonen
 bevisst avviker — verktøyflaten i 10.3–10.4, preview/apply for budsjett,

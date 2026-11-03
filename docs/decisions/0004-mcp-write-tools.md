@@ -68,6 +68,12 @@ check-then-act-mønsteret planen pekte på:
 
 Alle er rettet i tjenestelaget og dekket av integrasjonstester mot PostgreSQL.
 
+I tillegg fant testingen mot produksjonsbygget at `export type { X }` i en
+`"use server"`-fil kompileres som en verdi-eksport. Da feilet hele modulen ved
+lasting, og alle actions i `shopping-item.ts` og `maintenance-task.ts` var
+døde. Verken typesjekk eller enhetstester fanger det, så
+`lib/actions/use-server-exports.test.ts` avviser nå re-eksporter i slike filer.
+
 ### Verktøyflaten
 
 Skriveverktøyene ligger i `lib/mcp/tools/<domene>-write.ts` og bruker
@@ -234,4 +240,4 @@ etter `2025-11-25` tas inn når de er stabile og en målklient bruker dem.
 | `set-progress-entry-completed` | `completed` i `update-progress-entry` | Feltet er allerede en eksplisitt sluttilstand |
 | Valgfri idempotensnøkkel for create | ikke innført | Ingen målklient er observert å gjenta kall etter timeout; vurderes ved behov |
 | Konvertere check-then-act i 13 funksjoner | alle mutasjoner er flyttet til tjenester med eierskap i `where` | Konverteringen ble gjort der koden uansett ble flyttet, i stedet for som egen opprydding |
-| Fase 8: last- og misbrukstest, dashboards | ikke gjort i koden | Krever produksjonsmiljøet; står som driftsoppgaver i runbooken |
+| Fase 8: last- og misbrukstest, dashboards | last-, misbruks- og restore-test kjørt mot produksjonsbygget på en kopi av produksjonsdata; dashboards og alarmer ikke satt opp | Testene trenger ikke produksjonsserveren. Alarmer krever loggverktøy som stacken ikke har ennå; signalene står i runbooken |

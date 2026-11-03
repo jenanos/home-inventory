@@ -425,6 +425,10 @@ backupoppsettet:
 
 3. Noter dato og resultat, og slett testdatabasen.
 
+| Dato | Backup | Resultat |
+| ---- | ------ | -------- |
+| 2026-11-03 | `20261103-home-overview-db-custom-backup` | Restore uten feil (17 migrasjoner). `20260730120000_add_mcp_oauth_models` og `20261103181712_add_mcp_audit_events` gikk rent på dataene. Produksjonsbygget kjørte mot kopien: alle sider rendret, web-actions og MCP-verktøy fungerte. |
+
 Restore av en backup som er eldre enn en secret-rotasjon gir refresh tokens som
 ikke lenger kan hashes tilbake. De er da uleselige og må ryddes med SQL-en i
 rotasjonsavsnittet.
@@ -447,8 +451,14 @@ minste en ukentlig titt:
 
 ## Last- og misbrukstest
 
-Ikke kjørt ennå. Rate limiteren er prosesslokal, så testen må gå mot ett
-kjørende instans, helst en kopi av produksjon:
+Kjørt 2026-11-03 mot produksjonsbygget lokalt på en restore av produksjonsdata:
+registrering ga `429` fra og med sjette kall, `/api/mcp` ga `429` med
+`Retry-After` ved grensen per bruker, de tyngste leseverktøyene svarte med
+rundt 11 KB på under 50 ms, og 100 varer i `add-shopping-items` gikk på
+190 ms innenfor request-grensen. Gjenta etter større endringer.
+
+Rate limiteren er prosesslokal, så testen må gå mot én kjørende instans,
+helst en kopi av produksjon:
 
 1. `POST /api/oauth/register` over 5 ganger per time fra samme adresse → `429`.
 2. `POST /api/mcp` med gyldig token i en løkke → `429` etter 120 kall per minutt,
