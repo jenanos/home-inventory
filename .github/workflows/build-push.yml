@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Weekly rebuild so the image picks up security fixes from the node base
+  # image even when no code changes. Watchtower then rolls it out.
+  schedule:
+    - cron: "57 3 * * 1"
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
@@ -39,7 +44,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: pnpm
 
       - name: Install dependencies
@@ -101,7 +106,7 @@ jobs:
         with:
           context: .
           platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name == 'push' }}
+          push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha

@@ -1,5 +1,5 @@
 # ── Stage 1: Dependencies ────────────────────────────────────────
-FROM node:22-alpine AS deps
+FROM node:24-alpine AS deps
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 WORKDIR /app
 
@@ -13,7 +13,7 @@ COPY packages/typescript-config/package.json ./packages/typescript-config/
 RUN pnpm install --frozen-lockfile
 
 # ── Stage 2: Builder ─────────────────────────────────────────────
-FROM node:22-alpine AS builder
+FROM node:24-alpine AS builder
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 WORKDIR /app
 
@@ -30,7 +30,7 @@ RUN mkdir -p /app/.prisma-runtime/node_modules && \
 RUN pnpm build --filter web
 
 # ── Stage 3: Runner ──────────────────────────────────────────────
-FROM node:22-alpine AS runner
+FROM node:24-alpine AS runner
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
@@ -41,10 +41,14 @@ ENV PORT=3000
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
-# Copy Next.js standalone output (includes node_modules with traced deps)
+# Copy Next.js standalone output (includes node_modules with traced deps).
+# Application files stay owned by root (read-only for the runtime user);
+# only apps/web/.next/cache belongs to nextjs, because Next.js writes its runtime
+# cache (image optimisation, fetch cache) there.
 COPY --from=builder /app/apps/web/.next/standalone ./
 COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
 COPY --from=builder /app/apps/web/public ./apps/web/public
+RUN install -d -o nextjs -g nodejs ./apps/web/.next/cache
 
 # Copy Prisma schema and migrations for migrate deploy
 COPY --from=builder /app/packages/db/prisma ./packages/db/prisma
@@ -60,8 +64,7 @@ COPY --from=builder /app/.prisma-runtime/node_modules ./node_modules
 RUN npm install -g prisma@6.19.2
 
 # Copy start script
-COPY start.sh ./start.sh
-RUN chmod +x start.sh
+COPY --chmod=755 start.sh ./start.sh
 
 USER nextjs
 
