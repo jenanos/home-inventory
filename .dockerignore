@@ -1,0 +1,16 @@
+# Keep the build context small and free of local state. Without this file,
+# `COPY . .` in the builder stage copies the host's node_modules (with native
+# binaries for the wrong platform/libc) over the freshly installed ones, and
+# local .env files with secrets end up in the build.
+**/node_modules
+**/.next
+**/.turbo
+**/coverage
+**/*.tsbuildinfo
+.git
+**/.env
+**/.env.*
+!**/.env.example
+changes.bundle
+.claude
+.codex
