@@ -88,6 +88,7 @@ export async function GET(request: Request) {
       validated.redirectUri,
       validated.error,
       validated.description,
+      mcpConfig.issuer,
       validated.state
     )
   }
