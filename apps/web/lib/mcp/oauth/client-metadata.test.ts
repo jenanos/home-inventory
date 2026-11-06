@@ -53,6 +53,60 @@ describe("validateClientMetadata", () => {
     )
   })
 
+  it("accepts ChatGPT's CIMD document, which prefers private_key_jwt but also offers none", () => {
+    // Verbatim from https://chatgpt.com/oauth/client.json (2026-11-06).
+    const chatGpt = {
+      client_id: "https://chatgpt.com/oauth/client.json",
+      client_uri: "https://chatgpt.com/",
+      redirect_uris: ["https://chatgpt.com/connector_platform_oauth_redirect"],
+      token_endpoint_auth_method: "private_key_jwt",
+      token_endpoint_auth_methods_supported: ["none", "private_key_jwt"],
+      grant_types: ["authorization_code", "refresh_token"],
+      response_types: ["code"],
+      client_name: "ChatGPT",
+      logo_uri: "https://persistent.oaistatic.com/sonic/misc/openai-logo.png",
+      token_endpoint_auth_signing_alg: "RS256",
+      jwks_uri: "https://chatgpt.com/oauth/jwks.json",
+    }
+
+    const result = validateClientMetadata(chatGpt)
+
+    expect(result.ok && result.metadata).toEqual({
+      clientName: "ChatGPT",
+      redirectUris: ["https://chatgpt.com/connector_platform_oauth_redirect"],
+      grantTypes: ["authorization_code", "refresh_token"],
+      responseTypes: ["code"],
+    })
+  })
+
+  it("rejects a client whose offered auth methods do not include none", () => {
+    const result = validateClientMetadata({
+      ...validDocument,
+      token_endpoint_auth_method: "none",
+      token_endpoint_auth_methods_supported: [
+        "private_key_jwt",
+        "client_secret_basic",
+      ],
+    })
+
+    expect(result.ok).toBe(false)
+    expect(!result.ok && result.rejection.field).toBe(
+      "token_endpoint_auth_method"
+    )
+  })
+
+  it("rejects a malformed token_endpoint_auth_methods_supported", () => {
+    const result = validateClientMetadata({
+      ...validDocument,
+      token_endpoint_auth_methods_supported: "none",
+    })
+
+    expect(result.ok).toBe(false)
+    expect(!result.ok && result.rejection.field).toBe(
+      "token_endpoint_auth_methods_supported"
+    )
+  })
+
   it("rejects implicit flow and client credentials", () => {
     expect(
       validateClientMetadata({ ...validDocument, response_types: ["token"] }).ok

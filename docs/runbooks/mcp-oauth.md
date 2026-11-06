@@ -301,6 +301,7 @@ men trygt.
 | Access token avvises som `audience-mismatch`            | Issuer ble endret etter at tokenet ble utstedt                        |
 | `invalid_client` ved authorize                          | Klienten er tilbakekalt, eller DCR-registreringen utløp uten å bli brukt |
 | `invalid_client` for en CIMD-klient                     | Metadatadokumentet er utilgjengelig, ikke JSON, eller `client_id` matcher ikke URL-en |
+| `invalid_client` med «utsteder ikke klienthemmeligheter» | Klienten tilbyr ingen metode serveren støtter. Bare `none` (PKCE) støttes; når dokumentet har `token_endpoint_auth_methods_supported` (som ChatGPT), holder det at `none` står der |
 | Discovery gir `503`                                     | MCP-konfigurasjonen mangler eller er ugyldig, eller `HOME_OVERVIEW_MCP_ENABLED` er av |
 | `/api/mcp` gir `403` med `FORBIDDEN`                    | Tokenets bruker er slettet, står uten husstand, eller har flere husstandsmedlemskap |
 | Et verktøy mangler i `tools/list`                       | Tokenet har ikke scopet; sjekk `grantedScopes` fra `get-server-info`  |

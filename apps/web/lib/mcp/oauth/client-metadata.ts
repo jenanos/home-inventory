@@ -53,6 +53,49 @@ function readStringArray(value: unknown): string[] | null {
     : null
 }
 
+function isSupportedAuthMethod(method: string) {
+  return (SUPPORTED_TOKEN_ENDPOINT_AUTH_METHODS as readonly string[]).includes(
+    method
+  )
+}
+
+/**
+ * A client may list several methods it can use in the plural
+ * `token_endpoint_auth_methods_supported` and keep the singular
+ * `token_endpoint_auth_method` as a legacy preference. ChatGPT's CIMD document
+ * does exactly that (`private_key_jwt` preferred, `none` also offered) and then
+ * picks from the intersection with our metadata. So when the plural field is
+ * present it decides, and the singular one is only a preference; without it,
+ * the singular field is binding as in RFC 7591.
+ */
+function checkTokenEndpointAuthMethod(
+  document: Record<string, unknown>
+): ClientMetadataResult | null {
+  const rejection = reject(
+    "token_endpoint_auth_method",
+    "Serveren utsteder ikke klienthemmeligheter; bruk token_endpoint_auth_method=none."
+  )
+
+  const offered = document.token_endpoint_auth_methods_supported
+  if (offered !== undefined) {
+    const methods = readStringArray(offered)
+    if (!methods) {
+      return reject(
+        "token_endpoint_auth_methods_supported",
+        "token_endpoint_auth_methods_supported må være en liste med strenger."
+      )
+    }
+    return methods.some(isSupportedAuthMethod) ? null : rejection
+  }
+
+  const preferred = document.token_endpoint_auth_method
+  if (preferred !== undefined && !isSupportedAuthMethod(String(preferred))) {
+    return rejection
+  }
+
+  return null
+}
+
 /**
  * Shared validation for both registration paths: an RFC 7591 request body and
  * a Client ID Metadata Document carry the same fields and must satisfy the
@@ -140,17 +183,9 @@ export function validateClientMetadata(
     }
   }
 
-  const authMethod = document.token_endpoint_auth_method
-  if (
-    authMethod !== undefined &&
-    !(SUPPORTED_TOKEN_ENDPOINT_AUTH_METHODS as readonly string[]).includes(
-      String(authMethod)
-    )
-  ) {
-    return reject(
-      "token_endpoint_auth_method",
-      "Serveren utsteder ikke klienthemmeligheter; bruk token_endpoint_auth_method=none."
-    )
+  const authMethodRejection = checkTokenEndpointAuthMethod(document)
+  if (authMethodRejection) {
+    return authMethodRejection
   }
 
   return {

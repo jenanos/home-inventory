@@ -182,6 +182,7 @@ export async function POST(request: Request) {
         pending.redirectUri,
         "access_denied",
         "Brukeren avviste forespørselen.",
+        mcpConfig.issuer,
         pending.state
       )
     )
@@ -229,6 +230,7 @@ export async function POST(request: Request) {
         pending.redirectUri,
         "server_error",
         "Kunne ikke fullføre autoriseringen.",
+        mcpConfig.issuer,
         pending.state
       )
     )

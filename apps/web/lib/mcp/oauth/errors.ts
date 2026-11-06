@@ -60,16 +60,22 @@ export function oauthJsonResponse(body: unknown, status = 200) {
  * Errors that happen after the redirect URI is verified go back to the client
  * as a redirect, per OAuth 2.1 section 4.1.2.1. Errors before that point must
  * never redirect, because the URI is not yet trusted.
+ *
+ * `iss` is required here too (RFC 9207 section 2): the discovery document
+ * advertises `authorization_response_iss_parameter_supported`, and clients
+ * such as ChatGPT reject any authorization response, error or not, without it.
  */
 export function oauthRedirectErrorResponse(
   redirectUri: string,
   error: OAuthErrorCode,
   description: string,
+  issuer: string,
   state?: string | null
 ) {
   const target = new URL(redirectUri)
   target.searchParams.set("error", error)
   target.searchParams.set("error_description", description)
+  target.searchParams.set("iss", issuer)
   if (state) {
     target.searchParams.set("state", state)
   }
