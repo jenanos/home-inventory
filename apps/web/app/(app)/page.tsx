@@ -23,6 +23,7 @@ import {
 } from "lucide-react"
 import { cn } from "@workspace/ui/lib/utils"
 import { Progress } from "@workspace/ui/components/progress"
+import { TIMEFRAME_LABELS } from "@/lib/shopping-timeframe"
 
 const formatNOK = (amount: number) =>
   new Intl.NumberFormat("nb-NO", {
@@ -31,23 +32,23 @@ const formatNOK = (amount: number) =>
     maximumFractionDigits: 0,
   }).format(amount)
 
-const phaseConfig = {
-  BEFORE_MOVE: {
-    label: "Før innflytting",
+const timeframeConfig = {
+  NOW: {
+    label: TIMEFRAME_LABELS.NOW,
     className: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
   },
-  FIRST_WEEK: {
-    label: "Første uke",
+  SOON: {
+    label: TIMEFRAME_LABELS.SOON,
     className:
       "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
   },
-  CAN_WAIT: {
-    label: "Kan vente",
+  LATER: {
+    label: TIMEFRAME_LABELS.LATER,
     className:
       "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
   },
-  NO_RUSH: {
-    label: "Ingen hast",
+  SOMEDAY: {
+    label: TIMEFRAME_LABELS.SOMEDAY,
     className:
       "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300",
   },
@@ -199,30 +200,27 @@ export default async function DashboardPage() {
           />
         )}
 
-        {/* Phase Breakdown */}
+        {/* Timeframe Breakdown */}
         {householdStats.pendingCount > 0 && (
           <Card className="shadow-sm">
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                Etter prioritet
+                Når det trengs
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap gap-3">
                 {(
-                  Object.entries(phaseConfig) as [
-                    keyof typeof phaseConfig,
-                    (typeof phaseConfig)[keyof typeof phaseConfig],
+                  Object.entries(timeframeConfig) as [
+                    keyof typeof timeframeConfig,
+                    (typeof timeframeConfig)[keyof typeof timeframeConfig],
                   ][]
-                ).map(([phase, config]) => {
-                  const count =
-                    householdStats.itemsByPhase[
-                      phase as keyof typeof householdStats.itemsByPhase
-                    ] ?? 0
+                ).map(([timeframe, config]) => {
+                  const count = householdStats.itemsByTimeframe[timeframe] ?? 0
                   if (count === 0) return null
                   return (
                     <div
-                      key={phase}
+                      key={timeframe}
                       className={cn(
                         "flex items-center gap-2 rounded-lg px-4 py-2.5",
                         config.className

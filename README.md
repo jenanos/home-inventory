@@ -5,10 +5,11 @@ A personal app for managing home projects and finances, built with Next.js 16 an
 ## Features
 
 - **Shopping lists** — create and organize multiple lists per household
-- **Item tracking** — priority, phase (before move, first week, etc.), due dates, estimated prices, store names, and product URLs
+- **Item tracking** — priority, timeframe (now, soon, later, someday), due dates, estimated prices, store names, product URLs and product alternatives
 - **Categories** — 13 default categories with icons and colors, fully customizable
 - **Multi-user households** — invite members and assign items
 - **Shared links** — generate shareable links to lists with optional expiration
+- **MCP server** — an OAuth-protected MCP endpoint (`/api/mcp`) lets AI assistants read and update shopping lists, budget, maintenance and garden
 - **Authentication** — magic link email login via Resend
 - **Dark mode** — toggle with the `d` hotkey in dev
 

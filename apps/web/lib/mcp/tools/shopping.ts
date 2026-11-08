@@ -6,6 +6,7 @@ import {
   listShoppingCategoriesPage,
   listShoppingItemsPage,
   listShoppingListsPage,
+  searchShoppingItemsPage,
 } from "../../application/shopping/read"
 import { getShoppingListItemEffectivePrice } from "../../shopping-list-pricing"
 import {
@@ -18,8 +19,8 @@ import { notFoundError, toolSuccess } from "../result"
 import { defineTool, READ_ONLY_ANNOTATIONS } from "./define"
 import {
   ITEM_STATUSES,
-  PHASES,
   PRIORITIES,
+  TIMEFRAMES,
   assertId,
   calculated,
   calendarDate,
@@ -94,6 +95,7 @@ export const productAlternativeSchema = z.object({
   name: z.string(),
   price: storedMoneySchema,
   url: z.string().nullable(),
+  imageUrl: z.string().nullable(),
   storeName: z.string().nullable(),
   notes: z.string().nullable(),
   rank: z
@@ -112,6 +114,7 @@ type ProductAlternativeRow = {
   name: string
   price: DecimalValue | null
   url: string | null
+  imageUrl: string | null
   storeName: string | null
   notes: string | null
   rank: number
@@ -126,6 +129,7 @@ export function serializeProductAlternative(
     name: alternative.name,
     price: money(alternative.price),
     url: alternative.url,
+    imageUrl: alternative.imageUrl,
     storeName: alternative.storeName,
     notes: alternative.notes,
     rank: alternative.rank,
@@ -139,10 +143,16 @@ export const shoppingItemSchema = z.object({
   description: z.string().nullable(),
   status: z.enum(ITEM_STATUSES),
   priority: z.enum(PRIORITIES),
-  phase: z.enum(PHASES).nullable(),
+  timeframe: z
+    .enum(TIMEFRAMES)
+    .nullable()
+    .describe(
+      "When the item is needed: NOW (as soon as possible), SOON, LATER, SOMEDAY (no rush)."
+    ),
   dueDate: calendarDateOutputSchema,
   estimatedPrice: storedMoneySchema,
   url: z.string().nullable(),
+  imageUrl: z.string().nullable(),
   storeName: z.string().nullable(),
   purchasedAt: timestampSchema.nullable(),
   category: z.object({ id: z.string(), name: z.string() }).nullable(),
@@ -161,10 +171,11 @@ export type ShoppingItemRow = {
   description: string | null
   status: (typeof ITEM_STATUSES)[number]
   priority: (typeof PRIORITIES)[number]
-  phase: (typeof PHASES)[number] | null
+  timeframe: (typeof TIMEFRAMES)[number] | null
   dueDate: Date | null
   estimatedPrice: DecimalValue | null
   url: string | null
+  imageUrl: string | null
   storeName: string | null
   purchasedAt: Date | null
   createdAt: Date
@@ -175,8 +186,8 @@ export type ShoppingItemRow = {
 }
 
 /**
- * Field-by-field whitelist. `assignedTo` (another member's user record) and
- * `imageUrl` are never part of the contract.
+ * Field-by-field whitelist. `assignedTo` (another member's user record) is
+ * never part of the contract.
  */
 export function serializeShoppingItem(
   item: ShoppingItemRow,
@@ -188,10 +199,11 @@ export function serializeShoppingItem(
     description: item.description,
     status: item.status,
     priority: item.priority,
-    phase: item.phase,
+    timeframe: item.timeframe,
     dueDate: calendarDate(item.dueDate),
     estimatedPrice: money(item.estimatedPrice),
     url: item.url,
+    imageUrl: item.imageUrl,
     storeName: item.storeName,
     purchasedAt: optionalTimestamp(item.purchasedAt),
     category: item.category,
@@ -399,8 +411,76 @@ export const listShoppingCategoriesTool = defineTool({
   },
 })
 
+export const searchShoppingItemsTool = defineTool({
+  name: "search-shopping-items",
+  scope: "shopping:read",
+  title: "Search shopping items across lists",
+  description:
+    "Finds items across every shopping list the user can see, filtered by text, list, status, priority, timeframe or category. Use it to check whether something is already planned before adding it, or to answer questions like 'what do we need soon?'. Each item carries the list it belongs to.",
+  inputSchema: {
+    query: filterTextSchema
+      .optional()
+      .describe(
+        "Case-insensitive match on item name, description, store or alternative name."
+      ),
+    listId: idSchema.optional().describe("Limit to one list."),
+    status: z.enum(ITEM_STATUSES).optional(),
+    priority: z.enum(PRIORITIES).optional(),
+    timeframe: z.enum(TIMEFRAMES).optional(),
+    categoryId: idSchema
+      .nullable()
+      .optional()
+      .describe("Id from list-shopping-categories, or null for uncategorized."),
+    includeAlternatives: z
+      .boolean()
+      .optional()
+      .describe("Include product alternatives. Defaults to false."),
+    ...paginationInputSchema,
+  },
+  outputSchema: {
+    items: z.array(
+      shoppingItemSchema.extend({
+        list: z.object({ id: z.string(), name: z.string() }),
+      })
+    ),
+    pageInfo: pageInfoSchema,
+  },
+  annotations: READ_ONLY_ANNOTATIONS,
+  handler: async (args, session) => {
+    const page = resolvePageRequest(args)
+    const includeAlternatives = args.includeAlternatives ?? false
+    const { totalCount, items } = await searchShoppingItemsPage(
+      session.context,
+      {
+        ...page,
+        query: args.query,
+        listId: args.listId,
+        status: args.status,
+        priority: args.priority,
+        timeframe: args.timeframe,
+        categoryId: args.categoryId,
+        includeAlternatives,
+      }
+    )
+
+    const serialized = items.map((item) => ({
+      ...serializeShoppingItem(item, includeAlternatives),
+      list: { id: item.list.id, name: item.list.name },
+    }))
+
+    return toolSuccess(
+      {
+        items: serialized,
+        pageInfo: buildPageInfo(page, serialized.length, totalCount),
+      },
+      `Fant ${totalCount} vare(r); viser ${serialized.length}.`
+    )
+  },
+})
+
 export const shoppingTools = [
   listShoppingListsTool,
   getShoppingListTool,
+  searchShoppingItemsTool,
   listShoppingCategoriesTool,
 ]

@@ -155,6 +155,17 @@ export const UPDATE_ANNOTATIONS: ToolAnnotations = {
   openWorldHint: false,
 }
 
+/**
+ * Removes data. Never idempotent in the MCP sense: repeating the call after it
+ * succeeded answers NOT_FOUND, because the resource is gone.
+ */
+export const DELETE_ANNOTATIONS: ToolAnnotations = {
+  readOnlyHint: false,
+  destructiveHint: true,
+  idempotentHint: false,
+  openWorldHint: false,
+}
+
 export type WriteToolResult = {
   structuredContent: Record<string, unknown>
   summary: string

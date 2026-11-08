@@ -1,12 +1,7 @@
 export { calculateBudgetStats } from "./application/budget/calculations"
 
 type ShoppingItemStatus = "PENDING" | "PURCHASED" | "SKIPPED" | string
-type ShoppingItemPhase =
-  | "BEFORE_MOVE"
-  | "FIRST_WEEK"
-  | "CAN_WAIT"
-  | "NO_RUSH"
-  | string
+type ShoppingItemTimeframe = "NOW" | "SOON" | "LATER" | "SOMEDAY" | string
 
 type MaintenanceTaskStatus =
   | "NOT_STARTED"
@@ -20,7 +15,7 @@ export type ShoppingStatsItemBase = {
   status: ShoppingItemStatus
   estimatedPrice?: unknown
   alternatives: Array<{ price?: unknown }>
-  phase?: ShoppingItemPhase | null
+  timeframe?: ShoppingItemTimeframe | null
   assignedTo?: { name: string | null } | null
 }
 
@@ -54,14 +49,13 @@ export function calculateShoppingStats<T extends ShoppingStatsItemBase>(
     purchasedTotal: budgetItems
       .filter((item) => item.status === "PURCHASED")
       .reduce((sum, item) => sum + getEffectivePrice(item), 0),
-    itemsByPhase: {
-      BEFORE_MOVE: pendingItems.filter((item) => item.phase === "BEFORE_MOVE")
+    itemsByTimeframe: {
+      NOW: pendingItems.filter((item) => item.timeframe === "NOW").length,
+      SOON: pendingItems.filter((item) => item.timeframe === "SOON").length,
+      LATER: pendingItems.filter((item) => item.timeframe === "LATER").length,
+      SOMEDAY: pendingItems.filter((item) => item.timeframe === "SOMEDAY")
         .length,
-      FIRST_WEEK: pendingItems.filter((item) => item.phase === "FIRST_WEEK")
-        .length,
-      CAN_WAIT: pendingItems.filter((item) => item.phase === "CAN_WAIT").length,
-      NO_RUSH: pendingItems.filter((item) => item.phase === "NO_RUSH").length,
-      UNSET: pendingItems.filter((item) => !item.phase).length,
+      UNSET: pendingItems.filter((item) => !item.timeframe).length,
     },
     itemsByPerson: pendingItems.reduce(
       (acc, item) => {

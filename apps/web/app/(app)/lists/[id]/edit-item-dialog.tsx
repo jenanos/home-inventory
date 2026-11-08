@@ -65,8 +65,9 @@ import {
   setPreferredAlternative,
 } from "@/lib/actions/product-alternative"
 import type { ShoppingItemData, AlternativeData } from "./item-list"
-import type { Priority, Phase, ItemStatus } from "@workspace/db"
+import type { Priority, Timeframe, ItemStatus } from "@workspace/db"
 import { useMediaQuery } from "@/hooks/use-media-query"
+import { TIMEFRAME_OPTIONS } from "@/lib/shopping-timeframe"
 
 interface EditItemDialogProps {
   item: ShoppingItemData | null
@@ -83,7 +84,7 @@ type ItemSavePayload = {
   description: string | null
   categoryId: string | null
   priority: Priority
-  phase: Phase | null
+  timeframe: Timeframe | null
   dueDate: Date | null
   assignedToId: string | null
   status: ItemStatus
@@ -116,7 +117,7 @@ export function EditItemDialog({
   const [description, setDescription] = useState("")
   const [categoryId, setCategoryId] = useState("")
   const [priority, setPriority] = useState<Priority>("MEDIUM")
-  const [phase, setPhase] = useState("")
+  const [timeframe, setTimeframe] = useState("")
   const [dueDate, setDueDate] = useState<Date | undefined>(undefined)
   const [assignedToId, setAssignedToId] = useState("")
   const [status, setStatus] = useState<ItemStatus>("PENDING")
@@ -131,7 +132,7 @@ export function EditItemDialog({
       setDescription(item.description ?? "")
       setCategoryId(item.category?.id ?? "none")
       setPriority(item.priority)
-      setPhase(item.phase ?? "none")
+      setTimeframe(item.timeframe ?? "none")
       setDueDate(item.dueDate ? new Date(item.dueDate) : undefined)
       setAssignedToId(item.assignedTo?.id ?? "none")
       setStatus(item.status)
@@ -153,12 +154,12 @@ export function EditItemDialog({
       description: description.trim() || null,
       categoryId: categoryId && categoryId !== "none" ? categoryId : null,
       priority,
-      phase: (phase && phase !== "none" ? phase : null) as Phase | null,
+      timeframe: (timeframe && timeframe !== "none" ? timeframe : null) as Timeframe | null,
       dueDate: dueDate ?? null,
       assignedToId: assignedToId && assignedToId !== "none" ? assignedToId : null,
       status,
     }
-  }, [item, name, description, categoryId, priority, phase, dueDate, assignedToId, status])
+  }, [item, name, description, categoryId, priority, timeframe, dueDate, assignedToId, status])
 
   const flushItemSave = useCallback(() => {
     const payload = itemSavePayloadRef.current
@@ -187,7 +188,7 @@ export function EditItemDialog({
         description: description.trim() || null,
         categoryId: categoryId && categoryId !== "none" ? categoryId : null,
         priority,
-        phase: (phase && phase !== "none" ? phase : null) as Phase | null,
+        timeframe: (timeframe && timeframe !== "none" ? timeframe : null) as Timeframe | null,
         dueDate: dueDate ?? null,
         assignedToId:
           assignedToId && assignedToId !== "none" ? assignedToId : null,
@@ -196,7 +197,7 @@ export function EditItemDialog({
     }, 600)
 
     return () => clearTimeout(timeout)
-  }, [name, description, categoryId, priority, phase, dueDate, assignedToId, status])
+  }, [name, description, categoryId, priority, timeframe, dueDate, assignedToId, status])
 
   function markItemDirty() {
     itemDirty.current = true
@@ -299,17 +300,18 @@ export function EditItemDialog({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="grid gap-1.5">
-              <Label>Fase</Label>
-              <Select value={phase} onValueChange={(v) => { setPhase(v); markItemDirty() }}>
+              <Label>Når</Label>
+              <Select value={timeframe} onValueChange={(v) => { setTimeframe(v); markItemDirty() }}>
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Velg..." />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Ingen</SelectItem>
-                  <SelectItem value="BEFORE_MOVE">For innflytting</SelectItem>
-                  <SelectItem value="FIRST_WEEK">Forste uke</SelectItem>
-                  <SelectItem value="CAN_WAIT">Kan vente</SelectItem>
-                  <SelectItem value="NO_RUSH">Ingen hast</SelectItem>
+                  {TIMEFRAME_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

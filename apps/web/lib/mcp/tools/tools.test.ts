@@ -182,10 +182,11 @@ beforeEach(() => {
       description: null,
       status: "PENDING",
       priority: "MEDIUM",
-      phase: null,
+      timeframe: null,
       dueDate: new Date("2026-03-15T00:00:00Z"),
       estimatedPrice: decimal("499.00"),
       url: null,
+      imageUrl: null,
       storeName: "Butikk",
       purchasedAt: null,
       createdAt: new Date("2026-01-02T00:00:00Z"),
@@ -197,6 +198,7 @@ beforeEach(() => {
           name: "Billigere panne",
           price: decimal("299.00"),
           url: null,
+          imageUrl: null,
           storeName: null,
           notes: null,
           rank: 0,
@@ -204,6 +206,7 @@ beforeEach(() => {
         },
       ],
       _count: { alternatives: 1 },
+      list: { id: LIST_ID, name: "Kjøkken" },
       // Present on the row, absent from every whitelist.
       assignedTo: { id: "user-2", name: POISON.assignee, email: POISON.email },
     },
@@ -401,6 +404,7 @@ const HAPPY_PATH_ARGS: Array<[string, Record<string, unknown>]> = [
   ["get-server-info", {}],
   ["list-shopping-lists", {}],
   ["get-shopping-list", { listId: LIST_ID, includeAlternatives: true }],
+  ["search-shopping-items", { query: "panne", includeAlternatives: true }],
   ["list-shopping-categories", {}],
   ["get-budget-summary", {}],
   ["get-budget-details", {}],
@@ -549,6 +553,22 @@ describe("resource boundaries", () => {
             householdId: "household-1",
             OR: [{ isPrivate: false }, { createdById: "user-1" }],
           },
+        },
+      })
+    )
+  })
+
+  it("bounds cross-list search by list visibility", async () => {
+    await callTool("search-shopping-items", { timeframe: "SOON" })
+
+    expect(mocks.shoppingItemFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          list: {
+            householdId: "household-1",
+            OR: [{ isPrivate: false }, { createdById: "user-1" }],
+          },
+          timeframe: "SOON",
         },
       })
     )

@@ -20,7 +20,9 @@ import {
   type LucideProps,
 } from "lucide-react"
 import type { ComponentType } from "react"
+import type { CategoryIconName } from "@/lib/category-icons"
 
+// `satisfies` keeps this map and CATEGORY_ICON_NAMES in step.
 const ICON_MAP: Record<string, ComponentType<LucideProps>> = {
   baby: Baby,
   sofa: Sofa,
@@ -39,7 +41,7 @@ const ICON_MAP: Record<string, ComponentType<LucideProps>> = {
   lightbulb: Lightbulb,
   archive: Archive,
   box: Box,
-}
+} satisfies Record<CategoryIconName, ComponentType<LucideProps>>
 
 export function CategoryIcon({
   name,

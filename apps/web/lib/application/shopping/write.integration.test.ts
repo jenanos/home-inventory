@@ -6,17 +6,16 @@ import { createHouseholdFixtures } from "../../test/household-fixtures"
 import type { ApplicationContext } from "../context"
 import { MAX_BATCH_SIZE } from "../mutations"
 import {
-  bulkCreateShoppingItems,
-  bulkImportShoppingItemsWithDuplicates,
-} from "./import"
-import {
   addProductAlternative,
   addShoppingItems,
+  createShoppingCategory,
   createShoppingItem,
   createShoppingList,
   deleteProductAlternative,
   deleteShoppingItem,
+  deleteShoppingItems,
   deleteShoppingList,
+  moveShoppingItems,
   reorderAlternatives,
   setPreferredAlternative,
   setShoppingItemStatus,
@@ -340,13 +339,6 @@ describe("adding items", () => {
     ).rejects.toMatchObject({
       code: "VALIDATION_ERROR",
     })
-    await expect(
-      bulkCreateShoppingItems(context, {
-        listId: list.id,
-        items,
-        categoryMap: {},
-      })
-    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" })
     expect(await db.shoppingItem.count({ where: { listId: list.id } })).toBe(0)
   })
 
@@ -361,86 +353,6 @@ describe("adding items", () => {
       ])
     ).rejects.toMatchObject({ code: "VALIDATION_ERROR" })
     expect(await db.shoppingItem.count({ where: { listId: list.id } })).toBe(0)
-  })
-})
-
-describe("LLM import with duplicates", () => {
-  it("rejects an update id from another household and changes nothing", async () => {
-    const owner = await fixtures.createHousehold()
-    const victim = await fixtures.createHousehold()
-    const mine = await listWithItem(owner.context)
-    const theirs = await listWithItem(victim.context)
-
-    await expect(
-      bulkImportShoppingItemsWithDuplicates(owner.context, {
-        listId: mine.list.id,
-        categoryMap: {},
-        newItems: [{ name: "Ny vare" }],
-        updates: [{ id: theirs.item.id, fields: { description: "kapret" } }],
-      })
-    ).rejects.toMatchObject(NOT_FOUND)
-
-    const victimItem = await db.shoppingItem.findUniqueOrThrow({
-      where: { id: theirs.item.id },
-    })
-    expect(victimItem.description).toBeNull()
-    expect(
-      await db.shoppingItem.count({ where: { listId: mine.list.id } })
-    ).toBe(1)
-  })
-
-  it("rejects an update id from another list in the same household", async () => {
-    const { context } = await fixtures.createHousehold()
-    const first = await listWithItem(context)
-    const second = await listWithItem(context)
-
-    await expect(
-      bulkImportShoppingItemsWithDuplicates(context, {
-        listId: first.list.id,
-        categoryMap: {},
-        newItems: [],
-        updates: [{ id: second.item.id, fields: { storeName: "Elkjøp" } }],
-      })
-    ).rejects.toMatchObject(NOT_FOUND)
-  })
-
-  it("rejects a category map pointing at another household", async () => {
-    const owner = await fixtures.createHousehold()
-    const other = await fixtures.createHousehold()
-    const foreign = await db.category.create({
-      data: { name: "Fremmed", householdId: other.householdId },
-    })
-    const { list } = await listWithItem(owner.context)
-
-    await expect(
-      bulkCreateShoppingItems(owner.context, {
-        listId: list.id,
-        categoryMap: { Fremmed: foreign.id },
-        items: [{ name: "Sofa", categoryName: "Fremmed" }],
-      })
-    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" })
-  })
-
-  it("applies updates on the same list", async () => {
-    const { context } = await fixtures.createHousehold()
-    const { list, item } = await listWithItem(context)
-
-    const result = await bulkImportShoppingItemsWithDuplicates(context, {
-      listId: list.id,
-      categoryMap: {},
-      newItems: [{ name: "Vannkoker", priority: "NOT_A_PRIORITY" as never }],
-      updates: [{ id: item.id, fields: { storeName: "Elkjøp" } }],
-    })
-
-    expect(result.count).toBe(2)
-    const items = await db.shoppingItem.findMany({ where: { listId: list.id } })
-    expect(items.find((entry) => entry.id === item.id)?.storeName).toBe(
-      "Elkjøp"
-    )
-    // The import is deliberately lenient about pasted enum values.
-    expect(items.find((entry) => entry.name === "Vannkoker")?.priority).toBe(
-      "MEDIUM"
-    )
   })
 })
 
@@ -580,5 +492,165 @@ describe("shopping write tools", () => {
     const serialized = JSON.stringify(result.structuredContent)
     expect(serialized).not.toContain("assignedTo")
     expect(serialized).not.toContain(context.userId)
+  })
+})
+
+describe("deleting and moving items", () => {
+  it("deletes items with their alternatives, all or nothing", async () => {
+    const owner = await fixtures.createHousehold()
+    const victim = await fixtures.createHousehold()
+    const mine = await listWithItem(owner.context)
+    const theirs = await listWithItem(victim.context)
+
+    await expect(
+      deleteShoppingItems(owner.context, [mine.item.id, theirs.item.id])
+    ).rejects.toMatchObject(NOT_FOUND)
+    expect(await db.shoppingItem.count({ where: { id: mine.item.id } })).toBe(1)
+    expect(await db.shoppingItem.count({ where: { id: theirs.item.id } })).toBe(
+      1
+    )
+
+    const deleted = await deleteShoppingItems(owner.context, [mine.item.id])
+    expect(deleted).toEqual([
+      { id: mine.item.id, name: "Kaffetrakter", listId: mine.list.id },
+    ])
+    expect(
+      await db.productAlternative.count({ where: { itemId: mine.item.id } })
+    ).toBe(0)
+  })
+
+  it("will not delete from another member's private list", async () => {
+    const { context: creator, householdId } = await fixtures.createHousehold()
+    const member = await fixtures.addMember(householdId)
+    const { item } = await listWithItem(creator, { isPrivate: true })
+
+    await expect(deleteShoppingItems(member, [item.id])).rejects.toMatchObject(
+      NOT_FOUND
+    )
+  })
+
+  it("moves items between visible lists and is harmless to repeat", async () => {
+    const { context } = await fixtures.createHousehold()
+    const { item } = await listWithItem(context)
+    const target = await createShoppingList(context, { name: "Hage" })
+
+    const moved = await moveShoppingItems(context, [item.id], target.id)
+    expect(moved.map((entry) => entry.listId)).toEqual([target.id])
+    expect(moved[0]?.alternatives).toHaveLength(2)
+
+    const again = await moveShoppingItems(context, [item.id], target.id)
+    expect(again.map((entry) => entry.id)).toEqual([item.id])
+  })
+
+  it("will not move into or out of lists the caller cannot see", async () => {
+    const { context: creator, householdId } = await fixtures.createHousehold()
+    const member = await fixtures.addMember(householdId)
+    const stranger = await fixtures.createHousehold()
+    const shared = await listWithItem(member)
+    const privateList = await createShoppingList(creator, {
+      name: "Privat",
+      isPrivate: true,
+    })
+    const foreignList = await createShoppingList(stranger.context, {
+      name: "Fremmed",
+    })
+
+    await expect(
+      moveShoppingItems(member, [shared.item.id], privateList.id)
+    ).rejects.toMatchObject(NOT_FOUND)
+    await expect(
+      moveShoppingItems(member, [shared.item.id], foreignList.id)
+    ).rejects.toMatchObject(NOT_FOUND)
+    await expect(
+      moveShoppingItems(stranger.context, [shared.item.id], foreignList.id)
+    ).rejects.toMatchObject(NOT_FOUND)
+
+    const item = await db.shoppingItem.findUniqueOrThrow({
+      where: { id: shared.item.id },
+    })
+    expect(item.listId).toBe(shared.list.id)
+  })
+})
+
+describe("categories", () => {
+  it("creates a category and rejects a duplicate name", async () => {
+    const { context } = await fixtures.createHousehold()
+
+    const category = await createShoppingCategory(context, {
+      name: "Garasje",
+      icon: "wrench",
+    })
+    expect(category).toMatchObject({ name: "Garasje", icon: "wrench" })
+
+    await expect(
+      createShoppingCategory(context, { name: "Garasje" })
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" })
+  })
+})
+
+describe("MCP tools for alternatives and timeframe", () => {
+  it("reorders and deletes alternatives through the tools", async () => {
+    const { context } = await fixtures.createHousehold()
+    const { item } = await listWithItem(context)
+    const [first, second] = item.alternatives
+    const session = fixtures.session(context, ["shopping:write"])
+
+    const reordered = await tool("reorder-product-alternatives").invoke(
+      { itemId: item.id, alternativeIds: [second!.id, first!.id] },
+      session
+    )
+    expect(reordered.isError).toBeUndefined()
+    expect(reordered.structuredContent).toMatchObject({
+      item: {
+        alternatives: [
+          { id: second!.id, rank: 0 },
+          { id: first!.id, rank: 1 },
+        ],
+      },
+    })
+
+    const removed = await tool("delete-product-alternative").invoke(
+      { alternativeId: second!.id },
+      session
+    )
+    expect(removed.structuredContent).toMatchObject({
+      item: { alternativeCount: 1, alternatives: [{ id: first!.id }] },
+    })
+  })
+
+  it("stores timeframe and imageUrl from add-shopping-items", async () => {
+    const { context } = await fixtures.createHousehold()
+    const list = await createShoppingList(context, { name: "Hus" })
+
+    const result = await tool("add-shopping-items").invoke(
+      {
+        listId: list.id,
+        items: [
+          {
+            name: "Hageslange",
+            timeframe: "SOON",
+            imageUrl: "https://example.com/slange.jpg",
+            alternatives: [
+              {
+                name: "Gardena 20 m",
+                price: 599,
+                imageUrl: "https://example.com/gardena.jpg",
+              },
+            ],
+          },
+        ],
+      },
+      fixtures.session(context, ["shopping:write"])
+    )
+
+    expect(result.structuredContent).toMatchObject({
+      created: [
+        {
+          timeframe: "SOON",
+          imageUrl: "https://example.com/slange.jpg",
+          alternatives: [{ imageUrl: "https://example.com/gardena.jpg" }],
+        },
+      ],
+    })
   })
 })

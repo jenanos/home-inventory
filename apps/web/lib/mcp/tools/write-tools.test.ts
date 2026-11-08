@@ -59,6 +59,11 @@ describe("write tool contracts", () => {
         "add-product-alternative",
         "update-product-alternative",
         "set-preferred-alternative",
+        "reorder-product-alternatives",
+        "delete-product-alternative",
+        "move-shopping-items",
+        "delete-shopping-items",
+        "create-shopping-category",
         "create-budget-entry",
         "update-budget-entry",
         "create-budget-category",
@@ -140,12 +145,37 @@ describe("write tool contracts", () => {
     }
   )
 
-  it("exposes no full-replace, delete or administrative tool", () => {
+  it("exposes no full-replace, sharing or administrative tool", () => {
     for (const tool of registry) {
       expect(tool.name).not.toMatch(
-        /replace|delete|remove|share|member-role|admin|household/
+        /replace|share|member-role|admin|household|privacy/
       )
     }
+  })
+
+  // Deleting is allowed for shopping items and alternatives only (ADR 0005).
+  // A new delete tool is a decision, not a side effect of adding a feature.
+  it("allows deletion only where it was decided", () => {
+    const deleting = registry
+      .filter((tool) => /delete|remove/.test(tool.name))
+      .map((tool) => tool.name)
+      .sort()
+
+    expect(deleting).toEqual([
+      "delete-product-alternative",
+      "delete-shopping-items",
+    ])
+  })
+
+  it.each(
+    writeTools
+      .filter((tool) => tool.name.startsWith("delete-"))
+      .map((tool) => [tool.name, tool] as const)
+  )("%s is annotated as destructive and not idempotent", (_name, tool) => {
+    expect(tool.annotations).toMatchObject({
+      destructiveHint: true,
+      idempotentHint: false,
+    })
   })
 
   it("uses verb-noun kebab-case names", () => {

@@ -1,4 +1,4 @@
-import { db, ItemStatus, Phase, Priority, type Prisma } from "@workspace/db"
+import { db, ItemStatus, Priority, Timeframe, type Prisma } from "@workspace/db"
 
 import { isListColorId } from "../../list-colors"
 import {
@@ -13,6 +13,7 @@ import {
   definedFields,
   enumValue,
   freshness,
+  isUniqueConstraintError,
   notFound,
   optionalCalendarDate,
   optionalMoneyAmount,
@@ -35,9 +36,10 @@ import {
 const LIST = "handleliste"
 const ITEM = "vare"
 const ALTERNATIVE = "produktalternativ"
+const CATEGORY = "kategori"
 
 const PRIORITY_VALUES = Object.values(Priority)
-const PHASE_VALUES = Object.values(Phase)
+const TIMEFRAME_VALUES = Object.values(Timeframe)
 const ITEM_STATUS_VALUES = Object.values(ItemStatus)
 
 /** Alternatives are a short list per item, not a catalogue. */
@@ -108,7 +110,7 @@ export const SHOPPING_ITEM_RESULT_SELECT = {
   description: true,
   status: true,
   priority: true,
-  phase: true,
+  timeframe: true,
   dueDate: true,
   estimatedPrice: true,
   url: true,
@@ -144,7 +146,7 @@ export type ShoppingItemFields = {
   description?: string | null
   categoryId?: string | null
   priority?: Priority
-  phase?: Phase | null
+  timeframe?: Timeframe | null
   dueDate?: Date | string | null
   estimatedPrice?: number | null
   url?: string | null
@@ -181,10 +183,10 @@ function normalizeItemFields(input: Partial<ShoppingItemFields>) {
       input.priority === undefined
         ? undefined
         : enumValue(input.priority, PRIORITY_VALUES, "Prioritet"),
-    phase:
-      input.phase == null
-        ? input.phase
-        : enumValue(input.phase, PHASE_VALUES, "Fase"),
+    timeframe:
+      input.timeframe == null
+        ? input.timeframe
+        : enumValue(input.timeframe, TIMEFRAME_VALUES, "Når"),
     dueDate: optionalCalendarDate(input.dueDate, "Frist"),
     estimatedPrice: optionalMoneyAmount(input.estimatedPrice, "Estimert pris"),
     url: optionalUrl(input.url, "URL"),
@@ -697,6 +699,155 @@ export async function deleteShoppingItem(
   })
 }
 
+/**
+ * Deletes one or more items (and their alternatives). Every id must be a
+ * visible item, or nothing is deleted and the call is NOT_FOUND. Returns what
+ * was deleted so the caller can report it.
+ */
+export async function deleteShoppingItems(
+  context: ApplicationContext,
+  itemIds: string[]
+) {
+  assertBatchSize(itemIds.length, "Varer")
+  const ids = [...new Set(itemIds.map((id) => assertResourceId(id, ITEM)))]
+  const where = { id: { in: ids }, list: visibleLists(context) }
+
+  return db.$transaction(async (tx) => {
+    const items = await tx.shoppingItem.findMany({
+      where,
+      select: { id: true, name: true, listId: true },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    })
+    if (items.length !== ids.length) throw notFound(ITEM)
+
+    // The boundary is repeated in the delete itself; a row that disappeared
+    // or moved out of reach since the read rolls the whole call back.
+    const deleted = await tx.shoppingItem.deleteMany({ where })
+    if (deleted.count !== ids.length) throw notFound(ITEM)
+
+    return items
+  })
+}
+
+/**
+ * Moves items to another visible list. Both the items and the target list must
+ * be visible to the caller; otherwise nothing moves and the call is NOT_FOUND.
+ */
+export async function moveShoppingItems(
+  context: ApplicationContext,
+  itemIds: string[],
+  targetListId: string
+): Promise<ShoppingItemResult[]> {
+  assertBatchSize(itemIds.length, "Varer")
+  assertResourceId(targetListId, LIST)
+  const ids = [...new Set(itemIds.map((id) => assertResourceId(id, ITEM)))]
+  const where = { id: { in: ids }, list: visibleLists(context) }
+
+  return db.$transaction(async (tx) => {
+    const target = await tx.shoppingList.findFirst({
+      where: { ...visibleLists(context), id: targetListId },
+      select: { id: true },
+    })
+    if (!target) throw notFound(LIST)
+
+    // An item already on the target list is matched and left there, so the
+    // call sets an end state and a retry is harmless.
+    const moved = await tx.shoppingItem.updateMany({
+      where,
+      data: { listId: targetListId },
+    })
+    if (moved.count !== ids.length) throw notFound(ITEM)
+
+    return tx.shoppingItem.findMany({
+      where: { id: { in: ids }, listId: targetListId },
+      select: SHOPPING_ITEM_RESULT_SELECT,
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    })
+  })
+}
+
+// ─── Categories ─────────────────────────────────────────────────
+
+export const SHOPPING_CATEGORY_RESULT_SELECT = {
+  id: true,
+  name: true,
+  icon: true,
+  color: true,
+  isDefault: true,
+} satisfies Prisma.CategorySelect
+
+function duplicateCategoryName(error: unknown): never {
+  if (isUniqueConstraintError(error)) {
+    throw validationError("En kategori med det navnet finnes allerede.")
+  }
+  throw error
+}
+
+export type ShoppingCategoryFields = {
+  name: string
+  icon?: string | null
+  color?: string | null
+}
+
+function normalizeCategoryFields(input: Partial<ShoppingCategoryFields>) {
+  return definedFields({
+    name:
+      input.name === undefined ? undefined : requiredText(input.name, "Navn"),
+    icon: optionalText(input.icon, "Ikon", 50),
+    color: optionalText(input.color, "Farge", 50),
+  })
+}
+
+export async function createShoppingCategory(
+  context: ApplicationContext,
+  input: ShoppingCategoryFields
+) {
+  return db.category
+    .create({
+      data: {
+        ...normalizeCategoryFields(input),
+        name: requiredText(input.name, "Navn"),
+        householdId: context.householdId,
+      },
+      select: SHOPPING_CATEGORY_RESULT_SELECT,
+    })
+    .catch(duplicateCategoryName)
+}
+
+export async function updateShoppingCategory(
+  context: ApplicationContext,
+  categoryId: string,
+  input: Partial<ShoppingCategoryFields>
+) {
+  assertResourceId(categoryId, CATEGORY)
+  return scopedWrite({
+    resource: CATEGORY,
+    write: () =>
+      db.category
+        .update({
+          where: { id: categoryId, householdId: context.householdId },
+          data: normalizeCategoryFields(input),
+          select: SHOPPING_CATEGORY_RESULT_SELECT,
+        })
+        .catch(duplicateCategoryName),
+  })
+}
+
+export async function deleteShoppingCategory(
+  context: ApplicationContext,
+  categoryId: string
+) {
+  assertResourceId(categoryId, CATEGORY)
+  return scopedWrite({
+    resource: CATEGORY,
+    write: () =>
+      db.category.delete({
+        where: { id: categoryId, householdId: context.householdId },
+        select: { id: true },
+      }),
+  })
+}
+
 // ─── Product alternatives ───────────────────────────────────────
 
 async function findVisibleItem(
@@ -788,16 +939,28 @@ export async function deleteProductAlternative(
   alternativeId: string
 ) {
   assertResourceId(alternativeId, ALTERNATIVE)
-  const deleted = await scopedWrite({
-    resource: ALTERNATIVE,
-    write: () =>
-      db.productAlternative.delete({
-        where: visibleAlternativeWhere(context, alternativeId),
-        select: { id: true, itemId: true, item: { select: { listId: true } } },
-      }),
-  })
 
-  return { id: deleted.id, itemId: deleted.itemId, listId: deleted.item.listId }
+  return db.$transaction(async (tx) => {
+    const deleted = await scopedWrite({
+      resource: ALTERNATIVE,
+      write: () =>
+        tx.productAlternative.delete({
+          where: visibleAlternativeWhere(context, alternativeId),
+          select: {
+            id: true,
+            itemId: true,
+            item: { select: { listId: true } },
+          },
+        }),
+    })
+
+    return {
+      id: deleted.id,
+      itemId: deleted.itemId,
+      listId: deleted.item.listId,
+      item: await readItemResult(tx, deleted.itemId),
+    }
+  })
 }
 
 async function writeRanks(tx: Tx, itemId: string, orderedIds: string[]) {
@@ -879,6 +1042,6 @@ export async function reorderAlternatives(
     }
 
     await writeRanks(tx, itemId, orderedIds)
-    return { listId: item.listId }
+    return { item: await readItemResult(tx, itemId), listId: item.listId }
   })
 }

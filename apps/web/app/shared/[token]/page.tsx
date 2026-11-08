@@ -9,6 +9,7 @@ import {
 import { Badge } from "@workspace/ui/components/badge"
 import { Separator } from "@workspace/ui/components/separator"
 import { Eye, ShoppingCart } from "lucide-react"
+import { timeframeLabel } from "@/lib/shopping-timeframe"
 
 const formatNOK = (amount: number) =>
   new Intl.NumberFormat("nb-NO", {
@@ -21,13 +22,6 @@ const priorityLabel: Record<string, { label: string; className: string }> = {
   HIGH: { label: "Høy", className: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400" },
   MEDIUM: { label: "Medium", className: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400" },
   LOW: { label: "Lav", className: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" },
-}
-
-const phaseLabel: Record<string, string> = {
-  BEFORE_MOVE: "Før innflytting",
-  FIRST_WEEK: "Første uke",
-  CAN_WAIT: "Kan vente",
-  NO_RUSH: "Ingen hast",
 }
 
 export default async function SharedListPage({
@@ -101,8 +95,8 @@ export default async function SharedListPage({
                         {item.category && (
                           <Badge variant="secondary">{item.category.name}</Badge>
                         )}
-                        {item.phase && (
-                          <span>{phaseLabel[item.phase]}</span>
+                        {item.timeframe && (
+                          <span>{timeframeLabel(item.timeframe)}</span>
                         )}
                         {item.storeName && <span>{item.storeName}</span>}
                         {item.assignedTo && (
