@@ -1,25 +1,11 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@workspace/ui/components/sheet"
-import {
-  Drawer,
-  DrawerContent,
-  DrawerHeader,
-  DrawerTitle,
-} from "@workspace/ui/components/drawer"
-import { ScrollArea } from "@workspace/ui/components/scroll-area"
-import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
 import { upsertBudgetCategory } from "@/lib/actions/budget"
 import { toast } from "sonner"
-import { useMediaQuery } from "@/hooks/use-media-query"
+import { BudgetFormSheet, FormActions } from "./budget-form-sheet"
 
 interface BudgetCategoryData {
   id: string
@@ -37,40 +23,20 @@ export function CategoryDialog({
   onOpenChange,
   category,
 }: CategoryDialogProps) {
-  const isDesktop = useMediaQuery("(min-width: 768px)")
-  const title = category ? "Rediger kategori" : "Legg til kategori"
-  const formContent = open ? (
-    <CategoryDialogForm
-      key={category?.id ?? "new"}
-      category={category}
-      onOpenChange={onOpenChange}
-    />
-  ) : null
-
-  if (isDesktop) {
-    return (
-      <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent>
-          <SheetHeader>
-            <SheetTitle>{title}</SheetTitle>
-          </SheetHeader>
-          {formContent}
-        </SheetContent>
-      </Sheet>
-    )
-  }
-
   return (
-    <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent>
-        <DrawerHeader>
-          <DrawerTitle>{title}</DrawerTitle>
-        </DrawerHeader>
-        <ScrollArea className="max-h-[70vh] overflow-x-hidden">
-          <div className="min-w-0 px-4 pb-6">{formContent}</div>
-        </ScrollArea>
-      </DrawerContent>
-    </Drawer>
+    <BudgetFormSheet
+      open={open}
+      onOpenChange={onOpenChange}
+      title={category ? "Rediger kategori" : "Legg til kategori"}
+    >
+      {open ? (
+        <CategoryDialogForm
+          key={category?.id ?? "new"}
+          category={category}
+          onOpenChange={onOpenChange}
+        />
+      ) : null}
+    </BudgetFormSheet>
   )
 }
 
@@ -117,19 +83,11 @@ function CategoryDialogForm({
           placeholder="F.eks. Bilutgifter"
         />
       </div>
-      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => onOpenChange(false)}
-          className="w-full sm:w-auto"
-        >
-          Avbryt
-        </Button>
-        <Button type="submit" disabled={isPending} className="w-full sm:w-auto">
-          {category ? "Lagre" : "Legg til"}
-        </Button>
-      </div>
+      <FormActions
+        onCancel={() => onOpenChange(false)}
+        isPending={isPending}
+        submitLabel={category ? "Lagre" : "Legg til"}
+      />
     </form>
   )
 }

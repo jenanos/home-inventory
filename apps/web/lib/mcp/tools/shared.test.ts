@@ -1,5 +1,6 @@
 import {
   BudgetEntryType,
+  BudgetFrequency,
   BudgetLoanRepaymentType,
   BudgetLoanType,
   ItemStatus,
@@ -19,6 +20,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   BUDGET_ENTRY_TYPES,
+  BUDGET_FREQUENCIES,
   BUDGET_LOAN_REPAYMENT_TYPES,
   BUDGET_LOAN_TYPES,
   ITEM_STATUSES,
@@ -56,6 +58,7 @@ describe("tool enum contracts cover the Prisma schema", () => {
     ["PlantType", PLANT_TYPES, PlantType],
     ["Lifecycle", LIFECYCLES, Lifecycle],
     ["BudgetEntryType", BUDGET_ENTRY_TYPES, BudgetEntryType],
+    ["BudgetFrequency", BUDGET_FREQUENCIES, BudgetFrequency],
     ["BudgetLoanType", BUDGET_LOAN_TYPES, BudgetLoanType],
     [
       "BudgetLoanRepaymentType",

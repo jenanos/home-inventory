@@ -538,10 +538,24 @@ enum BudgetEntryType {
   INCOME
   EXPENSE
   DEDUCTION
+  SAVINGS
+}
+
+/// How often a budget entry's amount occurs. The calculation turns it into a
+/// monthly amount; the stored amount stays what the bill or payslip says.
+enum BudgetFrequency {
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  SEMIANNUAL
+  YEARLY
 }
 
 enum BudgetLoanType {
   MORTGAGE
+  STUDENT
+  CAR
+  CONSUMER
   OTHER
 }
 
@@ -559,6 +573,8 @@ model Budget {
   id                  String   @id @default(uuid()) @db.Uuid
   householdId         String   @unique @db.Uuid
   taxDeductionPercent Decimal  @default(22) @db.Decimal(5, 2)
+  /// Market value of the home, for the loan-to-value ratio.
+  propertyValue       Decimal? @db.Decimal(14, 2)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
@@ -591,6 +607,9 @@ model BudgetMember {
   name               String
   grossMonthlyIncome Decimal  @db.Decimal(10, 2)
   taxPercent         Decimal  @db.Decimal(5, 2)
+  /// Actual monthly payout. When set it replaces gross × (1 − tax).
+  netMonthlyIncome   Decimal? @db.Decimal(10, 2)
+  notes              String?
   sortOrder          Int      @default(0)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
@@ -611,6 +630,8 @@ model BudgetLoan {
   annualInterestRate Decimal                 @default(0) @db.Decimal(6, 3)
   termMonths         Int                     @default(12)
   monthlyFees        Decimal                 @default(0) @db.Decimal(10, 2)
+  fixedRateUntil     DateTime?               @db.Date
+  notes              String?
   sortOrder          Int                     @default(0)
   createdAt          DateTime                @default(now())
   updatedAt          DateTime                @updatedAt
@@ -630,6 +651,9 @@ model BudgetTrip {
   tollPerTrip   Decimal?          @db.Decimal(10, 2)
   ferryPerTrip  Decimal?          @db.Decimal(10, 2)
   fuelPerTrip   Decimal?          @db.Decimal(10, 2)
+  /// Parking, accommodation and the like. Applies to every transport type.
+  otherPerTrip  Decimal?          @db.Decimal(10, 2)
+  notes         String?
   sortOrder     Int               @default(0)
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
@@ -645,7 +669,15 @@ model BudgetEntry {
   name          String
   categoryId    String?         @db.Uuid
   type          BudgetEntryType
-  monthlyAmount Decimal         @db.Decimal(10, 2)
+  /// The amount per occurrence, in NOK. See `frequency`.
+  amount        Decimal         @db.Decimal(10, 2)
+  frequency     BudgetFrequency @default(MONTHLY)
+  provider      String?
+  /// Day of the month the money comes in or goes out, 1–31.
+  paymentDay    Int?
+  /// When a contract's binding period ends or it renews.
+  renewalDate   DateTime?       @db.Date
+  notes         String?
   sortOrder     Int             @default(0)
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt

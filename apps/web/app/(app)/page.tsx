@@ -91,11 +91,11 @@ export default async function DashboardPage() {
           budgetStats.entryCount > 0) ? (
           <BudgetStatsSummary
             disposable={cashFlow}
-            disposableSubtitle="per måned, etter alle utgifter"
+            disposableSubtitle="per måned, etter utgifter og sparing"
             items={[
               {
                 label: "Inntekt",
-                value: budgetStats.totalNetIncome,
+                value: budgetStats.totalIncome,
                 tone: "income",
               },
               {
@@ -108,6 +108,15 @@ export default async function DashboardPage() {
                 value: budgetStats.totalNonLoanExpenses,
                 tone: "expense",
               },
+              ...(budgetStats.totalSavings > 0
+                ? [
+                    {
+                      label: "Sparing",
+                      value: budgetStats.totalSavings,
+                      tone: "savings" as const,
+                    },
+                  ]
+                : []),
             ]}
           />
         ) : (

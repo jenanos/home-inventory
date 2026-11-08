@@ -12,7 +12,7 @@ const formatNOK = (amount: number) =>
 export interface BudgetBreakdownItem {
   label: string
   value: number
-  tone?: "income" | "expense" | "neutral" | "info"
+  tone?: "income" | "expense" | "savings" | "neutral" | "info"
 }
 
 interface BudgetStatsSummaryProps {
@@ -27,6 +27,7 @@ const toneClass: Record<NonNullable<BudgetBreakdownItem["tone"]>, string> = {
   income: "text-emerald-600 dark:text-emerald-400",
   expense: "text-red-600 dark:text-red-400",
   info: "text-blue-600 dark:text-blue-400",
+  savings: "text-violet-600 dark:text-violet-400",
   neutral: "text-foreground",
 }
 
@@ -66,10 +67,15 @@ export function BudgetStatsSummary({
           )}
         </div>
 
-        <div className="grid grid-cols-3 gap-2 border-t border-border pt-3">
+        <div
+          className={cn(
+            "grid gap-2 border-t border-border pt-3",
+            items.length === 4 ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3"
+          )}
+        >
           {items.map((item) => (
             <div key={item.label} className="min-w-0">
-              <p className="truncate text-[11px] uppercase tracking-wide text-muted-foreground">
+              <p className="truncate text-[11px] tracking-wide text-muted-foreground uppercase">
                 {item.label}
               </p>
               <p

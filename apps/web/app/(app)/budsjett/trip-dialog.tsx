@@ -1,21 +1,9 @@
 "use client"
 
-import { useEffect, useMemo, useState, useTransition } from "react"
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@workspace/ui/components/sheet"
-import {
-  Drawer,
-  DrawerContent,
-  DrawerHeader,
-  DrawerTitle,
-} from "@workspace/ui/components/drawer"
-import { Button } from "@workspace/ui/components/button"
+import { useState, useTransition } from "react"
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
+import { Textarea } from "@workspace/ui/components/textarea"
 import {
   Select,
   SelectContent,
@@ -23,12 +11,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@workspace/ui/components/select"
-import { ScrollArea } from "@workspace/ui/components/scroll-area"
+import { upsertBudgetTrip } from "@/lib/actions/budget"
+import {
+  tripCostPerTrip,
+  tripMonthlyCost,
+} from "@/lib/application/budget/calculations"
 import { toast } from "sonner"
 import type { TripTransportType } from "@workspace/db"
-import { upsertBudgetTrip } from "@/lib/actions/budget"
 import type { BudgetTripData } from "./budget-view"
-import { useMediaQuery } from "@/hooks/use-media-query"
+import { BudgetFormSheet, FormActions } from "./budget-form-sheet"
+import {
+  formatCurrency,
+  optionalString,
+  parseOptionalNumber,
+} from "./budget-format"
+import { MoreDetails } from "./more-details"
 
 interface TripDialogProps {
   open: boolean
@@ -37,73 +34,110 @@ interface TripDialogProps {
 }
 
 export function TripDialog({ open, onOpenChange, trip }: TripDialogProps) {
-  const [name, setName] = useState("")
-  const [transportType, setTransportType] = useState<TripTransportType>("AIR_OR_PUBLIC")
-  const [annualTrips, setAnnualTrips] = useState("1")
-  const [ticketPerTrip, setTicketPerTrip] = useState("")
-  const [tollPerTrip, setTollPerTrip] = useState("")
-  const [ferryPerTrip, setFerryPerTrip] = useState("")
-  const [fuelPerTrip, setFuelPerTrip] = useState("")
+  return (
+    <BudgetFormSheet
+      open={open}
+      onOpenChange={onOpenChange}
+      title={trip ? "Rediger reise" : "Legg til reise"}
+    >
+      {open ? (
+        <TripForm
+          key={trip?.id ?? "new"}
+          trip={trip}
+          onOpenChange={onOpenChange}
+        />
+      ) : null}
+    </BudgetFormSheet>
+  )
+}
+
+const costText = (value: number | null) =>
+  value != null && value > 0 ? String(value) : ""
+
+function CostInput({
+  id,
+  label,
+  value,
+  onChange,
+  placeholder,
+  className,
+}: {
+  id: string
+  label: string
+  value: string
+  onChange: (value: string) => void
+  placeholder?: string
+  className?: string
+}) {
+  return (
+    <div className={`flex flex-col gap-2 ${className ?? ""}`}>
+      <Label htmlFor={id}>{label}</Label>
+      <Input
+        id={id}
+        type="number"
+        min="0"
+        step="1"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+      />
+    </div>
+  )
+}
+
+function TripForm({
+  trip,
+  onOpenChange,
+}: {
+  trip: BudgetTripData | null
+  onOpenChange: (open: boolean) => void
+}) {
+  const [name, setName] = useState(trip?.name ?? "")
+  const [transportType, setTransportType] = useState<TripTransportType>(
+    trip?.transportType ?? "AIR_OR_PUBLIC"
+  )
+  const [annualTrips, setAnnualTrips] = useState(String(trip?.annualTrips ?? 1))
+  const [ticketPerTrip, setTicketPerTrip] = useState(
+    costText(trip?.ticketPerTrip ?? null)
+  )
+  const [tollPerTrip, setTollPerTrip] = useState(
+    costText(trip?.tollPerTrip ?? null)
+  )
+  const [ferryPerTrip, setFerryPerTrip] = useState(
+    costText(trip?.ferryPerTrip ?? null)
+  )
+  const [fuelPerTrip, setFuelPerTrip] = useState(
+    costText(trip?.fuelPerTrip ?? null)
+  )
+  const [otherPerTrip, setOtherPerTrip] = useState(
+    trip?.otherPerTrip != null ? String(trip.otherPerTrip) : ""
+  )
+  const [notes, setNotes] = useState(trip?.notes ?? "")
   const [isPending, startTransition] = useTransition()
-  const isDesktop = useMediaQuery("(min-width: 768px)")
 
-  useEffect(() => {
-    if (!open) return
-
-    if (trip) {
-      setName(trip.name)
-      setTransportType(trip.transportType)
-      setAnnualTrips(String(trip.annualTrips))
-      setTicketPerTrip(String(trip.ticketPerTrip || ""))
-      setTollPerTrip(String(trip.tollPerTrip || ""))
-      setFerryPerTrip(String(trip.ferryPerTrip || ""))
-      setFuelPerTrip(String(trip.fuelPerTrip || ""))
-      return
-    }
-
-    setName("")
-    setTransportType("AIR_OR_PUBLIC")
-    setAnnualTrips("1")
-    setTicketPerTrip("")
-    setTollPerTrip("")
-    setFerryPerTrip("")
-    setFuelPerTrip("")
-  }, [open, trip])
-
-  const monthlyPreview = useMemo(() => {
-    const trips = Math.max(1, Number(annualTrips) || 1)
-    if (transportType === "AIR_OR_PUBLIC") {
-      return (trips * (Number(ticketPerTrip) || 0)) / 12
-    }
-
-    const carPerTrip =
-      (Number(tollPerTrip) || 0) +
-      (Number(ferryPerTrip) || 0) +
-      (Number(fuelPerTrip) || 0)
-
-    return (trips * carPerTrip) / 12
-  }, [annualTrips, transportType, ticketPerTrip, tollPerTrip, ferryPerTrip, fuelPerTrip])
+  const costs = {
+    transportType,
+    annualTrips: Math.max(1, Math.round(Number(annualTrips) || 1)),
+    ticketPerTrip: parseOptionalNumber(ticketPerTrip) ?? 0,
+    tollPerTrip: parseOptionalNumber(tollPerTrip) ?? 0,
+    ferryPerTrip: parseOptionalNumber(ferryPerTrip) ?? 0,
+    fuelPerTrip: parseOptionalNumber(fuelPerTrip) ?? 0,
+    otherPerTrip: parseOptionalNumber(otherPerTrip),
+  }
+  const filledCount = [otherPerTrip, notes].filter(
+    (v) => v.trim() !== ""
+  ).length
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-
     const annualTripsNumber = Math.round(Number(annualTrips) || 0)
 
     if (!name.trim() || annualTripsNumber <= 0) {
       toast.error("Fyll inn navn og antall reiser per år")
       return
     }
-
-    if (transportType === "AIR_OR_PUBLIC" && (Number(ticketPerTrip) || 0) <= 0) {
-      toast.error("Legg inn billettkostnad per reise")
-      return
-    }
-
-    if (
-      transportType === "CAR" &&
-      (Number(tollPerTrip) || 0) + (Number(ferryPerTrip) || 0) + (Number(fuelPerTrip) || 0) <= 0
-    ) {
-      toast.error("Legg inn minst én kostnad for bilreise")
+    if (tripCostPerTrip(costs) <= 0) {
+      toast.error("Legg inn minst én kostnad per reise")
       return
     }
 
@@ -112,12 +146,9 @@ export function TripDialog({ open, onOpenChange, trip }: TripDialogProps) {
         await upsertBudgetTrip({
           id: trip?.id,
           name: name.trim(),
-          transportType,
+          ...costs,
           annualTrips: annualTripsNumber,
-          ticketPerTrip: Number(ticketPerTrip) || 0,
-          tollPerTrip: Number(tollPerTrip) || 0,
-          ferryPerTrip: Number(ferryPerTrip) || 0,
-          fuelPerTrip: Number(fuelPerTrip) || 0,
+          notes: optionalString(notes),
         })
         toast.success(trip ? "Reise oppdatert" : "Reise lagt til")
         onOpenChange(false)
@@ -127,16 +158,7 @@ export function TripDialog({ open, onOpenChange, trip }: TripDialogProps) {
     })
   }
 
-  const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat("nb-NO", {
-      style: "currency",
-      currency: "NOK",
-      maximumFractionDigits: 0,
-    }).format(amount)
-
-  const title = trip ? "Rediger reise" : "Legg til reise"
-
-  const formContent = (
+  return (
     <form onSubmit={handleSubmit} className="flex min-w-0 flex-col gap-4">
       <div className="flex flex-col gap-2">
         <Label htmlFor="trip-name">Navn på reise</Label>
@@ -159,12 +181,13 @@ export function TripDialog({ open, onOpenChange, trip }: TripDialogProps) {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="AIR_OR_PUBLIC">Fly / offentlig transport</SelectItem>
+              <SelectItem value="AIR_OR_PUBLIC">
+                Fly / offentlig transport
+              </SelectItem>
               <SelectItem value="CAR">Bil</SelectItem>
             </SelectContent>
           </Select>
         </div>
-
         <div className="flex flex-col gap-2">
           <Label htmlFor="trip-annual">Antall reiser per år</Label>
           <Input
@@ -179,99 +202,68 @@ export function TripDialog({ open, onOpenChange, trip }: TripDialogProps) {
       </div>
 
       {transportType === "AIR_OR_PUBLIC" ? (
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="trip-ticket">Billettkostnad per reise (kr)</Label>
-          <Input
-            id="trip-ticket"
-            type="number"
-            min="0"
-            step="1"
-            value={ticketPerTrip}
-            onChange={(e) => setTicketPerTrip(e.target.value)}
-            placeholder="F.eks. 3500"
-          />
-        </div>
+        <CostInput
+          id="trip-ticket"
+          label="Billettkostnad per reise (kr)"
+          value={ticketPerTrip}
+          onChange={setTicketPerTrip}
+          placeholder="F.eks. 3500"
+        />
       ) : (
-          <div className="grid min-w-0 gap-4 sm:grid-cols-2">
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="trip-toll">Bom per reise (kr)</Label>
-            <Input
-              id="trip-toll"
-              type="number"
-              min="0"
-              step="1"
-              value={tollPerTrip}
-              onChange={(e) => setTollPerTrip(e.target.value)}
-            />
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="trip-ferry">Ferge per reise (kr)</Label>
-            <Input
-              id="trip-ferry"
-              type="number"
-              min="0"
-              step="1"
-              value={ferryPerTrip}
-              onChange={(e) => setFerryPerTrip(e.target.value)}
-            />
-          </div>
-          <div className="flex flex-col gap-2 sm:col-span-2">
-            <Label htmlFor="trip-fuel">Lading / drivstoff per reise (kr)</Label>
-            <Input
-              id="trip-fuel"
-              type="number"
-              min="0"
-              step="1"
-              value={fuelPerTrip}
-              onChange={(e) => setFuelPerTrip(e.target.value)}
-            />
-          </div>
+        <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+          <CostInput
+            id="trip-toll"
+            label="Bom per reise (kr)"
+            value={tollPerTrip}
+            onChange={setTollPerTrip}
+          />
+          <CostInput
+            id="trip-ferry"
+            label="Ferge per reise (kr)"
+            value={ferryPerTrip}
+            onChange={setFerryPerTrip}
+          />
+          <CostInput
+            id="trip-fuel"
+            label="Lading / drivstoff per reise (kr)"
+            value={fuelPerTrip}
+            onChange={setFuelPerTrip}
+            className="sm:col-span-2"
+          />
         </div>
       )}
 
-      <div className="bg-muted rounded-md p-3 text-sm">
-        Månedlig kostnad fra årlig reiseforbruk: <span className="font-bold">{formatCurrency(monthlyPreview)}</span>
+      <MoreDetails filledCount={filledCount}>
+        <CostInput
+          id="trip-other"
+          label="Andre kostnader per reise (kr)"
+          value={otherPerTrip}
+          onChange={setOtherPerTrip}
+          placeholder="Parkering, overnatting o.l."
+        />
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="trip-notes">Notat</Label>
+          <Textarea
+            id="trip-notes"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={3}
+          />
+        </div>
+      </MoreDetails>
+
+      <div className="rounded-md bg-muted p-3 text-sm">
+        Månedlig kostnad fra årlig reiseforbruk:{" "}
+        <span className="font-bold">
+          {formatCurrency(tripMonthlyCost(costs))}
+        </span>
       </div>
 
-      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => onOpenChange(false)}
-          className="w-full sm:w-auto"
-        >
-          Avbryt
-        </Button>
-        <Button type="submit" disabled={isPending} className="w-full sm:w-auto">
-          {trip ? "Lagre" : "Legg til"}
-        </Button>
-      </div>
+      <FormActions
+        onCancel={() => onOpenChange(false)}
+        isPending={isPending}
+        submitLabel={trip ? "Lagre" : "Legg til"}
+      />
     </form>
-  )
-
-  if (isDesktop) {
-    return (
-      <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent>
-          <SheetHeader>
-            <SheetTitle>{title}</SheetTitle>
-          </SheetHeader>
-          {formContent}
-        </SheetContent>
-      </Sheet>
-    )
-  }
-
-  return (
-    <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent>
-        <DrawerHeader>
-          <DrawerTitle>{title}</DrawerTitle>
-        </DrawerHeader>
-        <ScrollArea className="max-h-[70vh] overflow-x-hidden">
-          <div className="min-w-0 px-4 pb-6">{formContent}</div>
-        </ScrollArea>
-      </DrawerContent>
-    </Drawer>
   )
 }

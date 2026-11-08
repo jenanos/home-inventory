@@ -108,7 +108,8 @@ const DEMO_LISTS: SeedList[] = [
         dueInDays: 5,
         estimatedPrice: 12999,
         url: "https://www.ikea.com/no/no/search/?q=kontinentalseng",
-        imageUrl: "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=800&q=80",
+        imageUrl:
+          "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=800&q=80",
         storeName: "IKEA",
         assignedToEmail: "ida@demo.homeinventory.local",
         status: "PENDING",
@@ -117,7 +118,8 @@ const DEMO_LISTS: SeedList[] = [
             name: "Kontinentalseng med oppbevaring - 180x200",
             price: 12495,
             url: "https://www.bohus.no/sok?text=kontinentalseng",
-            imageUrl: "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=800&q=80",
+            imageUrl:
+              "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=800&q=80",
             storeName: "Bohus",
             notes: "Best totalpris akkurat na, men 2 ukers levering.",
           },
@@ -125,7 +127,8 @@ const DEMO_LISTS: SeedList[] = [
             name: "Rammemadrass + gavl - 180x200",
             price: 13990,
             url: "https://jysk.no/sok?query=seng%20180x200",
-            imageUrl: "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=800&q=80",
+            imageUrl:
+              "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=800&q=80",
             storeName: "JYSK",
             notes: "Litt dyrere, men rask levering.",
           },
@@ -139,7 +142,8 @@ const DEMO_LISTS: SeedList[] = [
         timeframe: "NOW",
         dueInDays: 7,
         url: "https://www.ikea.com/no/no/search/?q=pax",
-        imageUrl: "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=800&q=80",
+        imageUrl:
+          "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=800&q=80",
         storeName: "IKEA",
         assignedToEmail: "marcus@demo.homeinventory.local",
         status: "PENDING",
@@ -148,7 +152,8 @@ const DEMO_LISTS: SeedList[] = [
             name: "PAX 200 cm med speildorer",
             price: 10450,
             url: "https://www.ikea.com/no/no/search/?q=pax%20garderobe",
-            imageUrl: "https://images.unsplash.com/photo-1595526114035-0d45ed16cfbf?auto=format&fit=crop&w=800&q=80",
+            imageUrl:
+              "https://images.unsplash.com/photo-1595526114035-0d45ed16cfbf?auto=format&fit=crop&w=800&q=80",
             storeName: "IKEA",
             notes: "Billigst, men krever montering over to kvelder.",
           },
@@ -156,7 +161,8 @@ const DEMO_LISTS: SeedList[] = [
             name: "Skyvedor garderobe 200 cm",
             price: 12999,
             url: "https://www.skeidar.no/sok/?query=garderobeskap",
-            imageUrl: "https://images.unsplash.com/photo-1595526114035-0d45ed16cfbf?auto=format&fit=crop&w=800&q=80",
+            imageUrl:
+              "https://images.unsplash.com/photo-1595526114035-0d45ed16cfbf?auto=format&fit=crop&w=800&q=80",
             storeName: "Skeidar",
             notes: "Ferdig losning, men dyrere.",
           },
@@ -178,7 +184,8 @@ const DEMO_LISTS: SeedList[] = [
         dueInDays: 3,
         estimatedPrice: 7499,
         url: "https://www.elkjop.no/search/vaskemaskin",
-        imageUrl: "https://images.unsplash.com/photo-1626806787461-102c1bfaaea1?auto=format&fit=crop&w=800&q=80",
+        imageUrl:
+          "https://images.unsplash.com/photo-1626806787461-102c1bfaaea1?auto=format&fit=crop&w=800&q=80",
         storeName: "Elkjop",
         assignedToEmail: "sara@demo.homeinventory.local",
         status: "PENDING",
@@ -187,7 +194,8 @@ const DEMO_LISTS: SeedList[] = [
             name: "Samsung 8 kg med damp",
             price: 6995,
             url: "https://www.power.no/search/?q=vaskemaskin",
-            imageUrl: "https://images.unsplash.com/photo-1626806787461-102c1bfaaea1?auto=format&fit=crop&w=800&q=80",
+            imageUrl:
+              "https://images.unsplash.com/photo-1626806787461-102c1bfaaea1?auto=format&fit=crop&w=800&q=80",
             storeName: "POWER",
             notes: "Litt lavere pris, men mindre trommel.",
           },
@@ -195,7 +203,8 @@ const DEMO_LISTS: SeedList[] = [
             name: "Bosch Serie 4 9 kg",
             price: 8999,
             url: "https://www.skousen.no/hvitevarer/vaskemaskin/",
-            imageUrl: "https://images.unsplash.com/photo-1517677208171-0bc6725a3e60?auto=format&fit=crop&w=800&q=80",
+            imageUrl:
+              "https://images.unsplash.com/photo-1517677208171-0bc6725a3e60?auto=format&fit=crop&w=800&q=80",
             storeName: "Skousen",
             notes: "Dyrere, men best kapasitet.",
           },
@@ -210,7 +219,8 @@ const DEMO_LISTS: SeedList[] = [
         dueInDays: 10,
         estimatedPrice: 1599,
         url: "https://www.kid.no/search?q=morkleggingsgardin",
-        imageUrl: "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=800&q=80",
+        imageUrl:
+          "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=800&q=80",
         storeName: "Kid",
         assignedToEmail: "ida@demo.homeinventory.local",
         status: "PURCHASED",
@@ -225,21 +235,24 @@ const DEMO_LISTS: SeedList[] = [
         dueInDays: 25,
         estimatedPrice: 2999,
         url: "https://www.ikea.com/no/no/search/?q=kommode",
-        imageUrl: "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=800&q=80",
+        imageUrl:
+          "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=800&q=80",
         storeName: "IKEA",
         assignedToEmail: "marcus@demo.homeinventory.local",
         status: "SKIPPED",
       },
       {
         name: "Skohylle og dororganisering til entre",
-        description: "Liten losning som tar lite gulvplass og samler nodvendige ting.",
+        description:
+          "Liten losning som tar lite gulvplass og samler nodvendige ting.",
         categoryName: "Oppbevaring",
         priority: "MEDIUM",
         timeframe: "SOON",
         dueInDays: 6,
         estimatedPrice: 899,
         url: "https://www.ikea.com/no/no/search/?q=skohylle",
-        imageUrl: "https://images.unsplash.com/photo-1556909212-d5b604d0c90d?auto=format&fit=crop&w=800&q=80",
+        imageUrl:
+          "https://images.unsplash.com/photo-1556909212-d5b604d0c90d?auto=format&fit=crop&w=800&q=80",
         storeName: "IKEA",
         assignedToEmail: "eirik@demo.homeinventory.local",
         status: "PENDING",
@@ -252,7 +265,8 @@ const DEMO_LISTS: SeedList[] = [
         timeframe: "NOW",
         dueInDays: 2,
         url: "https://www.komplett.no/search?q=mesh%20wifi",
-        imageUrl: "https://images.unsplash.com/photo-1544197150-b99a580bb7a8?auto=format&fit=crop&w=800&q=80",
+        imageUrl:
+          "https://images.unsplash.com/photo-1544197150-b99a580bb7a8?auto=format&fit=crop&w=800&q=80",
         storeName: "Komplett",
         assignedToEmail: "sara@demo.homeinventory.local",
         status: "PENDING",
@@ -261,7 +275,8 @@ const DEMO_LISTS: SeedList[] = [
             name: "TP-Link Deco 3-pack",
             price: 2690,
             url: "https://www.komplett.no/search?q=deco%20mesh",
-            imageUrl: "https://images.unsplash.com/photo-1544197150-b99a580bb7a8?auto=format&fit=crop&w=800&q=80",
+            imageUrl:
+              "https://images.unsplash.com/photo-1544197150-b99a580bb7a8?auto=format&fit=crop&w=800&q=80",
             storeName: "Komplett",
             notes: "Best pris og dekning.",
           },
@@ -269,7 +284,8 @@ const DEMO_LISTS: SeedList[] = [
             name: "Google Nest Wifi Pro 2-pack",
             price: 3490,
             url: "https://www.elkjop.no/search/google%20nest%20wifi",
-            imageUrl: "https://images.unsplash.com/photo-1544197150-b99a580bb7a8?auto=format&fit=crop&w=800&q=80",
+            imageUrl:
+              "https://images.unsplash.com/photo-1544197150-b99a580bb7a8?auto=format&fit=crop&w=800&q=80",
             storeName: "Elkjop",
             notes: "Penest design og enklest app.",
           },
@@ -290,7 +306,8 @@ const DEMO_LISTS: SeedList[] = [
         dueInDays: 20,
         estimatedPrice: 349,
         url: "https://www.clasohlson.com/no/search?text=nokkelboks",
-        imageUrl: "https://images.unsplash.com/photo-1558002038-1055907df827?auto=format&fit=crop&w=800&q=80",
+        imageUrl:
+          "https://images.unsplash.com/photo-1558002038-1055907df827?auto=format&fit=crop&w=800&q=80",
         storeName: "Clas Ohlson",
         status: "PENDING",
       },
@@ -307,14 +324,16 @@ const DEMO_LISTS: SeedList[] = [
     items: [
       {
         name: "Kasserollesett med tre gryter",
-        description: "Induksjon, lokk til alle grytene og plassbesparende handtak.",
+        description:
+          "Induksjon, lokk til alle grytene og plassbesparende handtak.",
         categoryName: "Kjøkken",
         priority: "HIGH",
         timeframe: "SOON",
         dueInDays: 4,
         estimatedPrice: 1999,
         url: "https://www.kitchn.no/sok/?q=kasserollesett",
-        imageUrl: "https://images.unsplash.com/photo-1584990347449-4f7d1f90c6f3?auto=format&fit=crop&w=800&q=80",
+        imageUrl:
+          "https://images.unsplash.com/photo-1584990347449-4f7d1f90c6f3?auto=format&fit=crop&w=800&q=80",
         storeName: "Kitchn",
         assignedToEmail: "marcus@demo.homeinventory.local",
         status: "PENDING",
@@ -344,7 +363,8 @@ const DEMO_LISTS: SeedList[] = [
         dueInDays: 3,
         estimatedPrice: 699,
         url: "https://www.ikea.com/no/no/search/?q=bestikksett",
-        imageUrl: "https://images.unsplash.com/photo-1464306076886-da185f6a9d05?auto=format&fit=crop&w=800&q=80",
+        imageUrl:
+          "https://images.unsplash.com/photo-1464306076886-da185f6a9d05?auto=format&fit=crop&w=800&q=80",
         storeName: "IKEA",
         assignedToEmail: "ida@demo.homeinventory.local",
         status: "PURCHASED",
@@ -359,7 +379,8 @@ const DEMO_LISTS: SeedList[] = [
         dueInDays: 5,
         estimatedPrice: 899,
         url: "https://www.ikea.com/no/no/search/?q=tallerkensett",
-        imageUrl: "https://images.unsplash.com/photo-1473093295043-cdd812d0e601?auto=format&fit=crop&w=800&q=80",
+        imageUrl:
+          "https://images.unsplash.com/photo-1473093295043-cdd812d0e601?auto=format&fit=crop&w=800&q=80",
         storeName: "IKEA",
         assignedToEmail: "eirik@demo.homeinventory.local",
         status: "PENDING",
@@ -372,7 +393,8 @@ const DEMO_LISTS: SeedList[] = [
         timeframe: "SOON",
         dueInDays: 2,
         url: "https://www.elkjop.no/search/kaffetrakter",
-        imageUrl: "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=800&q=80",
+        imageUrl:
+          "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=800&q=80",
         storeName: "Elkjop",
         assignedToEmail: "marcus@demo.homeinventory.local",
         status: "PENDING",
@@ -381,7 +403,8 @@ const DEMO_LISTS: SeedList[] = [
             name: "Wilfa Performance Compact",
             price: 1499,
             url: "https://www.elkjop.no/search/wilfa%20kaffetrakter",
-            imageUrl: "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=800&q=80",
+            imageUrl:
+              "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=800&q=80",
             storeName: "Elkjop",
             notes: "Beste bryggekvalitet.",
           },
@@ -408,7 +431,8 @@ const DEMO_LISTS: SeedList[] = [
         priority: "LOW",
         timeframe: "LATER",
         dueInDays: 35,
-        imageUrl: "https://images.unsplash.com/photo-1585771724684-38269d6639fd?auto=format&fit=crop&w=800&q=80",
+        imageUrl:
+          "https://images.unsplash.com/photo-1585771724684-38269d6639fd?auto=format&fit=crop&w=800&q=80",
         storeName: "Komplett",
         assignedToEmail: "sara@demo.homeinventory.local",
         status: "PENDING",
@@ -417,7 +441,8 @@ const DEMO_LISTS: SeedList[] = [
             name: "Roborock Q Revo",
             price: 7490,
             url: "https://www.komplett.no/search?q=roborock",
-            imageUrl: "https://images.unsplash.com/photo-1585771724684-38269d6639fd?auto=format&fit=crop&w=800&q=80",
+            imageUrl:
+              "https://images.unsplash.com/photo-1585771724684-38269d6639fd?auto=format&fit=crop&w=800&q=80",
             storeName: "Komplett",
             notes: "Mest funksjon for pengene.",
           },
@@ -446,7 +471,8 @@ const DEMO_LISTS: SeedList[] = [
         dueInDays: 1,
         estimatedPrice: 489,
         url: "https://www.normal.no/search?query=rengjoring",
-        imageUrl: "https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=800&q=80",
+        imageUrl:
+          "https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=800&q=80",
         storeName: "Normal",
         assignedToEmail: "eirik@demo.homeinventory.local",
         status: "PURCHASED",
@@ -461,7 +487,8 @@ const DEMO_LISTS: SeedList[] = [
         dueInDays: 18,
         estimatedPrice: 349,
         url: "https://www.ikea.com/no/no/search/?q=matboks%20glass",
-        imageUrl: "https://images.unsplash.com/photo-1514996937319-344454492b37?auto=format&fit=crop&w=800&q=80",
+        imageUrl:
+          "https://images.unsplash.com/photo-1514996937319-344454492b37?auto=format&fit=crop&w=800&q=80",
         storeName: "IKEA",
         status: "PENDING",
       },
@@ -474,7 +501,8 @@ const DEMO_LISTS: SeedList[] = [
         dueInDays: 40,
         estimatedPrice: 1599,
         url: "https://www.jollyroom.no/search?query=barnestol",
-        imageUrl: "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=800&q=80",
+        imageUrl:
+          "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=800&q=80",
         storeName: "Jollyroom",
         assignedToEmail: "ida@demo.homeinventory.local",
         status: "SKIPPED",
@@ -491,7 +519,8 @@ const DEMO_LISTS: SeedList[] = [
         priority: "HIGH",
         timeframe: "NOW",
         dueInDays: 12,
-        imageUrl: "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=800&q=80",
+        imageUrl:
+          "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=800&q=80",
         storeName: "Bohus",
         assignedToEmail: "ida@demo.homeinventory.local",
         status: "PENDING",
@@ -500,7 +529,8 @@ const DEMO_LISTS: SeedList[] = [
             name: "Bohus Modulsofa 290 cm",
             price: 18995,
             url: "https://www.bohus.no/sok?text=modulsofa",
-            imageUrl: "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=800&q=80",
+            imageUrl:
+              "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=800&q=80",
             storeName: "Bohus",
             notes: "Favoritten pa komfort.",
           },
@@ -529,7 +559,8 @@ const DEMO_LISTS: SeedList[] = [
         dueInDays: 7,
         estimatedPrice: 1299,
         url: "https://www.ikea.com/no/no/search/?q=gulvlampe",
-        imageUrl: "https://images.unsplash.com/photo-1507473885765-e6ed057f782c?auto=format&fit=crop&w=800&q=80",
+        imageUrl:
+          "https://images.unsplash.com/photo-1507473885765-e6ed057f782c?auto=format&fit=crop&w=800&q=80",
         storeName: "IKEA",
         assignedToEmail: "eirik@demo.homeinventory.local",
         status: "PURCHASED",
@@ -544,7 +575,8 @@ const DEMO_LISTS: SeedList[] = [
         dueInDays: 22,
         estimatedPrice: 2499,
         url: "https://www.ikea.com/no/no/search/?q=tv-benk",
-        imageUrl: "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?auto=format&fit=crop&w=800&q=80",
+        imageUrl:
+          "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?auto=format&fit=crop&w=800&q=80",
         storeName: "IKEA",
         assignedToEmail: "marcus@demo.homeinventory.local",
         status: "PENDING",
@@ -558,7 +590,8 @@ const DEMO_LISTS: SeedList[] = [
         dueInDays: 6,
         estimatedPrice: 2995,
         url: "https://www.komplett.no/search?q=27%20tommer%20skjerm",
-        imageUrl: "https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?auto=format&fit=crop&w=800&q=80",
+        imageUrl:
+          "https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?auto=format&fit=crop&w=800&q=80",
         storeName: "Komplett",
         assignedToEmail: "sara@demo.homeinventory.local",
         status: "PENDING",
@@ -588,21 +621,24 @@ const DEMO_LISTS: SeedList[] = [
         dueInDays: 8,
         estimatedPrice: 3790,
         url: "https://www.ajprodukter.no/kontor-konferanse/kontorstoler",
-        imageUrl: "https://images.unsplash.com/photo-1505843490701-5be5d6483f91?auto=format&fit=crop&w=800&q=80",
+        imageUrl:
+          "https://images.unsplash.com/photo-1505843490701-5be5d6483f91?auto=format&fit=crop&w=800&q=80",
         storeName: "AJ Produkter",
         assignedToEmail: "eirik@demo.homeinventory.local",
         status: "PENDING",
       },
       {
         name: "Trådløs skriver",
-        description: "Ble vurdert, men vi prover a klare oss uten fast skriver.",
+        description:
+          "Ble vurdert, men vi prover a klare oss uten fast skriver.",
         categoryName: "Kontor",
         priority: "LOW",
         timeframe: "SOMEDAY",
         dueInDays: 30,
         estimatedPrice: 1490,
         url: "https://www.elkjop.no/search/skriver",
-        imageUrl: "https://images.unsplash.com/photo-1612817159949-195b6eb9e31a?auto=format&fit=crop&w=800&q=80",
+        imageUrl:
+          "https://images.unsplash.com/photo-1612817159949-195b6eb9e31a?auto=format&fit=crop&w=800&q=80",
         storeName: "Elkjop",
         assignedToEmail: "sara@demo.homeinventory.local",
         status: "SKIPPED",
@@ -613,7 +649,8 @@ const DEMO_LISTS: SeedList[] = [
         priority: "LOW",
         estimatedPrice: 179,
         url: "https://www.clasohlson.com/no/search?text=kabelclips",
-        imageUrl: "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=800&q=80",
+        imageUrl:
+          "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=800&q=80",
         storeName: "Clas Ohlson",
         status: "PENDING",
       },
@@ -624,7 +661,8 @@ const DEMO_LISTS: SeedList[] = [
         priority: "MEDIUM",
         timeframe: "LATER",
         dueInDays: 16,
-        imageUrl: "https://images.unsplash.com/photo-1518444065439-e933c06ce9cd?auto=format&fit=crop&w=800&q=80",
+        imageUrl:
+          "https://images.unsplash.com/photo-1518444065439-e933c06ce9cd?auto=format&fit=crop&w=800&q=80",
         storeName: "Clas Ohlson",
         assignedToEmail: "marcus@demo.homeinventory.local",
         status: "PENDING",
@@ -659,7 +697,8 @@ const DEMO_LISTS: SeedList[] = [
         dueInDays: 28,
         estimatedPrice: 1699,
         url: "https://www.jula.no/search/?query=gresstrimmer",
-        imageUrl: "https://images.unsplash.com/photo-1622383563227-04401ab4e5ea?auto=format&fit=crop&w=800&q=80",
+        imageUrl:
+          "https://images.unsplash.com/photo-1622383563227-04401ab4e5ea?auto=format&fit=crop&w=800&q=80",
         storeName: "Jula",
         assignedToEmail: "marcus@demo.homeinventory.local",
         status: "PENDING",
@@ -673,7 +712,8 @@ const DEMO_LISTS: SeedList[] = [
         dueInDays: 21,
         estimatedPrice: 899,
         url: "https://www.biltema.no/sok/?query=hageslange",
-        imageUrl: "https://images.unsplash.com/photo-1501004318641-b39e6451bec6?auto=format&fit=crop&w=800&q=80",
+        imageUrl:
+          "https://images.unsplash.com/photo-1501004318641-b39e6451bec6?auto=format&fit=crop&w=800&q=80",
         storeName: "Biltema",
         status: "PENDING",
       },
@@ -686,7 +726,8 @@ const DEMO_LISTS: SeedList[] = [
         dueInDays: 4,
         estimatedPrice: 799,
         url: "https://www.jula.no/search/?query=verkt%C3%B8ykasse",
-        imageUrl: "https://images.unsplash.com/photo-1504148455328-c376907d081c?auto=format&fit=crop&w=800&q=80",
+        imageUrl:
+          "https://images.unsplash.com/photo-1504148455328-c376907d081c?auto=format&fit=crop&w=800&q=80",
         storeName: "Jula",
         assignedToEmail: "eirik@demo.homeinventory.local",
         status: "PURCHASED",
@@ -701,7 +742,8 @@ const DEMO_LISTS: SeedList[] = [
         dueInDays: 2,
         estimatedPrice: 1899,
         url: "https://www.obsbygg.no/search?query=stige",
-        imageUrl: "https://images.unsplash.com/photo-1517048676732-d65bc937f952?auto=format&fit=crop&w=800&q=80",
+        imageUrl:
+          "https://images.unsplash.com/photo-1517048676732-d65bc937f952?auto=format&fit=crop&w=800&q=80",
         storeName: "Obs BYGG",
         assignedToEmail: "marcus@demo.homeinventory.local",
         status: "PENDING",
@@ -715,7 +757,8 @@ const DEMO_LISTS: SeedList[] = [
         dueInDays: 9,
         estimatedPrice: 549,
         url: "https://www.ikea.com/no/no/search/?q=oppbevaringsboks",
-        imageUrl: "https://images.unsplash.com/photo-1584473457409-ce8a7c7c833d?auto=format&fit=crop&w=800&q=80",
+        imageUrl:
+          "https://images.unsplash.com/photo-1584473457409-ce8a7c7c833d?auto=format&fit=crop&w=800&q=80",
         storeName: "IKEA",
         assignedToEmail: "ida@demo.homeinventory.local",
         status: "PENDING",
@@ -727,7 +770,8 @@ const DEMO_LISTS: SeedList[] = [
         priority: "MEDIUM",
         timeframe: "LATER",
         dueInDays: 24,
-        imageUrl: "https://images.unsplash.com/photo-1620626011761-996317b8d101?auto=format&fit=crop&w=800&q=80",
+        imageUrl:
+          "https://images.unsplash.com/photo-1620626011761-996317b8d101?auto=format&fit=crop&w=800&q=80",
         storeName: "Megaflis",
         assignedToEmail: "sara@demo.homeinventory.local",
         status: "PENDING",
@@ -736,7 +780,8 @@ const DEMO_LISTS: SeedList[] = [
             name: "Rundt speil 80 cm med LED",
             price: 3299,
             url: "https://www.megaflis.no/search?text=led-speil",
-            imageUrl: "https://images.unsplash.com/photo-1620626011761-996317b8d101?auto=format&fit=crop&w=800&q=80",
+            imageUrl:
+              "https://images.unsplash.com/photo-1620626011761-996317b8d101?auto=format&fit=crop&w=800&q=80",
             storeName: "Megaflis",
             notes: "Favoritt til gjestebadet.",
           },
@@ -756,20 +801,23 @@ const DEMO_LISTS: SeedList[] = [
         priority: "LOW",
         estimatedPrice: 199,
         url: "https://www.clasohlson.com/no/search?text=kroker",
-        imageUrl: "https://images.unsplash.com/photo-1519710164239-da123dc03ef4?auto=format&fit=crop&w=800&q=80",
+        imageUrl:
+          "https://images.unsplash.com/photo-1519710164239-da123dc03ef4?auto=format&fit=crop&w=800&q=80",
         storeName: "Clas Ohlson",
         status: "PENDING",
       },
       {
         name: "Lite utebord til balkongen",
-        description: "Har lav prioritet siden vi kan vente til våren er ordentlig i gang.",
+        description:
+          "Har lav prioritet siden vi kan vente til våren er ordentlig i gang.",
         categoryName: "Møbler",
         priority: "LOW",
         timeframe: "SOMEDAY",
         dueInDays: 45,
         estimatedPrice: 3299,
         url: "https://www.ikea.com/no/no/search/?q=utebord",
-        imageUrl: "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=800&q=80",
+        imageUrl:
+          "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=800&q=80",
         storeName: "IKEA",
         status: "SKIPPED",
       },
@@ -857,7 +905,9 @@ async function createDemoHousehold(userIdByEmail: Map<string, string>) {
   const categories = await prisma.category.findMany({
     where: { householdId: household.id },
   })
-  const categoryIdByName = new Map(categories.map((category) => [category.name, category.id]))
+  const categoryIdByName = new Map(
+    categories.map((category) => [category.name, category.id])
+  )
 
   const now = new Date()
 
@@ -879,7 +929,10 @@ async function createDemoHousehold(userIdByEmail: Map<string, string>) {
             : undefined,
           priority: item.priority ?? "MEDIUM",
           timeframe: item.timeframe,
-          dueDate: typeof item.dueInDays === "number" ? addDays(now, item.dueInDays) : undefined,
+          dueDate:
+            typeof item.dueInDays === "number"
+              ? addDays(now, item.dueInDays)
+              : undefined,
           estimatedPrice: item.estimatedPrice,
           url: item.url,
           imageUrl: item.imageUrl,
@@ -889,7 +942,8 @@ async function createDemoHousehold(userIdByEmail: Map<string, string>) {
             : undefined,
           status: item.status ?? "PENDING",
           purchasedAt:
-            item.status === "PURCHASED" && typeof item.purchasedDaysAgo === "number"
+            item.status === "PURCHASED" &&
+            typeof item.purchasedDaysAgo === "number"
               ? addDays(now, -item.purchasedDaysAgo)
               : item.status === "PURCHASED"
                 ? now
@@ -937,12 +991,14 @@ async function createDemoHousehold(userIdByEmail: Map<string, string>) {
     data: {
       householdId: household.id,
       taxDeductionPercent: 22,
+      propertyValue: 4800000,
       members: {
         create: [
           {
             name: "Ida Solberg",
             grossMonthlyIncome: 52000,
             taxPercent: 34,
+            netMonthlyIncome: 35120,
             sortOrder: 0,
           },
           {
@@ -963,12 +1019,13 @@ async function createDemoHousehold(userIdByEmail: Map<string, string>) {
             annualInterestRate: 5.5,
             termMonths: 300,
             monthlyFees: 50,
+            fixedRateUntil: new Date("2027-09-01T00:00:00Z"),
             sortOrder: 0,
           },
           {
             bankName: "DNB",
             loanName: "Billån",
-            loanType: "OTHER",
+            loanType: "CAR",
             repaymentType: "SERIAL",
             principalAmount: 180000,
             annualInterestRate: 6.5,
@@ -1004,7 +1061,9 @@ async function createDemoHousehold(userIdByEmail: Map<string, string>) {
         name: "Strøm",
         categoryId: housingCategory.id,
         type: "EXPENSE" as BudgetEntryType,
-        monthlyAmount: 2500,
+        amount: 2500,
+        provider: "Tibber",
+        paymentDay: 20,
         budgetId: budget.id,
         sortOrder: 0,
       },
@@ -1012,7 +1071,8 @@ async function createDemoHousehold(userIdByEmail: Map<string, string>) {
         name: "Kommunale avgifter",
         categoryId: housingCategory.id,
         type: "EXPENSE" as BudgetEntryType,
-        monthlyAmount: 3200,
+        amount: 9600,
+        frequency: "QUARTERLY",
         budgetId: budget.id,
         sortOrder: 1,
       },
@@ -1020,7 +1080,10 @@ async function createDemoHousehold(userIdByEmail: Map<string, string>) {
         name: "Forsikring bolig og innbo",
         categoryId: housingCategory.id,
         type: "EXPENSE" as BudgetEntryType,
-        monthlyAmount: 1200,
+        amount: 14400,
+        frequency: "YEARLY",
+        provider: "Gjensidige",
+        renewalDate: new Date("2027-01-01T00:00:00Z"),
         budgetId: budget.id,
         sortOrder: 2,
       },
@@ -1028,7 +1091,7 @@ async function createDemoHousehold(userIdByEmail: Map<string, string>) {
         name: "Vedlikehold",
         categoryId: housingCategory.id,
         type: "EXPENSE" as BudgetEntryType,
-        monthlyAmount: 1500,
+        amount: 1500,
         budgetId: budget.id,
         sortOrder: 3,
       },
@@ -1036,7 +1099,7 @@ async function createDemoHousehold(userIdByEmail: Map<string, string>) {
         name: "Bil og kollektiv",
         categoryId: fixedCategory.id,
         type: "EXPENSE" as BudgetEntryType,
-        monthlyAmount: 4500,
+        amount: 4500,
         budgetId: budget.id,
         sortOrder: 4,
       },
@@ -1044,7 +1107,7 @@ async function createDemoHousehold(userIdByEmail: Map<string, string>) {
         name: "Streaming og mobil",
         categoryId: fixedCategory.id,
         type: "EXPENSE" as BudgetEntryType,
-        monthlyAmount: 1800,
+        amount: 1800,
         budgetId: budget.id,
         sortOrder: 5,
       },
@@ -1052,7 +1115,7 @@ async function createDemoHousehold(userIdByEmail: Map<string, string>) {
         name: "Dagligvarer",
         categoryId: fixedCategory.id,
         type: "EXPENSE" as BudgetEntryType,
-        monthlyAmount: 8000,
+        amount: 8000,
         budgetId: budget.id,
         sortOrder: 6,
       },
@@ -1060,23 +1123,24 @@ async function createDemoHousehold(userIdByEmail: Map<string, string>) {
         name: "Personlig forbruk",
         categoryId: fixedCategory.id,
         type: "EXPENSE" as BudgetEntryType,
-        monthlyAmount: 3000,
+        amount: 3000,
         budgetId: budget.id,
         sortOrder: 7,
       },
       {
         name: "Sparing",
         categoryId: fixedCategory.id,
-        type: "EXPENSE" as BudgetEntryType,
-        monthlyAmount: 5000,
+        type: "SAVINGS" as BudgetEntryType,
+        provider: "Fondskonto",
+        amount: 5000,
         budgetId: budget.id,
         sortOrder: 8,
       },
       {
         name: "Buffer",
         categoryId: fixedCategory.id,
-        type: "EXPENSE" as BudgetEntryType,
-        monthlyAmount: 2000,
+        type: "SAVINGS" as BudgetEntryType,
+        amount: 2000,
         budgetId: budget.id,
         sortOrder: 9,
       },
@@ -1084,7 +1148,7 @@ async function createDemoHousehold(userIdByEmail: Map<string, string>) {
         name: "Utleie av hybel",
         categoryId: null,
         type: "INCOME" as BudgetEntryType,
-        monthlyAmount: 6000,
+        amount: 6000,
         budgetId: budget.id,
         sortOrder: 10,
       },
@@ -1092,7 +1156,7 @@ async function createDemoHousehold(userIdByEmail: Map<string, string>) {
         name: "Treningsabonnement",
         categoryId: null,
         type: "EXPENSE" as BudgetEntryType,
-        monthlyAmount: 800,
+        amount: 800,
         budgetId: budget.id,
         sortOrder: 11,
       },

@@ -7,6 +7,7 @@ import {
   Plane,
   PlusCircle,
   Receipt,
+  Settings2,
   Trash2,
   Users,
   Wallet,
@@ -28,11 +29,26 @@ import {
   deleteBudgetMember,
   deleteBudgetTrip,
 } from "@/lib/actions/budget"
-import { calculateBudgetOverview } from "@/lib/application/budget/calculations"
-import { calculateLoanMonthlyAmounts } from "@/lib/budget-loan"
+import {
+  calculateBudgetOverview,
+  entryMonthlyAmount,
+  loanMonthlyAmounts,
+  memberCalculatedNetIncome,
+  memberNetIncome,
+  tripCostPerTrip,
+  tripMonthlyCost,
+} from "@/lib/application/budget/calculations"
+import {
+  BUDGET_ENTRY_OPTIONAL_FIELDS,
+  BUDGET_LOAN_OPTIONAL_FIELDS,
+  BUDGET_MEMBER_OPTIONAL_FIELDS,
+  BUDGET_SETTINGS_OPTIONAL_FIELDS,
+  BUDGET_TRIP_OPTIONAL_FIELDS,
+} from "@/lib/application/budget/fields"
 import { toast } from "sonner"
 import type {
   BudgetEntryType,
+  BudgetFrequency,
   BudgetLoanRepaymentType,
   BudgetLoanType,
   TripTransportType,
@@ -42,6 +58,18 @@ import { LoanDialog } from "./loan-dialog"
 import { EntryDialog } from "./entry-dialog"
 import { TripDialog } from "./trip-dialog"
 import { CategoryDialog } from "./category-dialog"
+import { SettingsDialog } from "./settings-dialog"
+import { KeyFigures } from "./key-figures"
+import { RowDetails, countEmptyFields } from "./row-details"
+import { ViewOptionsMenu, useBudgetViewOptions } from "./view-options"
+import type { BudgetViewOptions } from "./view-options"
+import {
+  ENTRY_TYPE_LABELS,
+  ENTRY_TYPE_TONE,
+  FREQUENCY_SUFFIX,
+  LOAN_TYPE_LABELS,
+  formatCurrency,
+} from "./budget-format"
 
 export interface BudgetCategoryData {
   id: string
@@ -51,6 +79,7 @@ export interface BudgetCategoryData {
 export interface BudgetData {
   id: string
   taxDeductionPercent: number
+  propertyValue: number | null
   categories: BudgetCategoryData[]
   members: BudgetMemberData[]
   loans: BudgetLoanData[]
@@ -63,6 +92,8 @@ export interface BudgetMemberData {
   name: string
   grossMonthlyIncome: number
   taxPercent: number
+  netMonthlyIncome: number | null
+  notes: string | null
 }
 
 export interface BudgetLoanData {
@@ -75,6 +106,9 @@ export interface BudgetLoanData {
   annualInterestRate: number
   termMonths: number
   monthlyFees: number
+  /** `YYYY-MM-DD` */
+  fixedRateUntil: string | null
+  notes: string | null
 }
 
 export interface BudgetTripData {
@@ -82,10 +116,12 @@ export interface BudgetTripData {
   name: string
   transportType: TripTransportType
   annualTrips: number
-  ticketPerTrip: number
-  tollPerTrip: number
-  ferryPerTrip: number
-  fuelPerTrip: number
+  ticketPerTrip: number | null
+  tollPerTrip: number | null
+  ferryPerTrip: number | null
+  fuelPerTrip: number | null
+  otherPerTrip: number | null
+  notes: string | null
 }
 
 export interface BudgetEntryData {
@@ -93,29 +129,47 @@ export interface BudgetEntryData {
   name: string
   category: BudgetCategoryData | null
   type: BudgetEntryType
-  monthlyAmount: number
+  amount: number
+  frequency: BudgetFrequency
+  provider: string | null
+  paymentDay: number | null
+  /** `YYYY-MM-DD` */
+  renewalDate: string | null
+  notes: string | null
 }
-
-const ENTRY_TYPE_LABELS: Record<BudgetEntryType, string> = {
-  INCOME: "Inntekt",
-  EXPENSE: "Kostnad",
-  DEDUCTION: "Fradrag",
-}
-
-const formatCurrency = (amount: number) =>
-  new Intl.NumberFormat("nb-NO", {
-    style: "currency",
-    currency: "NOK",
-    maximumFractionDigits: 0,
-  }).format(amount)
 
 interface BudgetViewProps {
   budget: BudgetData
 }
 
+/** Runs a delete after the user confirms it in the browser dialog. */
+function useConfirmedDelete() {
+  const [isPending, startTransition] = useTransition()
+
+  function remove(
+    message: string,
+    action: () => Promise<void>,
+    labels: { success: string; error: string }
+  ) {
+    if (!confirm(message)) return
+    startTransition(async () => {
+      try {
+        await action()
+        toast.success(labels.success)
+      } catch {
+        toast.error(labels.error)
+      }
+    })
+  }
+
+  return [isPending, remove] as const
+}
+
 export function BudgetView({ budget }: BudgetViewProps) {
   const [period, setPeriod] = useState<"month" | "year">("month")
   const multiplier = period === "year" ? 12 : 1
+  const periodLabel = period === "year" ? "per år" : "per måned"
+  const [viewOptions, setViewOptions] = useBudgetViewOptions()
 
   const [memberDialogOpen, setMemberDialogOpen] = useState(false)
   const [editingMember, setEditingMember] = useState<BudgetMemberData | null>(
@@ -132,6 +186,8 @@ export function BudgetView({ budget }: BudgetViewProps) {
   const [editingCategory, setEditingCategory] =
     useState<BudgetCategoryData | null>(null)
 
+  const [settingsOpen, setSettingsOpen] = useState(false)
+
   const [entryDialogOpen, setEntryDialogOpen] = useState(false)
   const [editingEntry, setEditingEntry] = useState<BudgetEntryData | null>(null)
   const [entryDefaults, setEntryDefaults] = useState<{
@@ -139,74 +195,40 @@ export function BudgetView({ budget }: BudgetViewProps) {
     type?: BudgetEntryType
   }>({})
 
-  const [isPending, startTransition] = useTransition()
+  const [isPending, confirmDelete] = useConfirmedDelete()
 
   const calculations = useMemo(() => calculateBudgetOverview(budget), [budget])
 
-  function handleDeleteMember(id: string) {
-    startTransition(async () => {
-      try {
-        await deleteBudgetMember(id)
-        toast.success("Medlem slettet")
-      } catch {
-        toast.error("Kunne ikke slette medlem")
-      }
-    })
+  const settingsRow = {
+    propertyValue: budget.propertyValue,
+    hasMortgage: calculations.mortgageDebt > 0,
+  }
+  const emptyFieldCount =
+    countEmptyFields(BUDGET_MEMBER_OPTIONAL_FIELDS, budget.members) +
+    countEmptyFields(BUDGET_LOAN_OPTIONAL_FIELDS, budget.loans) +
+    countEmptyFields(BUDGET_TRIP_OPTIONAL_FIELDS, budget.trips) +
+    countEmptyFields(BUDGET_ENTRY_OPTIONAL_FIELDS, budget.entries) +
+    countEmptyFields(BUDGET_SETTINGS_OPTIONAL_FIELDS, [settingsRow])
+
+  function editMember(member: BudgetMemberData | null) {
+    setEditingMember(member)
+    setMemberDialogOpen(true)
   }
 
-  function handleDeleteLoan(id: string) {
-    startTransition(async () => {
-      try {
-        await deleteBudgetLoan(id)
-        toast.success("Lån slettet")
-      } catch {
-        toast.error("Kunne ikke slette lån")
-      }
-    })
+  function editLoan(loan: BudgetLoanData | null) {
+    setEditingLoan(loan)
+    setLoanDialogOpen(true)
   }
 
-  function handleDeleteTrip(id: string) {
-    startTransition(async () => {
-      try {
-        await deleteBudgetTrip(id)
-        toast.success("Reise slettet")
-      } catch {
-        toast.error("Kunne ikke slette reise")
-      }
-    })
+  function editTrip(trip: BudgetTripData | null) {
+    setEditingTrip(trip)
+    setTripDialogOpen(true)
   }
 
-  function handleDeleteEntry(id: string) {
-    startTransition(async () => {
-      try {
-        await deleteBudgetEntry(id)
-        toast.success("Post slettet")
-      } catch {
-        toast.error("Kunne ikke slette post")
-      }
-    })
-  }
-
-  function handleDeleteCategory(category: BudgetCategoryData) {
-    const entryCount =
-      calculations.categoryGroups.find(
-        (group) => group.category.id === category.id
-      )?.entries.length ?? 0
-    const message =
-      entryCount > 0
-        ? `Slette kategorien "${category.name}"? ${entryCount} ${entryCount === 1 ? "post blir" : "poster blir"} ukategorisert.`
-        : `Slette kategorien "${category.name}"?`
-
-    if (!confirm(message)) return
-
-    startTransition(async () => {
-      try {
-        await deleteBudgetCategory(category.id)
-        toast.success("Kategori slettet")
-      } catch {
-        toast.error("Kunne ikke slette kategori")
-      }
-    })
+  function editEntry(entry: BudgetEntryData) {
+    setEditingEntry(entry)
+    setEntryDefaults({})
+    setEntryDialogOpen(true)
   }
 
   function openAddEntry(defaults: {
@@ -218,10 +240,23 @@ export function BudgetView({ budget }: BudgetViewProps) {
     setEntryDialogOpen(true)
   }
 
-  function openCreateCategory() {
-    setEditingCategory(null)
-    setCategoryDialogOpen(true)
+  function handleDeleteCategory(category: BudgetCategoryData) {
+    const entryCount =
+      calculations.categoryGroups.find(
+        (group) => group.category.id === category.id
+      )?.entries.length ?? 0
+    const message =
+      entryCount > 0
+        ? `Slette kategorien «${category.name}»? ${entryCount} ${entryCount === 1 ? "post blir" : "poster blir"} ukategorisert.`
+        : `Slette kategorien «${category.name}»?`
+
+    confirmDelete(message, () => deleteBudgetCategory(category.id), {
+      success: "Kategori slettet",
+      error: "Kunne ikke slette kategori",
+    })
   }
+
+  const showKeyFigures = budget.members.length > 0 || budget.loans.length > 0
 
   return (
     <div className="flex flex-col gap-6 overflow-x-hidden">
@@ -235,19 +270,37 @@ export function BudgetView({ budget }: BudgetViewProps) {
             <TabsTrigger value="year">Per år</TabsTrigger>
           </TabsList>
         </Tabs>
-        <Button variant="outline" size="sm" onClick={openCreateCategory}>
-          <PlusCircle className="h-3.5 w-3.5" data-icon="inline-start" />
-          Legg til kategori
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <ViewOptionsMenu
+            options={viewOptions}
+            onChange={setViewOptions}
+            emptyFieldCount={emptyFieldCount}
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setSettingsOpen(true)}
+          >
+            <Settings2 className="h-3.5 w-3.5" data-icon="inline-start" />
+            Innstillinger
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setEditingCategory(null)
+              setCategoryDialogOpen(true)
+            }}
+          >
+            <PlusCircle className="h-3.5 w-3.5" data-icon="inline-start" />
+            Legg til kategori
+          </Button>
+        </div>
       </div>
 
       <BudgetStatsSummary
         disposable={calculations.disposable * multiplier}
-        disposableSubtitle={
-          period === "year"
-            ? "per år, etter alle kostnader og fradrag"
-            : "per måned, etter alle kostnader og fradrag"
-        }
+        disposableSubtitle={`${periodLabel}, etter kostnader, sparing og fradrag`}
         items={[
           {
             label: "Netto inntekt",
@@ -259,13 +312,31 @@ export function BudgetView({ budget }: BudgetViewProps) {
             value: calculations.totalExpenses * multiplier,
             tone: "expense",
           },
+          ...(calculations.totalSavings > 0
+            ? [
+                {
+                  label: "Sparing",
+                  value: calculations.totalSavings * multiplier,
+                  tone: "savings" as const,
+                },
+              ]
+            : []),
           {
-            label: "Rentefradrag",
-            value: calculations.monthlyTaxDeduction * multiplier,
+            label: "Fradrag",
+            value: calculations.totalDeductions * multiplier,
             tone: "info",
           },
         ]}
       />
+
+      {showKeyFigures && (
+        <KeyFigures
+          figures={{ ...calculations, propertyValue: budget.propertyValue }}
+          multiplier={multiplier}
+          periodLabel={periodLabel}
+          onOpenSettings={() => setSettingsOpen(true)}
+        />
+      )}
 
       <BudgetSection
         title="Inntekter"
@@ -278,72 +349,61 @@ export function BudgetView({ budget }: BudgetViewProps) {
             {formatCurrency(calculations.totalNetIncome * multiplier)} netto
           </Badge>
         }
-        onAdd={() => {
-          setEditingMember(null)
-          setMemberDialogOpen(true)
-        }}
+        onAdd={() => editMember(null)}
         addLabel="Legg til medlem"
       >
         {budget.members.length === 0 ? (
-          <p className="py-4 text-center text-sm text-muted-foreground">
-            Ingen medlemmer lagt til ennå
-          </p>
+          <EmptyText>Ingen medlemmer lagt til ennå</EmptyText>
         ) : (
           <div className="divide-y divide-border">
-            {budget.members.map((member) => {
-              const netIncome =
-                member.grossMonthlyIncome * (1 - member.taxPercent / 100)
-
-              return (
-                <div
-                  key={member.id}
-                  className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">{member.name}</p>
-                    <p className="text-xs break-words text-muted-foreground sm:text-sm">
-                      Brutto:{" "}
-                      {formatCurrency(member.grossMonthlyIncome * multiplier)}
-                      {" · "}
-                      Skatt: {member.taxPercent}%
-                    </p>
-                  </div>
-                  <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-start">
-                    <div className="text-right">
-                      <p className="text-sm font-medium tabular-nums sm:text-base">
-                        {formatCurrency(netIncome * multiplier)}
-                      </p>
-                      <Badge
-                        variant="secondary"
-                        className="hidden text-xs sm:inline-flex"
-                      >
-                        Beregnet
-                      </Badge>
-                    </div>
-                    <div className="flex items-center gap-1 sm:gap-2">
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => {
-                          setEditingMember(member)
-                          setMemberDialogOpen(true)
-                        }}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => handleDeleteMember(member.id)}
-                        disabled={isPending}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
+            {budget.members.map((member) => (
+              <BudgetRow
+                key={member.id}
+                title={member.name}
+                subtitle={
+                  <>
+                    Brutto:{" "}
+                    {formatCurrency(member.grossMonthlyIncome * multiplier)}
+                    {" · "}
+                    Skatt: {member.taxPercent}%
+                    {member.netMonthlyIncome != null && (
+                      <>
+                        {" · "}
+                        <span className="line-through">
+                          {formatCurrency(
+                            memberCalculatedNetIncome(member) * multiplier
+                          )}
+                        </span>
+                      </>
+                    )}
+                  </>
+                }
+                details={
+                  <RowDetails
+                    fields={BUDGET_MEMBER_OPTIONAL_FIELDS}
+                    row={member}
+                    options={viewOptions}
+                    onEdit={() => editMember(member)}
+                  />
+                }
+                amount={formatCurrency(memberNetIncome(member) * multiplier)}
+                amountNote={
+                  member.netMonthlyIncome != null ? "Utbetalt" : "Beregnet"
+                }
+                onEdit={() => editMember(member)}
+                onDelete={() =>
+                  confirmDelete(
+                    `Slette inntekten for «${member.name}»?`,
+                    () => deleteBudgetMember(member.id),
+                    {
+                      success: "Medlem slettet",
+                      error: "Kunne ikke slette medlem",
+                    }
+                  )
+                }
+                isPending={isPending}
+              />
+            ))}
           </div>
         )}
       </BudgetSection>
@@ -356,118 +416,30 @@ export function BudgetView({ budget }: BudgetViewProps) {
             {formatCurrency(calculations.totalLoanCost * multiplier)}
           </Badge>
         }
-        onAdd={() => {
-          setEditingLoan(null)
-          setLoanDialogOpen(true)
-        }}
+        onAdd={() => editLoan(null)}
         addLabel="Legg til lån"
       >
         {budget.loans.length === 0 ? (
-          <p className="py-4 text-center text-sm text-muted-foreground">
-            Ingen lån lagt til ennå
-          </p>
+          <EmptyText>Ingen lån lagt til ennå</EmptyText>
         ) : (
           <div className="divide-y divide-border">
-            {budget.loans.map((loan) => {
-              const monthly = calculateLoanMonthlyAmounts(loan)
-              const totalMonthly = monthly.monthlyPayment + loan.monthlyFees
-              const needsSetup =
-                loan.principalAmount <= 0 || loan.termMonths <= 0
-              const termYears = loan.termMonths / 12
-              const termLabel = Number.isInteger(termYears)
-                ? `${termYears} år`
-                : `${termYears.toFixed(1)} år`
-
-              return (
-                <div
-                  key={loan.id}
-                  className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="flex items-center gap-x-2 gap-y-1 font-medium sm:flex-wrap">
-                      {loan.loanName}
-                      <span className="hidden text-sm font-normal text-muted-foreground sm:inline">
-                        {loan.bankName}
-                      </span>
-                      <Badge
-                        variant="secondary"
-                        className="hidden text-xs sm:inline-flex"
-                      >
-                        {loan.loanType === "MORTGAGE" ? "Boliglån" : "Annet"}
-                      </Badge>
-                      <Badge
-                        variant="secondary"
-                        className="hidden text-xs sm:inline-flex"
-                      >
-                        {loan.repaymentType === "ANNUITY"
-                          ? "Annuitet"
-                          : "Serie"}
-                      </Badge>
-                    </p>
-                    {needsSetup ? (
-                      <p className="text-xs text-amber-600 sm:text-sm dark:text-amber-400">
-                        Mangler lånebeløp og nedbetalingstid – rediger lånet for
-                        å fullføre.
-                      </p>
-                    ) : (
-                      <p className="flex flex-wrap gap-x-1 gap-y-1 text-xs break-words text-muted-foreground sm:text-sm">
-                        <span className="sm:hidden">{loan.bankName}</span>
-                        <span className="hidden sm:inline">
-                          {formatCurrency(loan.principalAmount)} ·{" "}
-                          {loan.annualInterestRate}% · {termLabel}
-                        </span>
-                        <span className="hidden sm:inline">·</span>
-                        <span className="hidden sm:inline">
-                          Renter:{" "}
-                          {formatCurrency(monthly.monthlyInterest * multiplier)}
-                        </span>
-                        <span className="hidden sm:inline">·</span>
-                        <span className="hidden sm:inline">
-                          Avdrag:{" "}
-                          {formatCurrency(
-                            monthly.monthlyPrincipal * multiplier
-                          )}
-                        </span>
-                        {loan.monthlyFees > 0 && (
-                          <>
-                            <span className="hidden sm:inline">·</span>
-                            <span className="hidden sm:inline">
-                              Gebyrer:{" "}
-                              {formatCurrency(loan.monthlyFees * multiplier)}
-                            </span>
-                          </>
-                        )}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-start">
-                    <p className="text-sm font-medium tabular-nums sm:text-base">
-                      {formatCurrency(totalMonthly * multiplier)}
-                    </p>
-                    <div className="flex items-center gap-1 sm:gap-2">
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => {
-                          setEditingLoan(loan)
-                          setLoanDialogOpen(true)
-                        }}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => handleDeleteLoan(loan.id)}
-                        disabled={isPending}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
+            {budget.loans.map((loan) => (
+              <LoanRow
+                key={loan.id}
+                loan={loan}
+                multiplier={multiplier}
+                viewOptions={viewOptions}
+                onEdit={() => editLoan(loan)}
+                onDelete={() =>
+                  confirmDelete(
+                    `Slette lånet «${loan.loanName}»?`,
+                    () => deleteBudgetLoan(loan.id),
+                    { success: "Lån slettet", error: "Kunne ikke slette lån" }
+                  )
+                }
+                isPending={isPending}
+              />
+            ))}
             {calculations.totalLoanInterest > 0 && (
               <div className="flex flex-col gap-3 bg-muted/50 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                 <div className="min-w-0 flex-1">
@@ -475,25 +447,24 @@ export function BudgetView({ budget }: BudgetViewProps) {
                     Rentefradrag
                   </p>
                   <p className="text-xs break-words text-muted-foreground sm:text-sm">
-                    {budget.taxDeductionPercent}% av totale rentekostnader (
-                    {formatCurrency(calculations.totalLoanInterest * 12)}/år)
+                    {budget.taxDeductionPercent}% av rentekostnadene neste 12
+                    måneder (
+                    {formatCurrency(calculations.totalLoanInterest * 12)})
                   </p>
                 </div>
-                <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-start">
-                  <div className="text-right">
-                    <p className="text-sm font-medium text-blue-700 tabular-nums sm:text-base dark:text-blue-400">
-                      −
-                      {formatCurrency(
-                        calculations.monthlyTaxDeduction * multiplier
-                      )}
-                    </p>
-                    <Badge
-                      variant="secondary"
-                      className="hidden text-xs sm:inline-flex"
-                    >
-                      Beregnet
-                    </Badge>
-                  </div>
+                <div className="text-right">
+                  <p className="text-sm font-medium text-blue-700 tabular-nums sm:text-base dark:text-blue-400">
+                    −
+                    {formatCurrency(
+                      calculations.monthlyTaxDeduction * multiplier
+                    )}
+                  </p>
+                  <Badge
+                    variant="secondary"
+                    className="hidden text-xs sm:inline-flex"
+                  >
+                    Beregnet
+                  </Badge>
                 </div>
               </div>
             )}
@@ -509,66 +480,41 @@ export function BudgetView({ budget }: BudgetViewProps) {
             {formatCurrency(calculations.totalTripCost * multiplier)}
           </Badge>
         }
-        onAdd={() => {
-          setEditingTrip(null)
-          setTripDialogOpen(true)
-        }}
+        onAdd={() => editTrip(null)}
         addLabel="Legg til reise"
       >
         {budget.trips.length === 0 ? (
-          <p className="py-4 text-center text-sm text-muted-foreground">
-            Ingen reiser lagt til ennå
-          </p>
+          <EmptyText>Ingen reiser lagt til ennå</EmptyText>
         ) : (
           <div className="divide-y divide-border">
-            {budget.trips.map((trip) => {
-              const perTrip =
-                trip.transportType === "AIR_OR_PUBLIC"
-                  ? trip.ticketPerTrip
-                  : trip.tollPerTrip + trip.ferryPerTrip + trip.fuelPerTrip
-              const monthly = (trip.annualTrips * perTrip) / 12
-
-              return (
-                <div
-                  key={trip.id}
-                  className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">{trip.name}</p>
-                    <p className="text-xs break-words text-muted-foreground sm:text-sm">
-                      {trip.transportType === "AIR_OR_PUBLIC"
-                        ? `Fly/offentlig · ${trip.annualTrips} reiser/år · Billett ${formatCurrency(perTrip)}/reise`
-                        : `Bil · ${trip.annualTrips} reiser/år · Bom/ferge/drivstoff ${formatCurrency(perTrip)}/reise`}
-                    </p>
-                  </div>
-                  <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-start">
-                    <p className="text-sm font-medium tabular-nums sm:text-base">
-                      {formatCurrency(monthly * multiplier)}
-                    </p>
-                    <div className="flex items-center gap-1 sm:gap-2">
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => {
-                          setEditingTrip(trip)
-                          setTripDialogOpen(true)
-                        }}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => handleDeleteTrip(trip.id)}
-                        disabled={isPending}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
+            {budget.trips.map((trip) => (
+              <BudgetRow
+                key={trip.id}
+                title={trip.name}
+                subtitle={`${trip.transportType === "AIR_OR_PUBLIC" ? "Fly/offentlig" : "Bil"} · ${trip.annualTrips} reiser/år · ${formatCurrency(tripCostPerTrip(trip))}/reise`}
+                details={
+                  <RowDetails
+                    fields={BUDGET_TRIP_OPTIONAL_FIELDS}
+                    row={trip}
+                    options={viewOptions}
+                    onEdit={() => editTrip(trip)}
+                  />
+                }
+                amount={formatCurrency(tripMonthlyCost(trip) * multiplier)}
+                onEdit={() => editTrip(trip)}
+                onDelete={() =>
+                  confirmDelete(
+                    `Slette reisen «${trip.name}»?`,
+                    () => deleteBudgetTrip(trip.id),
+                    {
+                      success: "Reise slettet",
+                      error: "Kunne ikke slette reise",
+                    }
+                  )
+                }
+                isPending={isPending}
+              />
+            ))}
           </div>
         )}
       </BudgetSection>
@@ -589,6 +535,7 @@ export function BudgetView({ budget }: BudgetViewProps) {
                 <Button
                   variant="ghost"
                   size="icon-sm"
+                  aria-label={`Rediger kategorien ${category.name}`}
                   onClick={() => {
                     setEditingCategory(category)
                     setCategoryDialogOpen(true)
@@ -599,6 +546,7 @@ export function BudgetView({ budget }: BudgetViewProps) {
                 <Button
                   variant="ghost"
                   size="icon-sm"
+                  aria-label={`Slett kategorien ${category.name}`}
                   onClick={() => handleDeleteCategory(category)}
                   disabled={isPending}
                 >
@@ -610,15 +558,11 @@ export function BudgetView({ budget }: BudgetViewProps) {
             <EntryList
               entries={entries}
               multiplier={multiplier}
-              onEdit={(entry) => {
-                setEditingEntry(entry)
-                setEntryDefaults({})
-                setEntryDialogOpen(true)
-              }}
-              onDelete={handleDeleteEntry}
+              viewOptions={viewOptions}
+              onEdit={editEntry}
+              onDelete={confirmDelete}
               isPending={isPending}
               emptyText="Ingen poster i kategorien"
-              showType
             />
           </BudgetSection>
         )
@@ -636,15 +580,11 @@ export function BudgetView({ budget }: BudgetViewProps) {
         <EntryList
           entries={calculations.uncategorizedEntries}
           multiplier={multiplier}
-          onEdit={(entry) => {
-            setEditingEntry(entry)
-            setEntryDefaults({})
-            setEntryDialogOpen(true)
-          }}
-          onDelete={handleDeleteEntry}
+          viewOptions={viewOptions}
+          onEdit={editEntry}
+          onDelete={confirmDelete}
           isPending={isPending}
           emptyText="Ingen ukategoriserte poster"
-          showType
         />
       </BudgetSection>
 
@@ -675,7 +615,19 @@ export function BudgetView({ budget }: BudgetViewProps) {
         categories={budget.categories}
         defaults={entryDefaults}
       />
+      <SettingsDialog
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        taxDeductionPercent={budget.taxDeductionPercent}
+        propertyValue={budget.propertyValue}
+      />
     </div>
+  )
+}
+
+function EmptyText({ children }: { children: ReactNode }) {
+  return (
+    <p className="py-4 text-center text-sm text-muted-foreground">{children}</p>
   )
 }
 
@@ -713,6 +665,7 @@ function BudgetSection({
               variant="outline"
               size="sm"
               onClick={onAdd}
+              aria-label={addLabel}
               className="w-full shrink-0 sm:w-auto"
             >
               <PlusCircle className="h-3.5 w-3.5 sm:mr-1.5" />
@@ -726,96 +679,239 @@ function BudgetSection({
   )
 }
 
+/** One line in a section: name and facts on the left, amount and actions on the right. */
+function BudgetRow({
+  title,
+  titleExtras,
+  subtitle,
+  details,
+  amount,
+  amountClassName,
+  amountNote,
+  onEdit,
+  onDelete,
+  isPending,
+}: {
+  title: string
+  titleExtras?: ReactNode
+  subtitle?: ReactNode
+  details?: ReactNode
+  amount: ReactNode
+  amountClassName?: string
+  amountNote?: string
+  onEdit: () => void
+  onDelete: () => void
+  isPending: boolean
+}) {
+  return (
+    <div className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+      <div className="min-w-0 flex-1">
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 font-medium">
+          <span className="truncate">{title}</span>
+          {titleExtras}
+        </p>
+        {subtitle && (
+          <div className="text-xs break-words text-muted-foreground sm:text-sm">
+            {subtitle}
+          </div>
+        )}
+        {details}
+      </div>
+      <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-start">
+        <div className="text-right">
+          <p
+            className={`text-sm font-medium tabular-nums sm:text-base ${amountClassName ?? ""}`}
+          >
+            {amount}
+          </p>
+          {amountNote && (
+            <Badge
+              variant="secondary"
+              className="hidden text-xs sm:inline-flex"
+            >
+              {amountNote}
+            </Badge>
+          )}
+        </div>
+        <div className="flex items-center gap-1 sm:gap-2">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`Rediger ${title}`}
+            onClick={onEdit}
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`Slett ${title}`}
+            onClick={onDelete}
+            disabled={isPending}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function LoanRow({
+  loan,
+  multiplier,
+  viewOptions,
+  onEdit,
+  onDelete,
+  isPending,
+}: {
+  loan: BudgetLoanData
+  multiplier: number
+  viewOptions: BudgetViewOptions
+  onEdit: () => void
+  onDelete: () => void
+  isPending: boolean
+}) {
+  const monthly = loanMonthlyAmounts(loan)
+  const needsSetup = loan.principalAmount <= 0 || loan.termMonths <= 0
+  const termYears = loan.termMonths / 12
+  const termLabel = Number.isInteger(termYears)
+    ? `${termYears} år`
+    : `${termYears.toFixed(1)} år`
+
+  return (
+    <BudgetRow
+      title={loan.loanName}
+      titleExtras={
+        <>
+          <span className="hidden text-sm font-normal text-muted-foreground sm:inline">
+            {loan.bankName}
+          </span>
+          <Badge variant="secondary" className="hidden text-xs sm:inline-flex">
+            {LOAN_TYPE_LABELS[loan.loanType]}
+          </Badge>
+          <Badge variant="secondary" className="hidden text-xs sm:inline-flex">
+            {loan.repaymentType === "ANNUITY" ? "Annuitet" : "Serie"}
+          </Badge>
+        </>
+      }
+      subtitle={
+        needsSetup ? (
+          <span className="text-amber-600 dark:text-amber-400">
+            Mangler restgjeld og nedbetalingstid – rediger lånet for å fullføre.
+          </span>
+        ) : (
+          <span className="flex flex-wrap gap-x-1 gap-y-1">
+            <span className="sm:hidden">{loan.bankName}</span>
+            <span className="hidden sm:inline">
+              {formatCurrency(loan.principalAmount)} · {loan.annualInterestRate}
+              % · {termLabel}
+            </span>
+            <span className="hidden sm:inline">·</span>
+            <span className="hidden sm:inline">
+              Renter: {formatCurrency(monthly.monthlyInterest * multiplier)}
+            </span>
+            <span className="hidden sm:inline">·</span>
+            <span className="hidden sm:inline">
+              Avdrag: {formatCurrency(monthly.monthlyPrincipal * multiplier)}
+            </span>
+            {loan.monthlyFees > 0 && (
+              <>
+                <span className="hidden sm:inline">·</span>
+                <span className="hidden sm:inline">
+                  Gebyrer: {formatCurrency(loan.monthlyFees * multiplier)}
+                </span>
+              </>
+            )}
+          </span>
+        )
+      }
+      details={
+        <RowDetails
+          fields={BUDGET_LOAN_OPTIONAL_FIELDS}
+          row={loan}
+          options={viewOptions}
+          onEdit={onEdit}
+        />
+      }
+      amount={formatCurrency(monthly.monthlyCost * multiplier)}
+      onEdit={onEdit}
+      onDelete={onDelete}
+      isPending={isPending}
+    />
+  )
+}
+
 function EntryList({
   entries,
   multiplier,
+  viewOptions,
   onEdit,
   onDelete,
   isPending,
   emptyText,
-  showCategory,
-  showType,
 }: {
   entries: BudgetEntryData[]
   multiplier: number
+  viewOptions: BudgetViewOptions
   onEdit: (entry: BudgetEntryData) => void
-  onDelete: (id: string) => void
+  onDelete: ReturnType<typeof useConfirmedDelete>[1]
   isPending: boolean
   emptyText: string
-  showCategory?: boolean
-  showType?: boolean
 }) {
   if (entries.length === 0) {
-    return (
-      <p className="py-4 text-center text-sm text-muted-foreground">
-        {emptyText}
-      </p>
-    )
+    return <EmptyText>{emptyText}</EmptyText>
   }
 
   return (
     <div className="divide-y divide-border">
       {entries.map((entry) => (
-        <div
+        <BudgetRow
           key={entry.id}
-          className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
-        >
-          <div className="min-w-0 flex-1">
-            <p className="truncate font-medium">{entry.name}</p>
-            <div className="flex flex-wrap gap-2">
-              {showCategory && entry.category && (
-                <Badge variant="secondary" className="text-xs">
-                  {entry.category.name}
-                </Badge>
+          title={entry.name}
+          subtitle={
+            <span className="flex flex-wrap items-center gap-2">
+              <Badge
+                variant="secondary"
+                className={`text-xs ${ENTRY_TYPE_TONE[entry.type]}`}
+              >
+                {ENTRY_TYPE_LABELS[entry.type]}
+              </Badge>
+              {entry.frequency !== "MONTHLY" && (
+                <span>
+                  {formatCurrency(entry.amount)}
+                  {FREQUENCY_SUFFIX[entry.frequency]}
+                </span>
               )}
-              {showType && (
-                <Badge
-                  variant="secondary"
-                  className={`text-xs ${
-                    entry.type === "INCOME"
-                      ? "text-green-700 dark:text-green-400"
-                      : entry.type === "DEDUCTION"
-                        ? "text-blue-700 dark:text-blue-400"
-                        : "text-red-700 dark:text-red-400"
-                  }`}
-                >
-                  {ENTRY_TYPE_LABELS[entry.type]}
-                </Badge>
-              )}
-            </div>
-          </div>
-          <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-start">
-            <p
-              className={`text-sm font-medium tabular-nums sm:text-base ${
-                entry.type === "INCOME"
-                  ? "text-green-600 dark:text-green-400"
-                  : entry.type === "DEDUCTION"
-                    ? "text-blue-600 dark:text-blue-400"
-                    : ""
-              }`}
-            >
+            </span>
+          }
+          details={
+            <RowDetails
+              fields={BUDGET_ENTRY_OPTIONAL_FIELDS}
+              row={entry}
+              options={viewOptions}
+              onEdit={() => onEdit(entry)}
+            />
+          }
+          amount={
+            <>
               {entry.type === "DEDUCTION" && "−"}
-              {formatCurrency(entry.monthlyAmount * multiplier)}
-            </p>
-            <div className="flex items-center gap-1 sm:gap-2">
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={() => onEdit(entry)}
-              >
-                <Pencil className="h-3.5 w-3.5" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={() => onDelete(entry.id)}
-                disabled={isPending}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          </div>
-        </div>
+              {formatCurrency(entryMonthlyAmount(entry) * multiplier)}
+            </>
+          }
+          amountClassName={
+            entry.type === "EXPENSE" ? "" : ENTRY_TYPE_TONE[entry.type]
+          }
+          onEdit={() => onEdit(entry)}
+          onDelete={() =>
+            onDelete(
+              `Slette posten «${entry.name}»?`,
+              () => deleteBudgetEntry(entry.id),
+              { success: "Post slettet", error: "Kunne ikke slette post" }
+            )
+          }
+          isPending={isPending}
+        />
       ))}
     </div>
   )
