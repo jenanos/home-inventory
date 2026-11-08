@@ -78,7 +78,13 @@ export async function POST(request: Request) {
   }
 
   const clearCookie = buildClearedConsentCookie(mcpConfig.issuer)
-  const fail = (error: OAuthError) => {
+  // Every refusal here ends on a generic error page, so the reason is logged
+  // (never the cookie, CSRF token or form values) to make it diagnosable.
+  const fail = (error: OAuthError, reason: string) => {
+    console.warn("[mcp-oauth] consent decision refused", {
+      reason,
+      error: error.code,
+    })
     const response = oauthBrowserErrorResponse(error)
     response.headers.set("Set-Cookie", clearCookie)
     return response
@@ -86,14 +92,16 @@ export async function POST(request: Request) {
 
   if (!hasSameOriginOrigin(request, mcpConfig.issuer)) {
     return fail(
-      new OAuthError("invalid_request", "Forespørselen ble avvist.", 403)
+      new OAuthError("invalid_request", "Forespørselen ble avvist.", 403),
+      `origin-mismatch:${request.headers.get("origin")?.slice(0, 100)}`
     )
   }
 
   const session = await auth()
   if (!session?.user?.id) {
     return fail(
-      new OAuthError("access_denied", "Du er ikke lenger innlogget.", 401)
+      new OAuthError("access_denied", "Du er ikke lenger innlogget.", 401),
+      "no-session"
     )
   }
 
@@ -104,7 +112,8 @@ export async function POST(request: Request) {
         "invalid_request",
         "Vi fant ingen aktiv tilkoblingsforespørsel.",
         400
-      )
+      ),
+      "no-consent-cookie"
     )
   }
 
@@ -117,7 +126,8 @@ export async function POST(request: Request) {
     return fail(
       error instanceof OAuthError
         ? error
-        : new OAuthError("invalid_request", "Ugyldig skjemainnsending.", 400)
+        : new OAuthError("invalid_request", "Ugyldig skjemainnsending.", 400),
+      "invalid-form"
     )
   }
 
@@ -130,7 +140,8 @@ export async function POST(request: Request) {
         "invalid_request",
         "Tilkoblingsforespørselen er utløpt eller allerede behandlet.",
         400
-      )
+      ),
+      pending ? "pending-request-other-user" : "pending-request-not-found"
     )
   }
 
@@ -140,7 +151,8 @@ export async function POST(request: Request) {
   )
   if (!consentCsrfTokenMatches(String(form.get("csrf") ?? ""), expectedCsrf)) {
     return fail(
-      new OAuthError("invalid_request", "Forespørselen ble avvist.", 403)
+      new OAuthError("invalid_request", "Forespørselen ble avvist.", 403),
+      "csrf-mismatch"
     )
   }
 
@@ -167,7 +179,8 @@ export async function POST(request: Request) {
         "invalid_request",
         "Tilkoblingsforespørselen er allerede behandlet.",
         400
-      )
+      ),
+      "already-consumed"
     )
   }
 
