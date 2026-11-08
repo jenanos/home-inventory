@@ -76,7 +76,7 @@ function CostInput({
         id={id}
         type="number"
         min="0"
-        step="1"
+        step="any"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}

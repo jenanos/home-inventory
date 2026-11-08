@@ -118,7 +118,7 @@ function MemberForm({
         <Input
           id="member-gross"
           type="number"
-          step="1"
+          step="any"
           min="0"
           value={grossIncome}
           onChange={(e) => setGrossIncome(e.target.value)}
@@ -130,7 +130,7 @@ function MemberForm({
         <Input
           id="member-tax"
           type="number"
-          step="0.1"
+          step="any"
           min="0"
           max="100"
           value={taxPercent}
@@ -169,7 +169,7 @@ function MemberForm({
           <Input
             id="member-net"
             type="number"
-            step="1"
+            step="any"
             min="0"
             value={netIncome}
             onChange={(e) => setNetIncome(e.target.value)}

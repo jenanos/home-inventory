@@ -101,7 +101,7 @@ function SettingsForm({
         <Input
           id="settings-property"
           type="number"
-          step="1"
+          step="any"
           min="0"
           value={value}
           onChange={(e) => setValue(e.target.value)}

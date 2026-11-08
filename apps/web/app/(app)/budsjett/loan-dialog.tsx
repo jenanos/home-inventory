@@ -208,7 +208,7 @@ function LoanForm({
         <Input
           id="loan-principal"
           type="number"
-          step="1"
+          step="any"
           min="0"
           value={principalAmount}
           onChange={(e) => setPrincipalAmount(e.target.value)}
@@ -221,7 +221,7 @@ function LoanForm({
           <Input
             id="loan-interest"
             type="number"
-            step="0.01"
+            step="any"
             min="0"
             value={annualInterestRate}
             onChange={(e) => setAnnualInterestRate(e.target.value)}
@@ -233,7 +233,7 @@ function LoanForm({
           <Input
             id="loan-term"
             type="number"
-            step="0.5"
+            step="any"
             min="0"
             value={termYears}
             onChange={(e) => setTermYears(e.target.value)}
@@ -246,7 +246,7 @@ function LoanForm({
         <Input
           id="loan-fees"
           type="number"
-          step="1"
+          step="any"
           min="0"
           value={monthlyFees}
           onChange={(e) => setMonthlyFees(e.target.value)}
