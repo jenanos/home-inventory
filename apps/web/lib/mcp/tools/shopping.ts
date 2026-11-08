@@ -64,6 +64,10 @@ export const shoppingListSummarySchema = z.object({
   isPrivate: z
     .boolean()
     .describe("Private lists are visible only to their creator."),
+  projectId: z
+    .string()
+    .nullable()
+    .describe("The project this list buys for, if any (see get-project)."),
   createdAt: timestampSchema,
   updatedAt: timestampSchema,
 })
@@ -73,6 +77,7 @@ type ShoppingListSummaryRow = {
   name: string
   color: string | null
   isPrivate: boolean
+  projectId: string | null
   createdAt: Date
   updatedAt: Date
 }
@@ -85,6 +90,7 @@ export function serializeShoppingListSummary(
     name: list.name,
     color: list.color,
     isPrivate: list.isPrivate,
+    projectId: list.projectId,
     createdAt: timestamp(list.createdAt),
     updatedAt: timestamp(list.updatedAt),
   }
@@ -226,6 +232,11 @@ export const listShoppingListsTool = defineTool({
     name: filterTextSchema
       .optional()
       .describe("Case-insensitive substring match on the list name."),
+    projectId: idSchema
+      .optional()
+      .describe(
+        "Only lists that buy for this project (id from list-projects)."
+      ),
     ...paginationInputSchema,
   },
   outputSchema: {
@@ -237,6 +248,7 @@ export const listShoppingListsTool = defineTool({
         isPrivate: z
           .boolean()
           .describe("Private lists are visible only to their creator."),
+        projectId: z.string().nullable(),
         itemCounts: itemCountsSchema,
         estimatedTotal: calculatedMoneySchema.describe(
           "Estimated cost of every item, using the top-ranked alternative price when present."
@@ -254,6 +266,7 @@ export const listShoppingListsTool = defineTool({
     const { totalCount, lists } = await listShoppingListsPage(session.context, {
       ...page,
       name: args.name,
+      projectId: args.projectId,
     })
 
     const serialized = lists.map((list) => {
@@ -277,6 +290,7 @@ export const listShoppingListsTool = defineTool({
         name: list.name,
         color: list.color,
         isPrivate: list.isPrivate,
+        projectId: list.projectId,
         itemCounts: counts,
         estimatedTotal: calculated(estimatedTotal),
         pendingTotal: calculated(pendingTotal),

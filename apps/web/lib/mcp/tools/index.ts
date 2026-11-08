@@ -4,8 +4,8 @@ import { budgetWriteTools } from "./budget-write"
 import type { McpToolDefinition } from "./define"
 import { gardenTools } from "./garden"
 import { gardenWriteTools } from "./garden-write"
-import { maintenanceTools } from "./maintenance"
-import { maintenanceWriteTools } from "./maintenance-write"
+import { projectTools } from "./projects"
+import { projectWriteTools } from "./projects-write"
 import { createServerInfoTool } from "./server-info"
 import { shoppingTools } from "./shopping"
 import { shoppingWriteTools } from "./shopping-write"
@@ -17,9 +17,9 @@ export type { McpToolDefinition } from "./define"
  * write tools go through the write services the web flow also uses, and are
  * only visible with the matching `*:write` scope.
  *
- * Full-replace operations (`replaceBudget`,
- * `replaceMaintenanceTasks`, `replacePlants`) stay server actions outside the
- * application layer, so nothing here can reach them (plan 10.4).
+ * Full-replace operations (`replaceBudget`, `replacePlants`) stay server
+ * actions outside the application layer, so nothing here can reach them
+ * (plan 10.4).
  */
 export function createToolRegistry(
   now: () => Date = () => new Date()
@@ -30,8 +30,8 @@ export function createToolRegistry(
     ...shoppingWriteTools,
     ...budgetTools,
     ...budgetWriteTools,
-    ...maintenanceTools,
-    ...maintenanceWriteTools,
+    ...projectTools,
+    ...projectWriteTools,
     ...gardenTools,
     ...gardenWriteTools,
   ]

@@ -9,7 +9,8 @@ A personal app for managing home projects and finances, built with Next.js 16 an
 - **Categories** — 13 default categories with icons and colors, fully customizable
 - **Multi-user households** — invite members and assign items
 - **Shared links** — generate shareable links to lists with optional expiration
-- **MCP server** — an OAuth-protected MCP endpoint (`/api/mcp`) lets AI assistants read and update shopping lists, budget, maintenance and garden
+- **Projects** — maintenance, repairs, renovations and other home projects, with checklist steps, optional vendor quotes and linked shopping lists
+- **MCP server** — an OAuth-protected MCP endpoint (`/api/mcp`) lets AI assistants read and update shopping lists, budget, projects and garden
 - **Authentication** — magic link email login via Resend
 - **Dark mode** — toggle with the `d` hotkey in dev
 

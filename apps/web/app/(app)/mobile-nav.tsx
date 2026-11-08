@@ -6,7 +6,7 @@ import {
   LayoutDashboard,
   ShoppingCart,
   Settings,
-  Wrench,
+  Hammer,
   Wallet,
   Flower2,
 } from "lucide-react"
@@ -18,14 +18,14 @@ export function MobileNav() {
   const items = [
     { href: "/", label: "Oversikt", icon: LayoutDashboard },
     { href: "/lists", label: "Innkjøp", icon: ShoppingCart },
-    { href: "/vedlikehold", label: "Vedlikehold", icon: Wrench },
+    { href: "/prosjekter", label: "Prosjekter", icon: Hammer },
     { href: "/budsjett", label: "Budsjett", icon: Wallet },
     { href: "/hage", label: "Hage", icon: Flower2 },
     { href: "/settings", label: "Innstillinger", icon: Settings },
   ]
 
   return (
-    <nav className="bg-card/95 border-border fixed inset-x-0 bottom-0 z-50 border-t backdrop-blur-sm md:hidden">
+    <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-card/95 backdrop-blur-sm md:hidden">
       <div className="flex items-center justify-around">
         {items.map((item) => {
           const isActive =

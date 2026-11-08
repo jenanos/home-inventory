@@ -143,6 +143,7 @@ export default async function ListPage({ params }: ListPageProps) {
         itemCount={items.length}
         purchasedCount={items.filter((i) => i.status === "PURCHASED").length}
         isPrivate={list.isPrivate}
+        project={list.project}
         canManagePrivacy={canManageShoppingListPrivacy(list, context.userId)}
         shareLinks={list.shareLinks.map((sl) => ({
           id: sl.id,

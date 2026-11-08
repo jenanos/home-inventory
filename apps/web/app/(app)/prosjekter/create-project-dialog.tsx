@@ -35,17 +35,27 @@ import { Calendar } from "@workspace/ui/components/calendar"
 import { Separator } from "@workspace/ui/components/separator"
 import { cn } from "@workspace/ui/lib/utils"
 import { Plus, Loader2, CalendarIcon } from "lucide-react"
-import { createMaintenanceTask } from "@/lib/actions/maintenance-task"
-import type { Priority } from "@workspace/db"
+import { createProject } from "@/lib/actions/project"
+import type { Priority, ProjectType } from "@workspace/db"
+import {
+  EXECUTION_UNSET,
+  PROJECT_EXECUTIONS,
+  PROJECT_EXECUTION_LABELS,
+  PROJECT_TYPES,
+  PROJECT_TYPE_LABELS,
+  executionFromSelect,
+} from "@/lib/project-labels"
 import { useMediaQuery } from "@/hooks/use-media-query"
 
-export function CreateTaskDialog() {
+export function CreateProjectDialog() {
   const [open, setOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
   const isDesktop = useMediaQuery("(min-width: 768px)")
 
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
+  const [type, setType] = useState<ProjectType>("OTHER")
+  const [execution, setExecution] = useState<string>(EXECUTION_UNSET)
   const [priority, setPriority] = useState<Priority>("MEDIUM")
   const [estimatedDuration, setEstimatedDuration] = useState("")
   const [estimatedPrice, setEstimatedPrice] = useState("")
@@ -55,6 +65,8 @@ export function CreateTaskDialog() {
   function resetForm() {
     setTitle("")
     setDescription("")
+    setType("OTHER")
+    setExecution(EXECUTION_UNSET)
     setPriority("MEDIUM")
     setEstimatedDuration("")
     setEstimatedPrice("")
@@ -70,18 +82,22 @@ export function CreateTaskDialog() {
 
     startTransition(async () => {
       try {
-        await createMaintenanceTask({
+        await createProject({
           title: title.trim(),
           description: description.trim() || undefined,
+          type,
+          execution: executionFromSelect(execution),
           priority,
           estimatedDuration: estimatedDuration.trim() || undefined,
-          estimatedPrice: estimatedPrice ? parseFloat(estimatedPrice) : undefined,
+          estimatedPrice: estimatedPrice
+            ? parseFloat(estimatedPrice)
+            : undefined,
           dueDate: dueDate || undefined,
         })
         resetForm()
         setOpen(false)
       } catch {
-        setError("Kunne ikke opprette oppgave")
+        setError("Kunne ikke opprette prosjektet")
       }
     })
   }
@@ -96,7 +112,7 @@ export function CreateTaskDialog() {
         <Label htmlFor="title">Tittel *</Label>
         <Input
           id="title"
-          placeholder="F.eks. Utbedre drenering"
+          placeholder="F.eks. Male gjerdet"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
         />
@@ -106,11 +122,46 @@ export function CreateTaskDialog() {
         <Label htmlFor="description">Beskrivelse</Label>
         <Textarea
           id="description"
-          placeholder="Beskriv oppgaven..."
+          placeholder="Hva skal gjøres, og hvorfor?"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           rows={3}
         />
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="flex flex-col gap-2">
+          <Label>Type</Label>
+          <Select value={type} onValueChange={(v) => setType(v as ProjectType)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PROJECT_TYPES.map((value) => (
+                <SelectItem key={value} value={value}>
+                  {PROJECT_TYPE_LABELS[value]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <Label>Hvem gjør jobben?</Label>
+          <Select value={execution} onValueChange={setExecution}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={EXECUTION_UNSET}>Ikke bestemt</SelectItem>
+              {PROJECT_EXECUTIONS.map((value) => (
+                <SelectItem key={value} value={value}>
+                  {PROJECT_EXECUTION_LABELS[value]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <Separator />
@@ -118,7 +169,10 @@ export function CreateTaskDialog() {
       <div className="grid grid-cols-2 gap-4">
         <div className="flex flex-col gap-2">
           <Label>Prioritet</Label>
-          <Select value={priority} onValueChange={(v) => setPriority(v as Priority)}>
+          <Select
+            value={priority}
+            onValueChange={(v) => setPriority(v as Priority)}
+          >
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
@@ -154,7 +208,7 @@ export function CreateTaskDialog() {
         </div>
 
         <div className="flex flex-col gap-2">
-          <Label>Forfallsdato</Label>
+          <Label>Frist</Label>
           <Popover>
             <PopoverTrigger asChild>
               <Button
@@ -165,9 +219,7 @@ export function CreateTaskDialog() {
                 )}
               >
                 <CalendarIcon className="mr-2 h-4 w-4" />
-                {dueDate
-                  ? dueDate.toLocaleDateString("nb-NO")
-                  : "Velg dato"}
+                {dueDate ? dueDate.toLocaleDateString("nb-NO") : "Velg dato"}
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="start">
@@ -187,7 +239,7 @@ export function CreateTaskDialog() {
         ) : (
           <Plus className="mr-2 h-4 w-4" />
         )}
-        Opprett oppgave
+        Opprett prosjekt
       </Button>
     </div>
   )
@@ -198,12 +250,12 @@ export function CreateTaskDialog() {
         <SheetTrigger asChild>
           <Button>
             <Plus className="mr-2 h-4 w-4" />
-            Ny oppgave
+            Nytt prosjekt
           </Button>
         </SheetTrigger>
         <SheetContent>
           <SheetHeader>
-            <SheetTitle>Ny vedlikeholdsoppgave</SheetTitle>
+            <SheetTitle>Nytt prosjekt</SheetTitle>
           </SheetHeader>
           {formContent}
         </SheetContent>
@@ -216,14 +268,14 @@ export function CreateTaskDialog() {
       <DrawerTrigger asChild>
         <Button>
           <Plus className="mr-2 h-4 w-4" />
-          Ny oppgave
+          Nytt prosjekt
         </Button>
       </DrawerTrigger>
       <DrawerContent>
         <DrawerHeader>
-          <DrawerTitle>Ny vedlikeholdsoppgave</DrawerTitle>
+          <DrawerTitle>Nytt prosjekt</DrawerTitle>
         </DrawerHeader>
-        <div className="px-4 pb-6">{formContent}</div>
+        <div className="overflow-y-auto px-4 pb-6">{formContent}</div>
       </DrawerContent>
     </Drawer>
   )

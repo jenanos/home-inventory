@@ -127,6 +127,12 @@ export const createShoppingListTool = defineWriteTool({
       .optional()
       .describe("Make the list visible only to you. Defaults to false."),
     color: colorInputSchema,
+    projectId: idSchema
+      .nullable()
+      .optional()
+      .describe(
+        "Project the list buys for (id from list-projects), e.g. materials for a renovation."
+      ),
   },
   outputSchema: { list: shoppingListSummarySchema },
   annotations: CREATE_ANNOTATIONS,
@@ -145,13 +151,17 @@ export const createShoppingListTool = defineWriteTool({
 export const updateShoppingListTool = defineWriteTool({
   name: "update-shopping-list",
   scope: "shopping:write",
-  title: "Rename or recolor a shopping list",
+  title: "Rename, recolor or link a shopping list to a project",
   description:
-    "Changes a list's name or color. Whether a list is private cannot be changed here; that is done in the app. Returns the saved list.",
+    "Changes a list's name, color or project and leaves omitted fields as they are. Set projectId to link the list to a project, or null to unlink it. Whether a list is private cannot be changed here; that is done in the app. Returns the saved list.",
   inputSchema: {
     listId: idSchema.describe("Id from list-shopping-lists."),
     name: nameInputSchema.optional(),
     color: colorInputSchema,
+    projectId: idSchema
+      .nullable()
+      .optional()
+      .describe("Project id from list-projects, or null to unlink."),
     expectedUpdatedAt: expectedUpdatedAtSchema,
   },
   outputSchema: { list: shoppingListSummarySchema },
@@ -161,6 +171,7 @@ export const updateShoppingListTool = defineWriteTool({
     const list = await updateShoppingList(session.context, args.listId, {
       name: args.name,
       color: args.color,
+      projectId: args.projectId,
       expectedUpdatedAt: parseExpectedUpdatedAt(args.expectedUpdatedAt),
     })
 

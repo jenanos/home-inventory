@@ -17,9 +17,9 @@ const mocks = vi.hoisted(() => ({
   budgetEntryCategoryFindMany: vi.fn(),
   budgetEntryFindMany: vi.fn(),
   budgetEntryCount: vi.fn(),
-  maintenanceTaskCount: vi.fn(),
-  maintenanceTaskFindMany: vi.fn(),
-  maintenanceTaskFindFirst: vi.fn(),
+  projectCount: vi.fn(),
+  projectFindMany: vi.fn(),
+  projectFindFirst: vi.fn(),
   plantCount: vi.fn(),
   plantFindMany: vi.fn(),
   plantFindFirst: vi.fn(),
@@ -53,10 +53,10 @@ vi.mock("@workspace/db", async (importOriginal) => ({
       findMany: mocks.budgetEntryFindMany,
       count: mocks.budgetEntryCount,
     },
-    maintenanceTask: {
-      count: mocks.maintenanceTaskCount,
-      findMany: mocks.maintenanceTaskFindMany,
-      findFirst: mocks.maintenanceTaskFindFirst,
+    project: {
+      count: mocks.projectCount,
+      findMany: mocks.projectFindMany,
+      findFirst: mocks.projectFindFirst,
     },
     plant: {
       count: mocks.plantCount,
@@ -76,7 +76,7 @@ function decimal(value: string) {
 }
 
 const LIST_ID = "11111111-1111-4111-8111-111111111111"
-const TASK_ID = "22222222-2222-4222-8222-222222222222"
+const PROJECT_ID = "22222222-2222-4222-8222-222222222222"
 const PLANT_ID = "33333333-3333-4333-8333-333333333333"
 
 /**
@@ -140,6 +140,7 @@ beforeEach(() => {
       name: "Kjøkken",
       color: "#fff",
       isPrivate: false,
+      projectId: null,
       createdAt: new Date("2026-01-01T00:00:00Z"),
       updatedAt: new Date("2026-02-01T00:00:00Z"),
       items: [
@@ -161,6 +162,7 @@ beforeEach(() => {
     name: "Kjøkken",
     color: null,
     isPrivate: false,
+    projectId: PROJECT_ID,
     createdAt: new Date("2026-01-01T00:00:00Z"),
     updatedAt: new Date("2026-02-01T00:00:00Z"),
     // Present on the browser-facing read of the same table. Swapping the tool
@@ -297,11 +299,13 @@ beforeEach(() => {
   )
   mocks.budgetEntryCount.mockResolvedValue(1)
 
-  mocks.maintenanceTaskCount.mockResolvedValue(1)
-  mocks.maintenanceTaskFindMany.mockResolvedValue([
+  mocks.projectCount.mockResolvedValue(1)
+  mocks.projectFindMany.mockResolvedValue([
     {
-      id: TASK_ID,
+      id: PROJECT_ID,
       title: "Male veggen",
+      type: "RENOVATION",
+      execution: "SELF",
       status: "NOT_STARTED",
       priority: "HIGH",
       estimatedDuration: "2 dager",
@@ -309,13 +313,16 @@ beforeEach(() => {
       dueDate: new Date("2026-05-01T00:00:00Z"),
       createdAt: new Date("2026-01-01T00:00:00Z"),
       updatedAt: new Date("2026-01-02T00:00:00Z"),
-      _count: { vendors: 1, progressEntries: 2 },
+      steps: [{ completed: true }, { completed: false }],
+      _count: { vendors: 1, shoppingLists: 1 },
     },
   ])
-  mocks.maintenanceTaskFindFirst.mockResolvedValue({
-    id: TASK_ID,
+  mocks.projectFindFirst.mockResolvedValue({
+    id: PROJECT_ID,
     title: "Male veggen",
     description: "Stue og gang",
+    type: "RENOVATION",
+    execution: "MIXED",
     status: "NOT_STARTED",
     priority: "HIGH",
     estimatedDuration: "2 dager",
@@ -337,9 +344,35 @@ beforeEach(() => {
         updatedAt: new Date("2026-02-02T00:00:00Z"),
       },
     ],
-    progressEntries: [
+    shoppingLists: [
       {
-        id: "progress-1",
+        id: LIST_ID,
+        name: "Maling",
+        color: null,
+        isPrivate: false,
+        updatedAt: new Date("2026-02-02T00:00:00Z"),
+        items: [
+          {
+            status: "PURCHASED",
+            estimatedPrice: null,
+            alternatives: [{ price: decimal("499.90") }],
+          },
+          {
+            status: "PENDING",
+            estimatedPrice: decimal("120"),
+            alternatives: [],
+          },
+          {
+            status: "SKIPPED",
+            estimatedPrice: decimal("999"),
+            alternatives: [],
+          },
+        ],
+      },
+    ],
+    steps: [
+      {
+        id: "step-1",
         title: "Kjøpe maling",
         description: null,
         dueDate: null,
@@ -408,8 +441,8 @@ const HAPPY_PATH_ARGS: Array<[string, Record<string, unknown>]> = [
   ["list-shopping-categories", {}],
   ["get-budget-summary", {}],
   ["get-budget-details", {}],
-  ["list-maintenance-tasks", {}],
-  ["get-maintenance-task", { taskId: TASK_ID }],
+  ["list-projects", {}],
+  ["get-project", { projectId: PROJECT_ID }],
   ["list-plants", {}],
   ["get-plant", { plantId: PLANT_ID }],
 ]
@@ -492,7 +525,7 @@ describe("tool input validation", () => {
   })
 
   it("rejects an unknown enum value", async () => {
-    const { structured } = await callTool("list-maintenance-tasks", {
+    const { structured } = await callTool("list-projects", {
       status: "ALMOST_DONE",
     })
 
@@ -508,9 +541,9 @@ describe("tool input validation", () => {
   })
 
   it("converts a YYYY-MM-DD filter to midnight UTC", async () => {
-    await callTool("list-maintenance-tasks", { dueBefore: "2026-06-30" })
+    await callTool("list-projects", { dueBefore: "2026-06-30" })
 
-    expect(mocks.maintenanceTaskCount).toHaveBeenCalledWith({
+    expect(mocks.projectCount).toHaveBeenCalledWith({
       where: expect.objectContaining({
         dueDate: { lte: new Date("2026-06-30T00:00:00.000Z") },
       }),
@@ -534,7 +567,7 @@ describe("resource boundaries", () => {
 
   it.each([
     ["get-shopping-list", "listId"],
-    ["get-maintenance-task", "taskId"],
+    ["get-project", "projectId"],
     ["get-plant", "plantId"],
   ])("%s rejects a malformed id as a validation error", async (name, field) => {
     const { structured } = await callTool(name, { [field]: "../../etc/passwd" })
@@ -666,6 +699,72 @@ describe("pagination in responses", () => {
       pending: 2,
       purchased: 1,
       skipped: 0,
+    })
+  })
+})
+
+describe("project reads", () => {
+  it("summarizes linked shopping lists without skipped items", async () => {
+    const { structured } = await callTool("get-project", {
+      projectId: PROJECT_ID,
+    })
+
+    expect(structured).toMatchObject({
+      project: { type: "RENOVATION", execution: "MIXED" },
+      shoppingLists: [
+        {
+          id: LIST_ID,
+          itemCount: 2,
+          pendingCount: 1,
+          purchasedCount: 1,
+          estimatedTotal: "619.90",
+          purchasedTotal: "499.90",
+        },
+      ],
+    })
+  })
+
+  it("only includes linked lists the user may see", async () => {
+    await callTool("get-project", { projectId: PROJECT_ID })
+
+    expect(mocks.projectFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: PROJECT_ID, householdId: "household-1" },
+        select: expect.objectContaining({
+          shoppingLists: expect.objectContaining({
+            where: {
+              householdId: "household-1",
+              OR: [{ isPrivate: false }, { createdById: "user-1" }],
+            },
+          }),
+        }),
+      })
+    )
+  })
+
+  it("counts completed steps and filters active projects", async () => {
+    const { structured } = await callTool("list-projects", {
+      activeOnly: true,
+      type: "RENOVATION",
+    })
+
+    expect(mocks.projectCount).toHaveBeenCalledWith({
+      where: {
+        householdId: "household-1",
+        status: { not: "COMPLETED" },
+        type: "RENOVATION",
+      },
+    })
+    expect(structured).toMatchObject({
+      projects: [
+        {
+          execution: "SELF",
+          stepCount: 2,
+          completedStepCount: 1,
+          vendorCount: 1,
+          shoppingListCount: 1,
+        },
+      ],
     })
   })
 })

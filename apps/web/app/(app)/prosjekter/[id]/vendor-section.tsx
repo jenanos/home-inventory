@@ -5,7 +5,12 @@ import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
 import { Textarea } from "@workspace/ui/components/textarea"
-import { Card, CardContent, CardHeader, CardTitle } from "@workspace/ui/components/card"
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@workspace/ui/components/card"
 import { Badge } from "@workspace/ui/components/badge"
 import { Separator } from "@workspace/ui/components/separator"
 import {
@@ -33,11 +38,11 @@ import {
   Pencil,
 } from "lucide-react"
 import {
-  createTaskVendor,
-  deleteTaskVendor,
-  selectTaskVendor,
-  updateTaskVendor,
-} from "@/lib/actions/maintenance-task"
+  createProjectVendor,
+  deleteProjectVendor,
+  selectProjectVendor,
+  updateProjectVendor,
+} from "@/lib/actions/project"
 import { useMediaQuery } from "@/hooks/use-media-query"
 
 interface Vendor {
@@ -50,11 +55,11 @@ interface Vendor {
   estimatedPrice: number | null
   notes: string | null
   isSelected: boolean
-  taskId: string
+  projectId: string
 }
 
 interface VendorSectionProps {
-  taskId: string
+  projectId: string
   vendors: Vendor[]
 }
 
@@ -65,7 +70,7 @@ const formatCurrency = (amount: number) =>
     maximumFractionDigits: 0,
   }).format(amount)
 
-export function VendorSection({ taskId, vendors }: VendorSectionProps) {
+export function VendorSection({ projectId, vendors }: VendorSectionProps) {
   const [isPending, startTransition] = useTransition()
   const [addOpen, setAddOpen] = useState(false)
   const [editingVendor, setEditingVendor] = useState<Vendor | null>(null)
@@ -113,8 +118,8 @@ export function VendorSection({ taskId, vendors }: VendorSectionProps) {
   function handleAdd() {
     if (!name.trim()) return
     startTransition(async () => {
-      await createTaskVendor({
-        taskId,
+      await createProjectVendor({
+        projectId,
         name: name.trim(),
         description: description.trim() || undefined,
         phone: phone.trim() || undefined,
@@ -131,7 +136,7 @@ export function VendorSection({ taskId, vendors }: VendorSectionProps) {
   function handleUpdate() {
     if (!editingVendor || !editName.trim()) return
     startTransition(async () => {
-      await updateTaskVendor({
+      await updateProjectVendor({
         id: editingVendor.id,
         name: editName.trim(),
         description: editDescription.trim() || null,
@@ -149,13 +154,13 @@ export function VendorSection({ taskId, vendors }: VendorSectionProps) {
 
   function handleSelect(vendorId: string) {
     startTransition(async () => {
-      await selectTaskVendor(vendorId)
+      await selectProjectVendor(vendorId)
     })
   }
 
   function handleDelete(vendorId: string) {
     startTransition(async () => {
-      await deleteTaskVendor(vendorId)
+      await deleteProjectVendor(vendorId)
     })
   }
 
@@ -195,7 +200,7 @@ export function VendorSection({ taskId, vendors }: VendorSectionProps) {
         <Label htmlFor={`${prefix}-vendor-desc`}>Beskrivelse</Label>
         <Textarea
           id={`${prefix}-vendor-desc`}
-          placeholder="Kort beskrivelse av aktøren..."
+          placeholder="Kort beskrivelse av leverandøren..."
           value={values.description}
           onChange={(e) => setters.setDescription(e.target.value)}
           rows={2}
@@ -263,24 +268,24 @@ export function VendorSection({ taskId, vendors }: VendorSectionProps) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h2 className="font-heading flex items-center gap-2 text-lg font-semibold">
+        <h2 className="flex items-center gap-2 font-heading text-lg font-semibold">
           <Users className="h-5 w-5" />
-          Aktører
+          Leverandører
         </h2>
         <Button variant="outline" size="sm" onClick={() => setAddOpen(true)}>
           <Plus className="mr-1 h-4 w-4" />
-          Legg til aktør
+          Legg til leverandør
         </Button>
       </div>
 
       {vendors.length === 0 ? (
         <Card className="flex flex-col items-center justify-center py-8">
-          <Users className="text-muted-foreground mb-3 h-8 w-8" />
-          <p className="text-muted-foreground text-sm">
-            Ingen aktører lagt til ennå
+          <Users className="mb-3 h-8 w-8 text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">
+            Ingen leverandører lagt til ennå
           </p>
-          <p className="text-muted-foreground text-xs">
-            Legg til aktører og velg en som endelig vedtatt
+          <p className="text-xs text-muted-foreground">
+            Legg til tilbud fra leverandører og velg den du går for
           </p>
         </Card>
       ) : (
@@ -289,9 +294,7 @@ export function VendorSection({ taskId, vendors }: VendorSectionProps) {
             <Card
               key={vendor.id}
               className={
-                vendor.isSelected
-                  ? "border-primary ring-primary/20 ring-2"
-                  : ""
+                vendor.isSelected ? "border-primary ring-2 ring-primary/20" : ""
               }
             >
               <CardHeader className="pb-2">
@@ -312,7 +315,7 @@ export function VendorSection({ taskId, vendors }: VendorSectionProps) {
                       className="h-7 w-7"
                       onClick={() => openEditForm(vendor)}
                       disabled={isPending}
-                      aria-label="Rediger aktør"
+                      aria-label="Rediger leverandør"
                     >
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>
@@ -323,7 +326,7 @@ export function VendorSection({ taskId, vendors }: VendorSectionProps) {
                         className="h-7 w-7"
                         onClick={() => handleSelect(vendor.id)}
                         disabled={isPending}
-                        aria-label="Velg som endelig aktør"
+                        aria-label="Velg som endelig leverandør"
                       >
                         <Star className="h-3.5 w-3.5" />
                       </Button>
@@ -334,14 +337,14 @@ export function VendorSection({ taskId, vendors }: VendorSectionProps) {
                       className="h-7 w-7 text-red-600 hover:text-red-700 dark:text-red-400"
                       onClick={() => handleDelete(vendor.id)}
                       disabled={isPending}
-                      aria-label="Slett aktør"
+                      aria-label="Slett leverandør"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>
                 </div>
                 {vendor.description && (
-                  <p className="text-muted-foreground text-sm">
+                  <p className="text-sm text-muted-foreground">
                     {vendor.description}
                   </p>
                 )}
@@ -355,7 +358,7 @@ export function VendorSection({ taskId, vendors }: VendorSectionProps) {
 
                 <div className="flex flex-wrap gap-3 text-xs">
                   {vendor.phone && (
-                    <span className="text-muted-foreground flex items-center gap-1">
+                    <span className="flex items-center gap-1 text-muted-foreground">
                       <Phone className="h-3 w-3" />
                       {vendor.phone}
                     </span>
@@ -363,37 +366,41 @@ export function VendorSection({ taskId, vendors }: VendorSectionProps) {
                   {vendor.email && (
                     <a
                       href={`mailto:${vendor.email}`}
-                      className="text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+                      className="flex items-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
                     >
                       <Mail className="h-3 w-3" />
                       {vendor.email}
                     </a>
                   )}
-                  {vendor.website && (() => {
-                    try {
-                      const url = new URL(vendor.website)
-                      if (url.protocol === "http:" || url.protocol === "https:") {
-                        return (
-                          <a
-                            href={vendor.website}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
-                          >
-                            <Globe className="h-3 w-3" />
-                            Nettside
-                          </a>
-                        )
+                  {vendor.website &&
+                    (() => {
+                      try {
+                        const url = new URL(vendor.website)
+                        if (
+                          url.protocol === "http:" ||
+                          url.protocol === "https:"
+                        ) {
+                          return (
+                            <a
+                              href={vendor.website}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
+                            >
+                              <Globe className="h-3 w-3" />
+                              Nettside
+                            </a>
+                          )
+                        }
+                      } catch {
+                        // invalid URL, don't render link
                       }
-                    } catch {
-                      // invalid URL, don't render link
-                    }
-                    return null
-                  })()}
+                      return null
+                    })()}
                 </div>
 
                 {vendor.notes && (
-                  <p className="text-muted-foreground mt-1 text-xs">
+                  <p className="mt-1 text-xs text-muted-foreground">
                     {vendor.notes}
                   </p>
                 )}
@@ -408,11 +415,19 @@ export function VendorSection({ taskId, vendors }: VendorSectionProps) {
         <Sheet open={addOpen} onOpenChange={setAddOpen}>
           <SheetContent>
             <SheetHeader>
-              <SheetTitle>Legg til aktør</SheetTitle>
+              <SheetTitle>Legg til leverandør</SheetTitle>
             </SheetHeader>
             {vendorFormFields(
               "add",
-              { name, description, phone, email, website, estimatedPrice, notes },
+              {
+                name,
+                description,
+                phone,
+                email,
+                website,
+                estimatedPrice,
+                notes,
+              },
               {
                 setName,
                 setDescription,
@@ -424,9 +439,13 @@ export function VendorSection({ taskId, vendors }: VendorSectionProps) {
               }
             )}
             <div className="mt-4 px-1">
-              <Button onClick={handleAdd} disabled={isPending} className="w-full">
+              <Button
+                onClick={handleAdd}
+                disabled={isPending}
+                className="w-full"
+              >
                 {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Legg til aktør
+                Legg til leverandør
               </Button>
             </div>
           </SheetContent>
@@ -435,12 +454,20 @@ export function VendorSection({ taskId, vendors }: VendorSectionProps) {
         <Drawer open={addOpen} onOpenChange={setAddOpen}>
           <DrawerContent>
             <DrawerHeader>
-              <DrawerTitle>Legg til aktør</DrawerTitle>
+              <DrawerTitle>Legg til leverandør</DrawerTitle>
             </DrawerHeader>
             <div className="overflow-y-auto px-4 pb-6">
               {vendorFormFields(
                 "add",
-                { name, description, phone, email, website, estimatedPrice, notes },
+                {
+                  name,
+                  description,
+                  phone,
+                  email,
+                  website,
+                  estimatedPrice,
+                  notes,
+                },
                 {
                   setName,
                   setDescription,
@@ -452,9 +479,15 @@ export function VendorSection({ taskId, vendors }: VendorSectionProps) {
                 }
               )}
               <div className="mt-4 px-1">
-                <Button onClick={handleAdd} disabled={isPending} className="w-full">
-                  {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Legg til aktør
+                <Button
+                  onClick={handleAdd}
+                  disabled={isPending}
+                  className="w-full"
+                >
+                  {isPending && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  Legg til leverandør
                 </Button>
               </div>
             </div>
@@ -470,7 +503,7 @@ export function VendorSection({ taskId, vendors }: VendorSectionProps) {
         >
           <SheetContent>
             <SheetHeader>
-              <SheetTitle>Rediger aktør</SheetTitle>
+              <SheetTitle>Rediger leverandør</SheetTitle>
             </SheetHeader>
             {vendorFormFields(
               "edit",
@@ -512,7 +545,7 @@ export function VendorSection({ taskId, vendors }: VendorSectionProps) {
         >
           <DrawerContent>
             <DrawerHeader>
-              <DrawerTitle>Rediger aktør</DrawerTitle>
+              <DrawerTitle>Rediger leverandør</DrawerTitle>
             </DrawerHeader>
             <div className="overflow-y-auto px-4 pb-6">
               {vendorFormFields(
@@ -542,7 +575,9 @@ export function VendorSection({ taskId, vendors }: VendorSectionProps) {
                   disabled={isPending}
                   className="w-full"
                 >
-                  {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {isPending && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
                   Lagre endringer
                 </Button>
               </div>

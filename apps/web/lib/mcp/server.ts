@@ -9,7 +9,7 @@ import { createToolRegistry, type McpToolDefinition } from "./tools"
  * it carries the conventions the old copy-paste LLM import prompt used to
  * explain. Keep it short: it is paid for on every conversation.
  */
-export const MCP_SERVER_INSTRUCTIONS = `Home Overview manages one household's home: shopping lists for things to buy for the house, budget, maintenance tasks and garden plants. Text in the app is Norwegian; write names and descriptions in Norwegian unless the user asks otherwise.
+export const MCP_SERVER_INSTRUCTIONS = `Home Overview manages one household's home: shopping lists for things to buy for the house, budget, home projects and garden plants. Text in the app is Norwegian; write names and descriptions in Norwegian unless the user asks otherwise.
 
 Shopping:
 - A shopping item is a purchase need ("Vaskemaskin", "Hageslange"), not a product. Put concrete products, models and offers for the same need under the item's alternatives, best first; the first alternative's price is the item's effective price.
@@ -18,6 +18,13 @@ Shopping:
 - Prices are NOK numbers without currency signs. url and imageUrl are plain absolute https URLs, not markdown links.
 - Mark bought items with set-shopping-item-status. Use SKIPPED for things no longer wanted; delete only mistakes and duplicates, and confirm with the user first.
 - Use list-shopping-categories for category ids; create a category only when none fits.
+
+Projects:
+- A project is anything the household wants done to the home: maintenance, repairs, renovations, improvements or other. Set type accordingly; many projects are done by the household itself.
+- execution says who does the work: SELF, VENDOR or MIXED (null if not decided). Add vendor quotes only when someone is hired.
+- Lay out a project in one call with create-project and its steps; mark progress with update-project-step completed true, and set status IN_PROGRESS or COMPLETED on the project.
+- To buy materials or equipment for a project, create a shopping list with create-shopping-list and projectId (or link an existing one with update-shopping-list), then add items to it. get-project shows its lists with totals.
+- Prefer COMPLETED or ON_HOLD over deleting; delete only mistakes and duplicates, and confirm with the user first.
 
 Every update tool accepts expectedUpdatedAt from your last read; a CONFLICT error means someone changed the data, so read again before retrying. get-server-info shows which domains this token may change.`
 

@@ -3,13 +3,13 @@ export { calculateBudgetStats } from "./application/budget/calculations"
 type ShoppingItemStatus = "PENDING" | "PURCHASED" | "SKIPPED" | string
 type ShoppingItemTimeframe = "NOW" | "SOON" | "LATER" | "SOMEDAY" | string
 
-type MaintenanceTaskStatus =
+type ProjectStatus =
   | "NOT_STARTED"
   | "IN_PROGRESS"
   | "COMPLETED"
   | "ON_HOLD"
   | string
-type MaintenanceTaskPriority = "HIGH" | string
+type ProjectPriority = "HIGH" | string
 
 export type ShoppingStatsItemBase = {
   status: ShoppingItemStatus
@@ -19,9 +19,9 @@ export type ShoppingStatsItemBase = {
   assignedTo?: { name: string | null } | null
 }
 
-export type MaintenanceStatsTaskBase = {
-  status: MaintenanceTaskStatus
-  priority?: MaintenanceTaskPriority | null
+export type ProjectStatsBase = {
+  status: ProjectStatus
+  priority?: ProjectPriority | null
   estimatedPrice?: unknown
   dueDate?: string | Date | null
 }
@@ -68,31 +68,35 @@ export function calculateShoppingStats<T extends ShoppingStatsItemBase>(
   }
 }
 
-export function calculateMaintenanceStats<T extends MaintenanceStatsTaskBase>(
-  tasks: T[],
+export function calculateProjectStats<T extends ProjectStatsBase>(
+  projects: T[],
   now = new Date()
 ) {
   return {
-    totalTasks: tasks.length,
-    notStartedCount: tasks.filter((task) => task.status === "NOT_STARTED")
+    totalProjects: projects.length,
+    notStartedCount: projects.filter(
+      (project) => project.status === "NOT_STARTED"
+    ).length,
+    inProgressCount: projects.filter(
+      (project) => project.status === "IN_PROGRESS"
+    ).length,
+    completedCount: projects.filter((project) => project.status === "COMPLETED")
       .length,
-    inProgressCount: tasks.filter((task) => task.status === "IN_PROGRESS")
+    onHoldCount: projects.filter((project) => project.status === "ON_HOLD")
       .length,
-    completedCount: tasks.filter((task) => task.status === "COMPLETED").length,
-    onHoldCount: tasks.filter((task) => task.status === "ON_HOLD").length,
-    totalEstimatedCost: tasks.reduce(
-      (sum, task) =>
-        sum + (task.estimatedPrice ? Number(task.estimatedPrice) : 0),
+    totalEstimatedCost: projects.reduce(
+      (sum, project) =>
+        sum + (project.estimatedPrice ? Number(project.estimatedPrice) : 0),
       0
     ),
-    highPriorityTasks: tasks.filter(
-      (task) => task.priority === "HIGH" && task.status !== "COMPLETED"
+    highPriorityProjects: projects.filter(
+      (project) => project.priority === "HIGH" && project.status !== "COMPLETED"
     ),
-    overdueTasks: tasks.filter(
-      (task) =>
-        task.dueDate != null &&
-        new Date(task.dueDate) < now &&
-        task.status !== "COMPLETED"
+    overdueProjects: projects.filter(
+      (project) =>
+        project.dueDate != null &&
+        new Date(project.dueDate) < now &&
+        project.status !== "COMPLETED"
     ),
   }
 }
