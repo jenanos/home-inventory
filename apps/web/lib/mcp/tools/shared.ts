@@ -67,9 +67,28 @@ export const PLANT_TYPES = [
 
 export const LIFECYCLES = ["ANNUAL", "BIENNIAL", "PERENNIAL"] as const
 
-export const BUDGET_ENTRY_TYPES = ["INCOME", "EXPENSE", "DEDUCTION"] as const
+export const BUDGET_ENTRY_TYPES = [
+  "INCOME",
+  "EXPENSE",
+  "DEDUCTION",
+  "SAVINGS",
+] as const
 
-export const BUDGET_LOAN_TYPES = ["MORTGAGE", "OTHER"] as const
+export const BUDGET_FREQUENCIES = [
+  "WEEKLY",
+  "MONTHLY",
+  "QUARTERLY",
+  "SEMIANNUAL",
+  "YEARLY",
+] as const
+
+export const BUDGET_LOAN_TYPES = [
+  "MORTGAGE",
+  "STUDENT",
+  "CAR",
+  "CONSUMER",
+  "OTHER",
+] as const
 
 export const BUDGET_LOAN_REPAYMENT_TYPES = ["ANNUITY", "SERIAL"] as const
 

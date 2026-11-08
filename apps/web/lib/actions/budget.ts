@@ -1,22 +1,12 @@
 "use server"
 
-import {
-  db,
-  type BudgetEntryType,
-  type BudgetLoanRepaymentType,
-  type BudgetLoanType,
-  type TripTransportType,
-} from "@workspace/db"
-import {
-  bulkImportBudget as bulkImportBudgetService,
-  bulkImportBudgetWithDuplicates as bulkImportBudgetWithDuplicatesService,
-  bulkImportSize,
-  createImportedBudgetRows,
-  findExistingBudgetItems as findExistingBudgetItemsService,
-  type BulkBudgetImportInput,
-  type BulkBudgetImportWithDuplicatesInput,
-  type ExistingBudgetItems,
-} from "@/lib/application/budget/import"
+import type {
+  BudgetEntryFields,
+  BudgetLoanFields,
+  BudgetMemberFields,
+  BudgetSettingsInput,
+  BudgetTripFields,
+} from "@/lib/application/budget/write"
 import {
   createBudgetCategory,
   createBudgetEntry,
@@ -29,16 +19,13 @@ import {
   deleteBudgetMember as deleteBudgetMemberService,
   deleteBudgetTrip as deleteBudgetTripService,
   ensureBudget as ensureBudgetService,
-  ensureBudgetRow,
-  ensureDefaultBudgetCategories,
-  setTaxDeductionPercent,
   updateBudgetCategory,
   updateBudgetEntry,
   updateBudgetLoan,
   updateBudgetMember,
+  updateBudgetSettings as updateBudgetSettingsService,
   updateBudgetTrip,
 } from "@/lib/application/budget/write"
-import { assertBatchSize } from "@/lib/application/mutations"
 import { requireHousehold } from "@/lib/session"
 import { revalidatePath } from "next/cache"
 
@@ -47,10 +34,14 @@ import { revalidatePath } from "next/cache"
  * browser context comes from the session; validation, the household boundary
  * and the transaction live in `lib/application/budget`. Only `revalidatePath`
  * stays here.
+ *
+ * The dialogs always send the whole row, so an optional field that is left
+ * empty arrives as null and clears the stored value.
  */
 
-function revalidateBudgetPage() {
+function revalidateBudgetPages() {
   revalidatePath("/budsjett")
+  revalidatePath("/")
 }
 
 // ─── Budget ─────────────────────────────────────────────────────
@@ -60,22 +51,19 @@ export async function ensureBudget() {
   return ensureBudgetService(context)
 }
 
-export async function updateTaxDeductionPercent(percent: number) {
+export async function updateBudgetSettings(
+  input: Omit<BudgetSettingsInput, "expectedUpdatedAt">
+) {
   const { context } = await requireHousehold()
-  await setTaxDeductionPercent(context, { percent })
-  revalidateBudgetPage()
+  await updateBudgetSettingsService(context, input)
+  revalidateBudgetPages()
 }
 
 // ─── Budget Members ─────────────────────────────────────────────
 
-interface UpsertBudgetMemberInput {
-  id?: string
-  name: string
-  grossMonthlyIncome: number
-  taxPercent: number
-}
+type WithId<T> = T & { id?: string }
 
-export async function upsertBudgetMember(input: UpsertBudgetMemberInput) {
+export async function upsertBudgetMember(input: WithId<BudgetMemberFields>) {
   const { context } = await requireHousehold()
   const { id, ...fields } = input
 
@@ -85,30 +73,18 @@ export async function upsertBudgetMember(input: UpsertBudgetMemberInput) {
     await createBudgetMember(context, fields)
   }
 
-  revalidateBudgetPage()
+  revalidateBudgetPages()
 }
 
 export async function deleteBudgetMember(memberId: string) {
   const { context } = await requireHousehold()
   await deleteBudgetMemberService(context, memberId)
-  revalidateBudgetPage()
+  revalidateBudgetPages()
 }
 
 // ─── Budget Loans ───────────────────────────────────────────────
 
-interface UpsertBudgetLoanInput {
-  id?: string
-  bankName: string
-  loanName: string
-  loanType: BudgetLoanType
-  repaymentType: BudgetLoanRepaymentType
-  principalAmount: number
-  annualInterestRate: number
-  termMonths: number
-  monthlyFees: number
-}
-
-export async function upsertBudgetLoan(input: UpsertBudgetLoanInput) {
+export async function upsertBudgetLoan(input: WithId<BudgetLoanFields>) {
   const { context } = await requireHousehold()
   const { id, ...fields } = input
 
@@ -118,33 +94,21 @@ export async function upsertBudgetLoan(input: UpsertBudgetLoanInput) {
     await createBudgetLoan(context, fields)
   }
 
-  revalidateBudgetPage()
+  revalidateBudgetPages()
 }
 
 export async function deleteBudgetLoan(loanId: string) {
   const { context } = await requireHousehold()
   await deleteBudgetLoanService(context, loanId)
-  revalidateBudgetPage()
+  revalidateBudgetPages()
 }
 
 // ─── Budget Trips ───────────────────────────────────────────────
 
-interface UpsertBudgetTripInput {
-  id?: string
-  name: string
-  transportType: TripTransportType
-  annualTrips: number
-  ticketPerTrip?: number
-  tollPerTrip?: number
-  ferryPerTrip?: number
-  fuelPerTrip?: number
-}
-
-export async function upsertBudgetTrip(input: UpsertBudgetTripInput) {
+export async function upsertBudgetTrip(input: WithId<BudgetTripFields>) {
   const { context } = await requireHousehold()
   const { id, ...rest } = input
-  // The dialog always sends the whole trip; an omitted cost means 0, as the
-  // action has always stored it.
+  // An omitted transport cost means 0, as the action has always stored it.
   const fields = {
     ...rest,
     ticketPerTrip: rest.ticketPerTrip ?? 0,
@@ -159,23 +123,21 @@ export async function upsertBudgetTrip(input: UpsertBudgetTripInput) {
     await createBudgetTrip(context, fields)
   }
 
-  revalidateBudgetPage()
+  revalidateBudgetPages()
 }
 
 export async function deleteBudgetTrip(tripId: string) {
   const { context } = await requireHousehold()
   await deleteBudgetTripService(context, tripId)
-  revalidateBudgetPage()
+  revalidateBudgetPages()
 }
 
 // ─── Budget Categories ───────────────────────────────────────────
 
-interface UpsertBudgetCategoryInput {
+export async function upsertBudgetCategory(input: {
   id?: string
   name: string
-}
-
-export async function upsertBudgetCategory(input: UpsertBudgetCategoryInput) {
+}) {
   const { context } = await requireHousehold()
 
   if (input.id) {
@@ -184,28 +146,20 @@ export async function upsertBudgetCategory(input: UpsertBudgetCategoryInput) {
     await createBudgetCategory(context, { name: input.name })
   }
 
-  revalidateBudgetPage()
+  revalidateBudgetPages()
 }
 
 export async function deleteBudgetCategory(categoryId: string) {
   const { context } = await requireHousehold()
   await deleteBudgetCategoryService(context, categoryId)
-  revalidateBudgetPage()
+  revalidateBudgetPages()
 }
 
 // ─── Budget Entries ─────────────────────────────────────────────
 
-interface UpsertBudgetEntryInput {
-  id?: string
-  name: string
-  categoryId?: string | null
-  type: BudgetEntryType
-  monthlyAmount: number
-}
-
-export async function upsertBudgetEntry(input: UpsertBudgetEntryInput) {
+export async function upsertBudgetEntry(input: WithId<BudgetEntryFields>) {
   const { context } = await requireHousehold()
-  // The dialog sends the full entry; a missing category means uncategorized.
+  // A missing category means uncategorized.
   const { id, ...rest } = input
   const fields = { ...rest, categoryId: rest.categoryId ?? null }
 
@@ -215,63 +169,11 @@ export async function upsertBudgetEntry(input: UpsertBudgetEntryInput) {
     await createBudgetEntry(context, fields)
   }
 
-  revalidateBudgetPage()
+  revalidateBudgetPages()
 }
 
 export async function deleteBudgetEntry(entryId: string) {
   const { context } = await requireHousehold()
   await deleteBudgetEntryService(context, entryId)
-  revalidateBudgetPage()
-}
-
-// ─── Bulk Import (LLM) ──────────────────────────────────────────
-
-export async function bulkImportBudget(input: BulkBudgetImportInput) {
-  const { context } = await requireHousehold()
-  const result = await bulkImportBudgetService(context, input)
-  revalidateBudgetPage()
-  return result
-}
-
-/**
- * Full replacement. Deliberately kept here and out of `lib/application`, so no
- * MCP tool can ever reach it (plan 10.4).
- */
-export async function replaceBudget(input: BulkBudgetImportInput) {
-  const { context } = await requireHousehold()
-  assertBatchSize(bulkImportSize(input), "Budsjettimporten", {
-    allowEmpty: true,
-  })
-
-  const count = await db.$transaction(async (tx) => {
-    const budget = await ensureBudgetRow(tx, context.householdId)
-    const budgetId = budget.id
-
-    await tx.budgetMember.deleteMany({ where: { budgetId } })
-    await tx.budgetLoan.deleteMany({ where: { budgetId } })
-    await tx.budgetTrip.deleteMany({ where: { budgetId } })
-    await tx.budgetEntry.deleteMany({ where: { budgetId } })
-    await tx.budgetEntryCategory.deleteMany({ where: { budgetId } })
-
-    const created = await createImportedBudgetRows(tx, budgetId, input, "zero")
-    await ensureDefaultBudgetCategories(tx, budgetId)
-    return created
-  })
-
-  revalidateBudgetPage()
-  return { count }
-}
-
-export async function findExistingBudgetItems(): Promise<ExistingBudgetItems> {
-  const { context } = await requireHousehold()
-  return findExistingBudgetItemsService(context)
-}
-
-export async function bulkImportBudgetWithDuplicates(
-  input: BulkBudgetImportWithDuplicatesInput
-) {
-  const { context } = await requireHousehold()
-  const result = await bulkImportBudgetWithDuplicatesService(context, input)
-  revalidateBudgetPage()
-  return result
+  revalidateBudgetPages()
 }

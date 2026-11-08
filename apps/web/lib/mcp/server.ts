@@ -26,6 +26,14 @@ Projects:
 - To buy materials or equipment for a project, create a shopping list with create-shopping-list and projectId (or link an existing one with update-shopping-list), then add items to it. get-project shows its lists with totals.
 - Prefer COMPLETED or ON_HOLD over deleting; delete only mistakes and duplicates, and confirm with the user first.
 
+Budget:
+- Amounts are NOK numbers. An entry has amount and frequency (WEEKLY, MONTHLY, QUARTERLY, SEMIANNUAL, YEARLY): enter a yearly bill as it is billed, the app converts it to a monthly figure.
+- Entry types: INCOME, EXPENSE, DEDUCTION, SAVINGS. Use SAVINGS for money set aside (funds, BSU, buffer), not EXPENSE.
+- Loans hold today's remaining balance and remaining term; add one loan per bank or loan part. Interest, principal and the interest deduction are calculated.
+- Read get-budget-details first. Lay out several entries with add-budget-entries (categoryName creates missing categories, existing names are skipped).
+- Rows list missingFields: optional details that are empty, such as provider, paymentDay, renewalDate, a member's actual netMonthlyIncome or the budget's propertyValue. Fill them from what the user tells you or shows you, e.g. a payslip or an invoice; never guess.
+- Use dryRun to show the effect before saving anything the user has not confirmed. Delete only what the user wants gone, and confirm first.
+
 Every update tool accepts expectedUpdatedAt from your last read; a CONFLICT error means someone changed the data, so read again before retrying. get-server-info shows which domains this token may change.`
 
 type McpServerDependencies = {

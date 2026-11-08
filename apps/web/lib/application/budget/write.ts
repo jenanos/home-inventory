@@ -1,5 +1,6 @@
 import {
   BudgetEntryType,
+  BudgetFrequency,
   BudgetLoanRepaymentType,
   BudgetLoanType,
   TripTransportType,
@@ -10,6 +11,9 @@ import {
 import type { ApplicationContext } from "../context"
 import { ApplicationError } from "../errors"
 import {
+  MAX_LONG_TEXT_LENGTH,
+  MAX_NAME_LENGTH,
+  assertBatchSize,
   definedFields,
   enumValue,
   freshness,
@@ -18,7 +22,9 @@ import {
   moneyAmount,
   notFound,
   numberInRange,
+  optionalCalendarDate,
   optionalMoneyAmount,
+  optionalText,
   requiredText,
   scopedWrite,
   validationError,
@@ -49,12 +55,15 @@ const DEFAULT_BUDGET_CATEGORY_NAMES = [
 ] as const
 
 const ENTRY_TYPES = Object.values(BudgetEntryType)
+const FREQUENCIES = Object.values(BudgetFrequency)
 const LOAN_TYPES = Object.values(BudgetLoanType)
 const REPAYMENT_TYPES = Object.values(BudgetLoanRepaymentType)
 const TRIP_TYPES = Object.values(TripTransportType)
 
 /** `Decimal(14, 2)` on `BudgetLoan.principalAmount`. */
 const MAX_PRINCIPAL_AMOUNT = 999_999_999_999.99
+/** `Decimal(14, 2)` on `Budget.propertyValue`. */
+const MAX_PROPERTY_VALUE = 999_999_999_999.99
 const MAX_TERM_MONTHS = 600
 const MAX_ANNUAL_TRIPS = 1000
 
@@ -81,42 +90,41 @@ class DryRunRollback extends Error {
 
 // ─── Budget row ─────────────────────────────────────────────────
 
-export async function ensureDefaultBudgetCategories(
+async function createDefaultBudgetCategories(
   client: BudgetDbClient,
   budgetId: string
 ) {
-  const [categoryCount, entryCount] = await Promise.all([
-    client.budgetEntryCategory.count({ where: { budgetId } }),
-    client.budgetEntry.count({ where: { budgetId } }),
-  ])
-
-  if (categoryCount > 0 || entryCount > 0) return
-
   await client.budgetEntryCategory.createMany({
     data: DEFAULT_BUDGET_CATEGORY_NAMES.map((name, index) => ({
       budgetId,
       name,
       sortOrder: index,
     })),
+    // Two first writes racing each other both reach this point.
+    skipDuplicates: true,
   })
 }
 
 /**
  * Creates the household's budget on first use. A household without a budget
  * reads as `hasBudget: false`; the first write creates the row implicitly,
- * with the same default categories the web page has always created.
+ * with the default categories. The defaults are only added together with the
+ * row, so categories the household deleted do not come back.
  */
 export async function ensureBudgetRow(
   client: BudgetDbClient,
   householdId: string
 ) {
+  const existing = await client.budget.findUnique({ where: { householdId } })
+  if (existing) return existing
+
   const budget = await client.budget.upsert({
     where: { householdId },
     update: {},
     create: { householdId },
   })
 
-  await ensureDefaultBudgetCategories(client, budget.id)
+  await createDefaultBudgetCategories(client, budget.id)
 
   return budget
 }
@@ -177,12 +185,34 @@ function percent(value: number, field: string) {
   )
 }
 
-export async function setTaxDeductionPercent(
+function notes(value: string | null | undefined) {
+  return optionalText(value, "Notat", MAX_LONG_TEXT_LENGTH)
+}
+
+export type BudgetSettingsInput = {
+  /** Share of loan interest that is tax deductible, 0–100. */
+  taxDeductionPercent?: number
+  /** Market value of the home; null clears it. */
+  propertyValue?: number | null
+  expectedUpdatedAt?: Date
+}
+
+export async function updateBudgetSettings(
   context: ApplicationContext,
-  input: { percent: number; expectedUpdatedAt?: Date },
+  input: BudgetSettingsInput,
   options: BudgetWriteOptions = {}
 ) {
-  const taxDeductionPercent = percent(input.percent, "Rentefradrag")
+  const data = definedFields({
+    taxDeductionPercent:
+      input.taxDeductionPercent === undefined
+        ? undefined
+        : percent(input.taxDeductionPercent, "Rentefradrag"),
+    propertyValue: optionalMoneyAmount(
+      input.propertyValue,
+      "Boligverdi",
+      MAX_PROPERTY_VALUE
+    ),
+  })
 
   return runBudgetWrite(context, options, (tx, budgetId) =>
     scopedWrite({
@@ -191,7 +221,7 @@ export async function setTaxDeductionPercent(
       write: () =>
         tx.budget.update({
           where: { id: budgetId, ...freshness(input.expectedUpdatedAt) },
-          data: { taxDeductionPercent },
+          data,
         }),
       existsInScope: async () => true,
     })
@@ -205,12 +235,23 @@ export type BudgetEntryFields = {
   /** A category of the same budget, or null for uncategorized. */
   categoryId?: string | null
   type: BudgetEntryType
-  monthlyAmount: number
+  /** The amount per occurrence. */
+  amount: number
+  /** How often `amount` occurs. Defaults to MONTHLY. */
+  frequency?: BudgetFrequency
+  provider?: string | null
+  /** Day of the month, 1–31. */
+  paymentDay?: number | null
+  /** `YYYY-MM-DD` or a `Date`. */
+  renewalDate?: Date | string | null
+  notes?: string | null
 }
 
 export type UpdateBudgetEntryInput = Partial<BudgetEntryFields> & {
   expectedUpdatedAt?: Date
 }
+
+const ENTRY_INCLUDE = { category: { select: { id: true, name: true } } }
 
 function normalizeEntryFields(input: Partial<BudgetEntryFields>) {
   return definedFields({
@@ -220,11 +261,32 @@ function normalizeEntryFields(input: Partial<BudgetEntryFields>) {
       input.type === undefined
         ? undefined
         : enumValue(input.type, ENTRY_TYPES, "Type"),
-    monthlyAmount:
-      input.monthlyAmount === undefined
+    amount:
+      input.amount === undefined
         ? undefined
-        : moneyAmount(input.monthlyAmount, "Månedlig beløp"),
+        : moneyAmount(input.amount, "Beløp"),
+    frequency:
+      input.frequency === undefined
+        ? undefined
+        : enumValue(input.frequency, FREQUENCIES, "Frekvens"),
+    provider: optionalText(input.provider, "Leverandør", MAX_NAME_LENGTH),
+    paymentDay:
+      input.paymentDay == null
+        ? input.paymentDay
+        : integerInRange(input.paymentDay, "Trekkdag", { min: 1, max: 31 }),
+    renewalDate: optionalCalendarDate(input.renewalDate, "Bindingstid til"),
+    notes: notes(input.notes),
   })
+}
+
+function newEntryData(input: BudgetEntryFields) {
+  const fields = normalizeEntryFields(input)
+  return {
+    ...fields,
+    name: required(fields.name, "Navn"),
+    type: required(fields.type, "Type"),
+    amount: required(fields.amount, "Beløp"),
+  }
 }
 
 async function assertCategoryInBudget(
@@ -246,12 +308,7 @@ export async function createBudgetEntry(
   input: BudgetEntryFields,
   options: BudgetWriteOptions = {}
 ) {
-  const fields = normalizeEntryFields(input)
-  const data = {
-    name: required(fields.name, "Navn"),
-    type: required(fields.type, "Type"),
-    monthlyAmount: required(fields.monthlyAmount, "Månedlig beløp"),
-  }
+  const data = newEntryData(input)
 
   return runBudgetWrite(context, options, async (tx, budgetId) => {
     await assertCategoryInBudget(tx, budgetId, input.categoryId)
@@ -264,7 +321,7 @@ export async function createBudgetEntry(
         budgetId,
         sortOrder,
       },
-      include: { category: { select: { id: true, name: true } } },
+      include: ENTRY_INCLUDE,
     })
   })
 }
@@ -289,11 +346,175 @@ export async function updateBudgetEntry(
         tx.budgetEntry.update({
           where: { ...scope, ...freshness(expectedUpdatedAt) },
           data: definedFields({ ...fields, categoryId }),
-          include: { category: { select: { id: true, name: true } } },
+          include: ENTRY_INCLUDE,
         }),
       existsInScope: async () =>
         (await tx.budgetEntry.count({ where: scope })) > 0,
     })
+  })
+}
+
+// ─── Several entries at once ────────────────────────────────────
+
+export type NewBudgetEntryInput = BudgetEntryFields & {
+  /**
+   * Category by name instead of id: matched ignoring case, and created when
+   * the budget has none by that name. Cannot be combined with `categoryId`.
+   */
+  categoryName?: string | null
+}
+
+export type SkippedBudgetEntry = {
+  index: number
+  name: string
+  existingEntryId: string | null
+  reason: "ALREADY_EXISTS" | "DUPLICATE_IN_REQUEST"
+}
+
+const entryNameCollator = new Intl.Collator("nb-NO", { sensitivity: "base" })
+
+function sameName(a: string, b: string) {
+  return (
+    entryNameCollator.compare(
+      normalizeBudgetCategoryName(a),
+      normalizeBudgetCategoryName(b)
+    ) === 0
+  )
+}
+
+/**
+ * Adds up to 100 entries in one transaction, so a first budget can be laid
+ * out in one call. An entry whose name already exists in the same category,
+ * ignoring case, is skipped and reported rather than added twice; the same
+ * goes for a repeat within the request. Any invalid entry fails the whole
+ * call and nothing is saved.
+ */
+export async function addBudgetEntries(
+  context: ApplicationContext,
+  entries: NewBudgetEntryInput[],
+  options: BudgetWriteOptions = {}
+) {
+  assertBatchSize(entries.length, "Budsjettpostene")
+
+  const prepared = entries.map((entry, index) => {
+    try {
+      if (entry.categoryId && entry.categoryName) {
+        throw validationError("Bruk enten categoryId eller categoryName.")
+      }
+      const categoryName =
+        entry.categoryName == null
+          ? null
+          : requiredText(
+              normalizeBudgetCategoryName(entry.categoryName),
+              "Kategorinavn"
+            )
+      return {
+        data: newEntryData(entry),
+        categoryId: entry.categoryId ?? null,
+        categoryName,
+      }
+    } catch (error) {
+      if (error instanceof ApplicationError) {
+        throw new ApplicationError(
+          error.code,
+          `Post ${index + 1}: ${error.message}`
+        )
+      }
+      throw error
+    }
+  })
+
+  return runBudgetWrite(context, options, async (tx, budgetId) => {
+    const categories = await tx.budgetEntryCategory.findMany({
+      where: { budgetId },
+      select: { id: true, name: true, sortOrder: true },
+    })
+    const existing = await tx.budgetEntry.findMany({
+      where: { budgetId },
+      select: { id: true, name: true, categoryId: true },
+    })
+    let nextEntryOrder = existing.length
+    let nextCategoryOrder =
+      categories.reduce((max, c) => Math.max(max, c.sortOrder), -1) + 1
+
+    const createdCategories: Array<{
+      id: string
+      name: string
+      sortOrder: number
+      updatedAt: Date
+    }> = []
+    const created: Prisma.BudgetEntryGetPayload<{
+      include: typeof ENTRY_INCLUDE
+    }>[] = []
+    const skipped: SkippedBudgetEntry[] = []
+    const seen: Array<{ name: string; categoryId: string | null }> = []
+
+    for (const [index, entry] of prepared.entries()) {
+      let categoryId = entry.categoryId
+      if (categoryId) {
+        if (!categories.some((category) => category.id === categoryId)) {
+          throw new ApplicationError(
+            "NOT_FOUND",
+            `Post ${index + 1}: ${notFound("budsjettkategori").message}`
+          )
+        }
+      } else if (entry.categoryName) {
+        const name = entry.categoryName
+        const match = categories.find((category) =>
+          sameName(category.name, name)
+        )
+        if (match) {
+          categoryId = match.id
+        } else {
+          const category = await writeCategory(name, () =>
+            tx.budgetEntryCategory.create({
+              data: { budgetId, name, sortOrder: nextCategoryOrder++ },
+            })
+          )
+          categories.push(category)
+          createdCategories.push(category)
+          categoryId = category.id
+        }
+      }
+
+      const matches = (row: { name: string; categoryId: string | null }) =>
+        row.categoryId === categoryId && sameName(row.name, entry.data.name)
+
+      const stored = existing.find(matches)
+      if (stored) {
+        skipped.push({
+          index,
+          name: entry.data.name,
+          existingEntryId: stored.id,
+          reason: "ALREADY_EXISTS",
+        })
+        continue
+      }
+      if (seen.some(matches)) {
+        skipped.push({
+          index,
+          name: entry.data.name,
+          existingEntryId: null,
+          reason: "DUPLICATE_IN_REQUEST",
+        })
+        continue
+      }
+      seen.push({ name: entry.data.name, categoryId })
+
+      created.push(
+        await tx.budgetEntry.create({
+          data: {
+            ...entry.data,
+            categoryId,
+            budgetId,
+            sortOrder: nextEntryOrder++,
+          },
+          include: ENTRY_INCLUDE,
+        })
+      )
+    }
+
+    return { created, skipped, createdCategories }
   })
 }
 
@@ -391,6 +612,9 @@ export type BudgetMemberFields = {
   name: string
   grossMonthlyIncome: number
   taxPercent: number
+  /** Actual payout; replaces gross × (1 − tax) when set. */
+  netMonthlyIncome?: number | null
+  notes?: string | null
 }
 
 export type UpdateBudgetMemberInput = Partial<BudgetMemberFields> & {
@@ -409,6 +633,11 @@ function normalizeMemberFields(input: Partial<BudgetMemberFields>) {
       input.taxPercent === undefined
         ? undefined
         : percent(input.taxPercent, "Skatteprosent"),
+    netMonthlyIncome: optionalMoneyAmount(
+      input.netMonthlyIncome,
+      "Utbetalt netto"
+    ),
+    notes: notes(input.notes),
   })
 }
 
@@ -419,6 +648,7 @@ export async function createBudgetMember(
 ) {
   const fields = normalizeMemberFields(input)
   const data = {
+    ...fields,
     name: required(fields.name, "Navn"),
     grossMonthlyIncome: required(
       fields.grossMonthlyIncome,
@@ -471,6 +701,9 @@ export type BudgetLoanFields = {
   annualInterestRate: number
   termMonths: number
   monthlyFees?: number
+  /** `YYYY-MM-DD` or a `Date`; null clears it. */
+  fixedRateUntil?: Date | string | null
+  notes?: string | null
 }
 
 export type UpdateBudgetLoanInput = Partial<BudgetLoanFields> & {
@@ -519,6 +752,8 @@ function normalizeLoanFields(input: Partial<BudgetLoanFields>) {
       input.monthlyFees === undefined
         ? undefined
         : moneyAmount(input.monthlyFees, "Månedlige gebyrer"),
+    fixedRateUntil: optionalCalendarDate(input.fixedRateUntil, "Fastrente til"),
+    notes: notes(input.notes),
   })
 }
 
@@ -534,6 +769,7 @@ export async function createBudgetLoan(
     ...definedFields(input),
   })
   const data = {
+    ...fields,
     bankName: required(fields.bankName, "Bank"),
     loanName: required(fields.loanName, "Lånenavn"),
     loanType: required(fields.loanType, "Lånetype"),
@@ -588,6 +824,9 @@ export type BudgetTripFields = {
   tollPerTrip?: number | null
   ferryPerTrip?: number | null
   fuelPerTrip?: number | null
+  /** Parking, accommodation and so on; applies to every transport type. */
+  otherPerTrip?: number | null
+  notes?: string | null
 }
 
 export type UpdateBudgetTripInput = Partial<BudgetTripFields> & {
@@ -664,6 +903,9 @@ export async function createBudgetTrip(
     transportType,
     annualTrips: annualTrips(input.annualTrips ?? 1),
     ...tripCosts(transportType, input),
+    otherPerTrip:
+      optionalMoneyAmount(input.otherPerTrip, "Andre kostnader") ?? null,
+    notes: notes(input.notes) ?? null,
   }
 
   return runBudgetWrite(context, options, async (tx, budgetId) => {
@@ -687,6 +929,8 @@ export async function updateBudgetTrip(
       : enumValue(rest.transportType, TRIP_TYPES, "Transporttype")
   const trips =
     rest.annualTrips === undefined ? undefined : annualTrips(rest.annualTrips)
+  const otherPerTrip = optionalMoneyAmount(rest.otherPerTrip, "Andre kostnader")
+  const tripNotes = notes(rest.notes)
 
   return runBudgetWrite(context, options, async (tx, budgetId) => {
     const scope = { id: tripId, budgetId }
@@ -709,6 +953,8 @@ export async function updateBudgetTrip(
             transportType,
             annualTrips: trips,
             ...tripCosts(transportType, rest, existing),
+            otherPerTrip,
+            notes: tripNotes,
           }),
         }),
       existsInScope: async () => true,
@@ -716,58 +962,87 @@ export async function updateBudgetTrip(
   })
 }
 
-// ─── Deletes (web only; no MCP tool) ────────────────────────────
-
-function scopedDelete(resource: string, remove: () => Promise<unknown>) {
-  return scopedWrite({ resource, write: remove })
-}
+// ─── Deletes ────────────────────────────────────────────────────
+//
+// Shared by the web page and MCP. Like every other budget write they run in
+// `runBudgetWrite`, so MCP can preview a delete with `dryRun` and both get the
+// summary before and after.
 
 export function deleteBudgetEntry(
   context: ApplicationContext,
-  entryId: string
+  entryId: string,
+  options: BudgetWriteOptions = {}
 ) {
-  return scopedDelete("budsjettpost", () =>
-    db.budgetEntry.delete({
-      where: { id: entryId, budget: { householdId: context.householdId } },
+  return runBudgetWrite(context, options, (tx, budgetId) =>
+    scopedWrite({
+      resource: "budsjettpost",
+      write: () =>
+        tx.budgetEntry.delete({
+          where: { id: entryId, budgetId },
+          include: ENTRY_INCLUDE,
+        }),
     })
   )
 }
 
-/** Entries in the category become uncategorized through `onDelete: SetNull`. */
+/**
+ * Entries in the category become uncategorized through `onDelete: SetNull`,
+ * so the totals do not change.
+ */
 export function deleteBudgetCategory(
   context: ApplicationContext,
-  categoryId: string
+  categoryId: string,
+  options: BudgetWriteOptions = {}
 ) {
-  return scopedDelete("budsjettkategori", () =>
-    db.budgetEntryCategory.delete({
-      where: { id: categoryId, budget: { householdId: context.householdId } },
+  return runBudgetWrite(context, options, async (tx, budgetId) => {
+    const entryCount = await tx.budgetEntry.count({
+      where: { categoryId, budgetId },
     })
-  )
+    const category = await scopedWrite({
+      resource: "budsjettkategori",
+      write: () =>
+        tx.budgetEntryCategory.delete({ where: { id: categoryId, budgetId } }),
+    })
+    return { ...category, uncategorizedEntryCount: entryCount }
+  })
 }
 
 export function deleteBudgetMember(
   context: ApplicationContext,
-  memberId: string
+  memberId: string,
+  options: BudgetWriteOptions = {}
 ) {
-  return scopedDelete("budsjettmedlem", () =>
-    db.budgetMember.delete({
-      where: { id: memberId, budget: { householdId: context.householdId } },
+  return runBudgetWrite(context, options, (tx, budgetId) =>
+    scopedWrite({
+      resource: "budsjettmedlem",
+      write: () =>
+        tx.budgetMember.delete({ where: { id: memberId, budgetId } }),
     })
   )
 }
 
-export function deleteBudgetLoan(context: ApplicationContext, loanId: string) {
-  return scopedDelete("lån", () =>
-    db.budgetLoan.delete({
-      where: { id: loanId, budget: { householdId: context.householdId } },
+export function deleteBudgetLoan(
+  context: ApplicationContext,
+  loanId: string,
+  options: BudgetWriteOptions = {}
+) {
+  return runBudgetWrite(context, options, (tx, budgetId) =>
+    scopedWrite({
+      resource: "lån",
+      write: () => tx.budgetLoan.delete({ where: { id: loanId, budgetId } }),
     })
   )
 }
 
-export function deleteBudgetTrip(context: ApplicationContext, tripId: string) {
-  return scopedDelete("reise", () =>
-    db.budgetTrip.delete({
-      where: { id: tripId, budget: { householdId: context.householdId } },
+export function deleteBudgetTrip(
+  context: ApplicationContext,
+  tripId: string,
+  options: BudgetWriteOptions = {}
+) {
+  return runBudgetWrite(context, options, (tx, budgetId) =>
+    scopedWrite({
+      resource: "reise",
+      write: () => tx.budgetTrip.delete({ where: { id: tripId, budgetId } }),
     })
   )
 }

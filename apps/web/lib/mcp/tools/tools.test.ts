@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   budgetFindUnique: vi.fn(),
   budgetMemberFindMany: vi.fn(),
   budgetLoanFindMany: vi.fn(),
+  budgetLoanCount: vi.fn(),
   budgetTripFindMany: vi.fn(),
   budgetEntryCategoryFindMany: vi.fn(),
   budgetEntryFindMany: vi.fn(),
@@ -46,7 +47,10 @@ vi.mock("@workspace/db", async (importOriginal) => ({
     },
     budget: { findUnique: mocks.budgetFindUnique },
     budgetMember: { findMany: mocks.budgetMemberFindMany },
-    budgetLoan: { findMany: mocks.budgetLoanFindMany },
+    budgetLoan: {
+      findMany: mocks.budgetLoanFindMany,
+      count: mocks.budgetLoanCount,
+    },
     budgetTrip: { findMany: mocks.budgetTripFindMany },
     budgetEntryCategory: { findMany: mocks.budgetEntryCategoryFindMany },
     budgetEntry: {
@@ -221,6 +225,7 @@ beforeEach(() => {
   mocks.budgetFindUnique.mockResolvedValue({
     id: "budget-1",
     taxDeductionPercent: decimal("22"),
+    propertyValue: null,
     createdAt: new Date("2026-01-01T00:00:00Z"),
     updatedAt: new Date("2026-02-01T00:00:00Z"),
     categories: [
@@ -237,6 +242,8 @@ beforeEach(() => {
         name: "Medlem",
         grossMonthlyIncome: decimal("60000"),
         taxPercent: decimal("35"),
+        netMonthlyIncome: null,
+        notes: null,
         sortOrder: 0,
         updatedAt: new Date("2026-02-02T00:00:00Z"),
       },
@@ -252,6 +259,8 @@ beforeEach(() => {
         annualInterestRate: decimal("5.5"),
         termMonths: 300,
         monthlyFees: decimal("65"),
+        fixedRateUntil: new Date("2028-06-01T00:00:00Z"),
+        notes: "Fastrente 3 år",
         sortOrder: 0,
         updatedAt: new Date("2026-02-02T00:00:00Z"),
       },
@@ -266,6 +275,8 @@ beforeEach(() => {
         tollPerTrip: decimal("120"),
         ferryPerTrip: null,
         fuelPerTrip: decimal("500"),
+        otherPerTrip: null,
+        notes: null,
         sortOrder: 0,
         updatedAt: new Date("2026-02-02T00:00:00Z"),
       },
@@ -275,7 +286,12 @@ beforeEach(() => {
         id: "be-1",
         name: "Strøm",
         type: "EXPENSE",
-        monthlyAmount: decimal("1500"),
+        amount: decimal("18000"),
+        frequency: "YEARLY",
+        provider: "Tibber",
+        paymentDay: null,
+        renewalDate: null,
+        notes: null,
         sortOrder: 0,
         updatedAt: new Date("2026-02-02T00:00:00Z"),
         category: { id: "bc-1", name: "Bolig" },
@@ -298,6 +314,7 @@ beforeEach(() => {
     async () => (await mocks.budgetFindUnique()).entries
   )
   mocks.budgetEntryCount.mockResolvedValue(1)
+  mocks.budgetLoanCount.mockResolvedValue(1)
 
   mocks.projectCount.mockResolvedValue(1)
   mocks.projectFindMany.mockResolvedValue([
@@ -654,6 +671,37 @@ describe("budget contract", () => {
     for (const amount of Object.values(totals)) {
       expect(amount).toMatch(/^-?\d+\.\d{2}$/)
     }
+    expect(summary.structured).toMatchObject({
+      keyFigures: { loanToValuePercent: null },
+    })
+  })
+
+  it("converts entry frequencies and reports empty optional fields", async () => {
+    const { structured } = await callTool("get-budget-details", {
+      sections: ["entries", "loans"],
+    })
+
+    expect(structured).toMatchObject({
+      propertyValue: null,
+      missingFields: ["propertyValue"],
+      entries: [
+        {
+          amount: "18000",
+          frequency: "YEARLY",
+          monthlyAmount: "1500.00",
+          provider: "Tibber",
+          missingFields: ["paymentDay", "renewalDate"],
+        },
+      ],
+      loans: [
+        {
+          fixedRateUntil: "2028-06-01",
+          notes: "Fastrente 3 år",
+          missingFields: [],
+        },
+      ],
+    })
+    expectMatchesOutputSchema("get-budget-details", structured)
   })
 
   it("only fetches the sections that were asked for", async () => {

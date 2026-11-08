@@ -65,16 +65,22 @@ describe("write tool contracts", () => {
         "delete-shopping-items",
         "create-shopping-category",
         "create-budget-entry",
+        "add-budget-entries",
         "update-budget-entry",
+        "delete-budget-entry",
         "create-budget-category",
         "update-budget-category",
+        "delete-budget-category",
         "create-budget-member",
         "update-budget-member",
+        "delete-budget-member",
         "create-budget-loan",
         "update-budget-loan",
+        "delete-budget-loan",
         "create-budget-trip",
         "update-budget-trip",
-        "set-tax-deduction-percent",
+        "delete-budget-trip",
+        "update-budget-settings",
         "create-project",
         "update-project",
         "delete-project",
@@ -157,9 +163,10 @@ describe("write tool contracts", () => {
     }
   })
 
-  // Deleting is allowed for shopping items and alternatives (ADR 0005) and for
-  // projects with their steps and vendors (ADR 0006). A new delete tool is a
-  // decision, not a side effect of adding a feature.
+  // Deleting is allowed for shopping items and alternatives (ADR 0005), for
+  // projects with their steps and vendors (ADR 0006) and for budget rows
+  // (ADR 0007). A new delete tool is a decision, not a side effect of adding a
+  // feature.
   it("allows deletion only where it was decided", () => {
     const deleting = registry
       .filter((tool) => /delete|remove/.test(tool.name))
@@ -167,6 +174,11 @@ describe("write tool contracts", () => {
       .sort()
 
     expect(deleting).toEqual([
+      "delete-budget-category",
+      "delete-budget-entry",
+      "delete-budget-loan",
+      "delete-budget-member",
+      "delete-budget-trip",
       "delete-product-alternative",
       "delete-project",
       "delete-project-step",

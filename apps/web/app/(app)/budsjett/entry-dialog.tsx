@@ -1,22 +1,9 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@workspace/ui/components/sheet"
-import {
-  Drawer,
-  DrawerContent,
-  DrawerHeader,
-  DrawerTitle,
-} from "@workspace/ui/components/drawer"
-import { ScrollArea } from "@workspace/ui/components/scroll-area"
-import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
+import { Textarea } from "@workspace/ui/components/textarea"
 import {
   Select,
   SelectContent,
@@ -25,10 +12,18 @@ import {
   SelectValue,
 } from "@workspace/ui/components/select"
 import { upsertBudgetEntry } from "@/lib/actions/budget"
+import { entryMonthlyAmount } from "@/lib/application/budget/calculations"
 import { toast } from "sonner"
-import type { BudgetEntryType } from "@workspace/db"
+import type { BudgetEntryType, BudgetFrequency } from "@workspace/db"
 import type { BudgetCategoryData, BudgetEntryData } from "./budget-view"
-import { useMediaQuery } from "@/hooks/use-media-query"
+import { BudgetFormSheet, FormActions } from "./budget-form-sheet"
+import {
+  FREQUENCY_LABELS,
+  formatCurrency,
+  optionalString,
+  parseOptionalNumber,
+} from "./budget-format"
+import { MoreDetails } from "./more-details"
 
 interface EntryDialogProps {
   open: boolean
@@ -45,7 +40,6 @@ export function EntryDialog({
   categories,
   defaults,
 }: EntryDialogProps) {
-  const isDesktop = useMediaQuery("(min-width: 768px)")
   const title = entry ? "Rediger budsjettpost" : "Legg til budsjettpost"
   const initialCategoryId =
     entry?.category?.id ??
@@ -53,41 +47,20 @@ export function EntryDialog({
     categories.some((category) => category.id === defaults.categoryId)
       ? defaults.categoryId
       : null)
-  const formContent = open ? (
-    <EntryDialogForm
-      key={entry?.id ?? "new"}
-      entry={entry}
-      categories={categories}
-      initialCategoryId={initialCategoryId}
-      initialType={entry?.type ?? defaults.type ?? "EXPENSE"}
-      onOpenChange={onOpenChange}
-    />
-  ) : null
-
-  if (isDesktop) {
-    return (
-      <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent>
-          <SheetHeader>
-            <SheetTitle>{title}</SheetTitle>
-          </SheetHeader>
-          {formContent}
-        </SheetContent>
-      </Sheet>
-    )
-  }
 
   return (
-    <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent>
-        <DrawerHeader>
-          <DrawerTitle>{title}</DrawerTitle>
-        </DrawerHeader>
-        <ScrollArea className="max-h-[70vh] overflow-x-hidden">
-          <div className="min-w-0 px-4 pb-6">{formContent}</div>
-        </ScrollArea>
-      </DrawerContent>
-    </Drawer>
+    <BudgetFormSheet open={open} onOpenChange={onOpenChange} title={title}>
+      {open ? (
+        <EntryDialogForm
+          key={entry?.id ?? "new"}
+          entry={entry}
+          categories={categories}
+          initialCategoryId={initialCategoryId}
+          initialType={entry?.type ?? defaults.type ?? "EXPENSE"}
+          onOpenChange={onOpenChange}
+        />
+      ) : null}
+    </BudgetFormSheet>
   )
 }
 
@@ -109,17 +82,39 @@ function EntryDialogForm({
     initialCategoryId ?? "none"
   )
   const [type, setType] = useState<BudgetEntryType>(initialType)
-  const [monthlyAmount, setMonthlyAmount] = useState(
-    entry ? String(entry.monthlyAmount) : ""
+  const [amount, setAmount] = useState(entry ? String(entry.amount) : "")
+  const [frequency, setFrequency] = useState<BudgetFrequency>(
+    entry?.frequency ?? "MONTHLY"
   )
+  const [provider, setProvider] = useState(entry?.provider ?? "")
+  const [paymentDay, setPaymentDay] = useState(
+    entry?.paymentDay != null ? String(entry.paymentDay) : ""
+  )
+  const [renewalDate, setRenewalDate] = useState(entry?.renewalDate ?? "")
+  const [notes, setNotes] = useState(entry?.notes ?? "")
   const [isPending, startTransition] = useTransition()
+
+  const amountNumber = parseOptionalNumber(amount)
+  // Fields that do not apply to the chosen type are hidden and not saved.
+  const hasProvider = type === "EXPENSE" || type === "SAVINGS"
+  const hasRenewal = type === "EXPENSE"
+  const filledCount = [
+    hasProvider ? provider : "",
+    paymentDay,
+    hasRenewal ? renewalDate : "",
+    notes,
+  ].filter((value) => value.trim() !== "").length
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    const amount = parseFloat(monthlyAmount)
+    const day = parseOptionalNumber(paymentDay)
 
-    if (!name.trim() || isNaN(amount)) {
-      toast.error("Fyll inn alle feltene")
+    if (!name.trim() || amountNumber === null || amountNumber < 0) {
+      toast.error("Fyll inn navn og beløp")
+      return
+    }
+    if (day !== null && (!Number.isInteger(day) || day < 1 || day > 31)) {
+      toast.error("Trekkdag må være et tall fra 1 til 31")
       return
     }
 
@@ -130,7 +125,12 @@ function EntryDialogForm({
           name: name.trim(),
           categoryId: categoryId === "none" ? null : categoryId,
           type,
-          monthlyAmount: amount,
+          amount: amountNumber,
+          frequency,
+          provider: hasProvider ? optionalString(provider) : null,
+          paymentDay: day,
+          renewalDate: hasRenewal && renewalDate ? renewalDate : null,
+          notes: optionalString(notes),
         })
         toast.success(entry ? "Post oppdatert" : "Post lagt til")
         onOpenChange(false)
@@ -162,10 +162,17 @@ function EntryDialogForm({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="EXPENSE">Kostnad</SelectItem>
+            <SelectItem value="SAVINGS">Sparing</SelectItem>
             <SelectItem value="INCOME">Inntekt</SelectItem>
             <SelectItem value="DEDUCTION">Fradrag (negativ kostnad)</SelectItem>
           </SelectContent>
         </Select>
+        {type === "SAVINGS" && (
+          <p className="text-xs text-muted-foreground">
+            Fond, BSU, buffer og lignende. Trekkes fra disponibelt, men vises
+            som sparing og ikke som kostnad.
+          </p>
+        )}
       </div>
       <div className="flex flex-col gap-2">
         <Label htmlFor="entry-category">Kategori (valgfri)</Label>
@@ -183,31 +190,105 @@ function EntryDialogForm({
           </SelectContent>
         </Select>
       </div>
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="entry-amount">Beløp per måned (kr)</Label>
-        <Input
-          id="entry-amount"
-          type="number"
-          step="1"
-          min="0"
-          value={monthlyAmount}
-          onChange={(e) => setMonthlyAmount(e.target.value)}
-          placeholder="F.eks. 2000"
-        />
+      <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="entry-amount">Beløp (kr)</Label>
+          <Input
+            id="entry-amount"
+            type="number"
+            step="any"
+            min="0"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="F.eks. 2000"
+          />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="entry-frequency">Hvor ofte</Label>
+          <Select
+            value={frequency}
+            onValueChange={(value) => setFrequency(value as BudgetFrequency)}
+          >
+            <SelectTrigger id="entry-frequency">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(FREQUENCY_LABELS).map(([value, label]) => (
+                <SelectItem key={value} value={value}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
-      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => onOpenChange(false)}
-          className="w-full sm:w-auto"
-        >
-          Avbryt
-        </Button>
-        <Button type="submit" disabled={isPending} className="w-full sm:w-auto">
-          {entry ? "Lagre" : "Legg til"}
-        </Button>
-      </div>
+      {frequency !== "MONTHLY" && amountNumber !== null && (
+        <p className="rounded-md bg-muted p-3 text-sm">
+          Tilsvarer{" "}
+          <span className="font-semibold">
+            {formatCurrency(
+              entryMonthlyAmount({ amount: amountNumber, frequency })
+            )}
+          </span>{" "}
+          per måned
+        </p>
+      )}
+
+      <MoreDetails filledCount={filledCount}>
+        {hasProvider && (
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="entry-provider">Leverandør</Label>
+            <Input
+              id="entry-provider"
+              value={provider}
+              onChange={(e) => setProvider(e.target.value)}
+              placeholder="F.eks. Tibber eller Gjensidige"
+            />
+          </div>
+        )}
+        <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="entry-payment-day">Trekkdag</Label>
+            <Input
+              id="entry-payment-day"
+              type="number"
+              step="1"
+              min="1"
+              max="31"
+              value={paymentDay}
+              onChange={(e) => setPaymentDay(e.target.value)}
+              placeholder="1–31"
+            />
+          </div>
+          {hasRenewal && (
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="entry-renewal">Bindingstid til</Label>
+              <Input
+                id="entry-renewal"
+                type="date"
+                value={renewalDate}
+                onChange={(e) => setRenewalDate(e.target.value)}
+              />
+            </div>
+          )}
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="entry-notes">Notat</Label>
+          <Textarea
+            id="entry-notes"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="F.eks. avtalevilkår eller hvor tallet kommer fra"
+            rows={3}
+          />
+        </div>
+      </MoreDetails>
+
+      <FormActions
+        onCancel={() => onOpenChange(false)}
+        isPending={isPending}
+        submitLabel={entry ? "Lagre" : "Legg til"}
+      />
     </form>
   )
 }

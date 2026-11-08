@@ -17,9 +17,8 @@ export type { McpToolDefinition } from "./define"
  * write tools go through the write services the web flow also uses, and are
  * only visible with the matching `*:write` scope.
  *
- * Full-replace operations (`replaceBudget`, `replacePlants`) stay server
- * actions outside the application layer, so nothing here can reach them
- * (plan 10.4).
+ * Full-replace operations (`replacePlants`) stay server actions outside the
+ * application layer, so nothing here can reach them (plan 10.4).
  */
 export function createToolRegistry(
   now: () => Date = () => new Date()

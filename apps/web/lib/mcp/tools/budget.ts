@@ -1,6 +1,20 @@
 import { z } from "zod"
 
-import { calculateBudgetStats } from "../../application/budget/calculations"
+import {
+  calculateBudgetStats,
+  entryMonthlyAmount,
+  loanMonthlyAmounts,
+  memberNetIncome,
+  tripMonthlyCost,
+} from "../../application/budget/calculations"
+import {
+  BUDGET_ENTRY_OPTIONAL_FIELDS,
+  BUDGET_LOAN_OPTIONAL_FIELDS,
+  BUDGET_MEMBER_OPTIONAL_FIELDS,
+  BUDGET_SETTINGS_OPTIONAL_FIELDS,
+  BUDGET_TRIP_OPTIONAL_FIELDS,
+  missingFieldKeys,
+} from "../../application/budget/fields"
 import {
   BUDGET_DETAIL_SECTIONS,
   getBudget,
@@ -16,11 +30,14 @@ import { toolSuccess } from "../result"
 import { defineTool, READ_ONLY_ANNOTATIONS } from "./define"
 import {
   BUDGET_ENTRY_TYPES,
+  BUDGET_FREQUENCIES,
   BUDGET_LOAN_REPAYMENT_TYPES,
   BUDGET_LOAN_TYPES,
   TRIP_TRANSPORT_TYPES,
   calculated,
   calculatedMoneySchema,
+  calendarDate,
+  calendarDateOutputSchema,
   money,
   storedMoneySchema,
   timestamp,
@@ -30,24 +47,54 @@ import {
 const totalsSchema = z
   .object({
     grossIncome: calculatedMoneySchema,
-    netIncome: calculatedMoneySchema,
+    netIncome: calculatedMoneySchema.describe(
+      "Salary after tax: the member's netMonthlyIncome where set, otherwise gross minus taxPercent."
+    ),
     totalIncome: calculatedMoneySchema.describe(
       "Net salary income plus INCOME entries."
     ),
-    loanInterest: calculatedMoneySchema,
+    loanInterest: calculatedMoneySchema.describe(
+      "Average monthly interest over the next 12 months, from today's balance."
+    ),
     loanPrincipal: calculatedMoneySchema,
     loanFees: calculatedMoneySchema,
     loanCost: calculatedMoneySchema,
     tripCost: calculatedMoneySchema.describe(
       "Annual trip cost spread monthly."
     ),
-    totalExpenses: calculatedMoneySchema,
+    totalExpenses: calculatedMoneySchema.describe(
+      "Loans, trips and EXPENSE entries. Savings are not expenses."
+    ),
+    savings: calculatedMoneySchema.describe("SAVINGS entries per month."),
+    savingsIncludingPrincipal: calculatedMoneySchema.describe(
+      "SAVINGS entries plus loan principal, which also builds wealth."
+    ),
     taxDeduction: calculatedMoneySchema.describe(
       "Monthly value of the interest deduction."
     ),
     totalDeductions: calculatedMoneySchema,
     disposable: calculatedMoneySchema.describe(
-      "Income minus expenses plus deductions."
+      "Income minus expenses and savings, plus deductions."
+    ),
+    totalDebt: calculatedMoneySchema.describe("Sum of all loan balances."),
+    mortgageDebt: calculatedMoneySchema.describe(
+      "Sum of MORTGAGE loan balances."
+    ),
+  })
+  .nullable()
+
+const ratioSchema = z.string().nullable()
+
+const keyFiguresSchema = z
+  .object({
+    savingsRatePercent: ratioSchema.describe(
+      "savingsIncludingPrincipal as a percentage of totalIncome; null without income."
+    ),
+    debtToIncomeRatio: ratioSchema.describe(
+      "totalDebt divided by yearly gross salary (Norwegian banks lend up to 5×); null without salary or debt."
+    ),
+    loanToValuePercent: ratioSchema.describe(
+      "mortgageDebt as a percentage of propertyValue; null until propertyValue is set."
     ),
   })
   .nullable()
@@ -71,10 +118,15 @@ export const budgetSummaryShape = {
     .describe("False when the household has not set up a budget yet."),
   currency: z.literal("NOK"),
   totals: totalsSchema,
+  keyFigures: keyFiguresSchema,
   counts: countsSchema,
 }
 
 export const budgetSummarySchema = z.object(budgetSummaryShape)
+
+function ratio(value: number | null) {
+  return value === null ? null : calculated(value)
+}
 
 export function serializeBudgetSummary(
   stats: ReturnType<typeof calculateBudgetStats>
@@ -82,7 +134,13 @@ export function serializeBudgetSummary(
   // ADR 0001: a household without a budget row is not a NOT_FOUND — the
   // household exists, it just has nothing budgeted yet.
   if (!stats.hasBudget) {
-    return { hasBudget: false, currency: "NOK", totals: null, counts: null }
+    return {
+      hasBudget: false,
+      currency: "NOK",
+      totals: null,
+      keyFigures: null,
+      counts: null,
+    }
   }
 
   return {
@@ -98,9 +156,18 @@ export function serializeBudgetSummary(
       loanCost: calculated(stats.totalLoanCost),
       tripCost: calculated(stats.totalTripCost),
       totalExpenses: calculated(stats.totalExpenses),
+      savings: calculated(stats.totalSavings),
+      savingsIncludingPrincipal: calculated(stats.savingsIncludingPrincipal),
       taxDeduction: calculated(stats.monthlyTaxDeduction),
       totalDeductions: calculated(stats.totalDeductions),
       disposable: calculated(stats.disposable),
+      totalDebt: calculated(stats.totalDebt),
+      mortgageDebt: calculated(stats.mortgageDebt),
+    },
+    keyFigures: {
+      savingsRatePercent: ratio(stats.savingsRate),
+      debtToIncomeRatio: ratio(stats.debtToIncomeRatio),
+      loanToValuePercent: ratio(stats.loanToValue),
     },
     counts: {
       members: stats.memberCount,
@@ -116,7 +183,7 @@ export const getBudgetSummaryTool = defineTool({
   scope: "budget:read",
   title: "Get the budget summary",
   description:
-    "Returns the household's monthly budget totals: income, loan cost, trips, deductions and the disposable amount. All amounts are monthly NOK. Use get-budget-details for the individual rows behind these totals.",
+    "Returns the household's monthly budget totals (income, loan cost, trips, savings, deductions, the disposable amount) and key figures (savings rate, debt-to-income, loan-to-value). All amounts are monthly NOK. Use get-budget-details for the rows behind these totals.",
   inputSchema: {},
   outputSchema: budgetSummaryShape,
   annotations: READ_ONLY_ANNOTATIONS,
@@ -135,11 +202,27 @@ export const getBudgetSummaryTool = defineTool({
 
 // ─── Row shapes, shared with the budget write tools ─────────────
 
+const missingFieldsSchema = z
+  .array(z.string())
+  .describe(
+    "Optional fields that apply to this row but are empty. Ask the user or look them up when relevant; never invent values."
+  )
+
+const notesSchema = z.string().nullable()
+
 export const budgetMemberRowSchema = z.object({
   id: z.string(),
   name: z.string(),
   grossMonthlyIncome: storedMoneySchema,
   taxPercent: storedMoneySchema,
+  netMonthlyIncome: storedMoneySchema.describe(
+    "Actual monthly payout from the payslip, or null. When set it replaces gross minus taxPercent."
+  ),
+  notes: notesSchema,
+  effectiveNetMonthlyIncome: calculatedMoneySchema.describe(
+    "The net income the budget uses for this member."
+  ),
+  missingFields: missingFieldsSchema,
   sortOrder: z.number().int(),
   updatedAt: timestampSchema,
 })
@@ -150,10 +233,28 @@ export const budgetLoanRowSchema = z.object({
   loanName: z.string(),
   loanType: z.enum(BUDGET_LOAN_TYPES),
   repaymentType: z.enum(BUDGET_LOAN_REPAYMENT_TYPES),
-  principalAmount: storedMoneySchema,
+  principalAmount: storedMoneySchema.describe("Remaining balance today."),
   annualInterestRate: storedMoneySchema,
-  termMonths: z.number().int(),
+  termMonths: z.number().int().describe("Remaining term in months."),
   monthlyFees: storedMoneySchema,
+  fixedRateUntil: calendarDateOutputSchema,
+  notes: notesSchema,
+  calculated: z.object({
+    monthlyInterest: calculatedMoneySchema.describe(
+      "Average over the next 12 months."
+    ),
+    monthlyPrincipal: calculatedMoneySchema,
+    monthlyCost: calculatedMoneySchema.describe(
+      "Interest, principal and fees per month."
+    ),
+    firstPayment: calculatedMoneySchema.describe(
+      "This month's payment without fees."
+    ),
+    remainingInterest: calculatedMoneySchema.describe(
+      "Interest left to pay over the remaining term."
+    ),
+  }),
+  missingFields: missingFieldsSchema,
   sortOrder: z.number().int(),
   updatedAt: timestampSchema,
 })
@@ -167,6 +268,10 @@ export const budgetTripRowSchema = z.object({
   tollPerTrip: storedMoneySchema,
   ferryPerTrip: storedMoneySchema,
   fuelPerTrip: storedMoneySchema,
+  otherPerTrip: storedMoneySchema,
+  notes: notesSchema,
+  monthlyCost: calculatedMoneySchema,
+  missingFields: missingFieldsSchema,
   sortOrder: z.number().int(),
   updatedAt: timestampSchema,
 })
@@ -182,9 +287,18 @@ export const budgetEntryRowSchema = z.object({
   id: z.string(),
   name: z.string(),
   type: z.enum(BUDGET_ENTRY_TYPES),
-  monthlyAmount: storedMoneySchema,
-  sortOrder: z.number().int(),
+  amount: storedMoneySchema.describe("Amount per occurrence."),
+  frequency: z.enum(BUDGET_FREQUENCIES),
+  monthlyAmount: calculatedMoneySchema.describe(
+    "amount converted to a monthly figure."
+  ),
+  provider: z.string().nullable(),
+  paymentDay: z.number().int().nullable(),
+  renewalDate: calendarDateOutputSchema,
+  notes: notesSchema,
   category: z.object({ id: z.string(), name: z.string() }).nullable(),
+  missingFields: missingFieldsSchema,
+  sortOrder: z.number().int(),
   updatedAt: timestampSchema,
 })
 
@@ -195,6 +309,8 @@ export function serializeBudgetMember(member: {
   name: string
   grossMonthlyIncome: DecimalLike
   taxPercent: DecimalLike
+  netMonthlyIncome: DecimalLike | null
+  notes: string | null
   sortOrder: number
   updatedAt: Date
 }) {
@@ -203,6 +319,10 @@ export function serializeBudgetMember(member: {
     name: member.name,
     grossMonthlyIncome: money(member.grossMonthlyIncome),
     taxPercent: money(member.taxPercent),
+    netMonthlyIncome: money(member.netMonthlyIncome),
+    notes: member.notes,
+    effectiveNetMonthlyIncome: calculated(memberNetIncome(member)),
+    missingFields: missingFieldKeys(BUDGET_MEMBER_OPTIONAL_FIELDS, member),
     sortOrder: member.sortOrder,
     updatedAt: timestamp(member.updatedAt),
   }
@@ -218,9 +338,13 @@ export function serializeBudgetLoan(loan: {
   annualInterestRate: DecimalLike
   termMonths: number
   monthlyFees: DecimalLike
+  fixedRateUntil: Date | null
+  notes: string | null
   sortOrder: number
   updatedAt: Date
 }) {
+  const amounts = loanMonthlyAmounts(loan)
+
   return {
     id: loan.id,
     bankName: loan.bankName,
@@ -231,6 +355,16 @@ export function serializeBudgetLoan(loan: {
     annualInterestRate: money(loan.annualInterestRate),
     termMonths: loan.termMonths,
     monthlyFees: money(loan.monthlyFees),
+    fixedRateUntil: calendarDate(loan.fixedRateUntil),
+    notes: loan.notes,
+    calculated: {
+      monthlyInterest: calculated(amounts.monthlyInterest),
+      monthlyPrincipal: calculated(amounts.monthlyPrincipal),
+      monthlyCost: calculated(amounts.monthlyCost),
+      firstPayment: calculated(amounts.firstPayment),
+      remainingInterest: calculated(amounts.remainingInterest),
+    },
+    missingFields: missingFieldKeys(BUDGET_LOAN_OPTIONAL_FIELDS, loan),
     sortOrder: loan.sortOrder,
     updatedAt: timestamp(loan.updatedAt),
   }
@@ -245,6 +379,8 @@ export function serializeBudgetTrip(trip: {
   tollPerTrip: DecimalLike | null
   ferryPerTrip: DecimalLike | null
   fuelPerTrip: DecimalLike | null
+  otherPerTrip: DecimalLike | null
+  notes: string | null
   sortOrder: number
   updatedAt: Date
 }) {
@@ -257,6 +393,10 @@ export function serializeBudgetTrip(trip: {
     tollPerTrip: money(trip.tollPerTrip),
     ferryPerTrip: money(trip.ferryPerTrip),
     fuelPerTrip: money(trip.fuelPerTrip),
+    otherPerTrip: money(trip.otherPerTrip),
+    notes: trip.notes,
+    monthlyCost: calculated(tripMonthlyCost(trip)),
+    missingFields: missingFieldKeys(BUDGET_TRIP_OPTIONAL_FIELDS, trip),
     sortOrder: trip.sortOrder,
     updatedAt: timestamp(trip.updatedAt),
   }
@@ -280,7 +420,12 @@ export function serializeBudgetEntry(entry: {
   id: string
   name: string
   type: z.infer<typeof budgetEntryRowSchema>["type"]
-  monthlyAmount: DecimalLike
+  amount: DecimalLike
+  frequency: z.infer<typeof budgetEntryRowSchema>["frequency"]
+  provider: string | null
+  paymentDay: number | null
+  renewalDate: Date | null
+  notes: string | null
   sortOrder: number
   category: { id: string; name: string } | null
   updatedAt: Date
@@ -289,11 +434,18 @@ export function serializeBudgetEntry(entry: {
     id: entry.id,
     name: entry.name,
     type: entry.type,
-    monthlyAmount: money(entry.monthlyAmount),
-    sortOrder: entry.sortOrder,
+    amount: money(entry.amount),
+    frequency: entry.frequency,
+    monthlyAmount: calculated(entryMonthlyAmount(entry)),
+    provider: entry.provider,
+    paymentDay: entry.paymentDay,
+    renewalDate: calendarDate(entry.renewalDate),
+    notes: entry.notes,
     category: entry.category
       ? { id: entry.category.id, name: entry.category.name }
       : null,
+    missingFields: missingFieldKeys(BUDGET_ENTRY_OPTIONAL_FIELDS, entry),
+    sortOrder: entry.sortOrder,
     updatedAt: timestamp(entry.updatedAt),
   }
 }
@@ -303,7 +455,7 @@ export const getBudgetDetailsTool = defineTool({
   scope: "budget:read",
   title: "Get budget details",
   description:
-    "Returns the rows behind the budget summary. Request only the sections you need; entries is the only paged section. Member names are part of this contract because they identify the income rows.",
+    "Returns the rows behind the budget summary, each with its calculated monthly figures and missingFields: the optional fields that are still empty. Request only the sections you need; entries is the only paged section. Member names are part of this contract because they identify the income rows.",
   inputSchema: {
     sections: z
       .array(z.enum(BUDGET_DETAIL_SECTIONS))
@@ -321,6 +473,10 @@ export const getBudgetDetailsTool = defineTool({
     taxDeductionPercent: storedMoneySchema.describe(
       "Percentage of loan interest that is tax deductible."
     ),
+    propertyValue: storedMoneySchema.describe(
+      "Market value of the home, used for loan-to-value."
+    ),
+    missingFields: missingFieldsSchema.nullable(),
     members: z.array(budgetMemberRowSchema).nullable(),
     loans: z.array(budgetLoanRowSchema).nullable(),
     trips: z.array(budgetTripRowSchema).nullable(),
@@ -344,6 +500,8 @@ export const getBudgetDetailsTool = defineTool({
           hasBudget: false,
           currency: "NOK",
           taxDeductionPercent: null,
+          propertyValue: null,
+          missingFields: null,
           members: null,
           loans: null,
           trips: null,
@@ -363,6 +521,11 @@ export const getBudgetDetailsTool = defineTool({
         hasBudget: true,
         currency: "NOK",
         taxDeductionPercent: money(details.budget.taxDeductionPercent),
+        propertyValue: money(details.budget.propertyValue),
+        missingFields: missingFieldKeys(BUDGET_SETTINGS_OPTIONAL_FIELDS, {
+          propertyValue: details.budget.propertyValue,
+          hasMortgage: details.hasMortgage,
+        }),
         members: details.members?.map(serializeBudgetMember) ?? null,
         loans: details.loans?.map(serializeBudgetLoan) ?? null,
         trips: details.trips?.map(serializeBudgetTrip) ?? null,

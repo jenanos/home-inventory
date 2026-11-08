@@ -59,6 +59,7 @@ export async function getBudgetDetails(
     select: {
       id: true,
       taxDeductionPercent: true,
+      propertyValue: true,
       createdAt: true,
       updatedAt: true,
     },
@@ -71,53 +72,69 @@ export async function getBudgetDetails(
   const wants = (section: BudgetDetailSection) =>
     options.sections.includes(section)
 
-  const [members, loans, trips, categories, entryCount, entries] =
-    await Promise.all([
-      wants("members")
-        ? db.budgetMember.findMany({
-            where: { budgetId: budget.id },
-            orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
-          })
-        : null,
-      wants("loans")
-        ? db.budgetLoan.findMany({
-            where: { budgetId: budget.id },
-            orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
-          })
-        : null,
-      wants("trips")
-        ? db.budgetTrip.findMany({
-            where: { budgetId: budget.id },
-            orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
-          })
-        : null,
-      wants("categories")
-        ? db.budgetEntryCategory.findMany({
-            where: { budgetId: budget.id },
-            orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
-          })
-        : null,
-      wants("entries")
-        ? db.budgetEntry.count({ where: { budgetId: budget.id } })
-        : 0,
-      wants("entries")
-        ? db.budgetEntry.findMany({
-            where: { budgetId: budget.id },
-            select: {
-              id: true,
-              name: true,
-              type: true,
-              monthlyAmount: true,
-              sortOrder: true,
-              updatedAt: true,
-              category: { select: { id: true, name: true } },
-            },
-            orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
-            skip: options.offset,
-            take: options.limit,
-          })
-        : null,
-    ])
+  const [
+    members,
+    loans,
+    trips,
+    categories,
+    entryCount,
+    entries,
+    mortgageCount,
+  ] = await Promise.all([
+    wants("members")
+      ? db.budgetMember.findMany({
+          where: { budgetId: budget.id },
+          orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+        })
+      : null,
+    wants("loans")
+      ? db.budgetLoan.findMany({
+          where: { budgetId: budget.id },
+          orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+        })
+      : null,
+    wants("trips")
+      ? db.budgetTrip.findMany({
+          where: { budgetId: budget.id },
+          orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+        })
+      : null,
+    wants("categories")
+      ? db.budgetEntryCategory.findMany({
+          where: { budgetId: budget.id },
+          orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+        })
+      : null,
+    wants("entries")
+      ? db.budgetEntry.count({ where: { budgetId: budget.id } })
+      : 0,
+    wants("entries")
+      ? db.budgetEntry.findMany({
+          where: { budgetId: budget.id },
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            amount: true,
+            frequency: true,
+            provider: true,
+            paymentDay: true,
+            renewalDate: true,
+            notes: true,
+            sortOrder: true,
+            updatedAt: true,
+            category: { select: { id: true, name: true } },
+          },
+          orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+          skip: options.offset,
+          take: options.limit,
+        })
+      : null,
+    // Whether a property value would add anything, for `missingFields`.
+    db.budgetLoan.count({
+      where: { budgetId: budget.id, loanType: "MORTGAGE" },
+    }),
+  ])
 
   return {
     budget,
@@ -127,5 +144,6 @@ export async function getBudgetDetails(
     categories,
     entries,
     entryCount,
+    hasMortgage: mortgageCount > 0,
   }
 }

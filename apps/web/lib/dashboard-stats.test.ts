@@ -81,9 +81,9 @@ describe("calculateBudgetStats", () => {
       ],
       trips: [],
       entries: [
-        { type: "EXPENSE", monthlyAmount: "12000", category: null },
-        { type: "DEDUCTION", monthlyAmount: "1500", category: null },
-        { type: "EXPENSE", monthlyAmount: "800", category: null },
+        { type: "EXPENSE", amount: "12000", category: null },
+        { type: "DEDUCTION", amount: "1500", category: null },
+        { type: "EXPENSE", amount: "800", category: null },
       ],
     })
 
