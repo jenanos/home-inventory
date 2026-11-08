@@ -5,8 +5,8 @@ const mocks = vi.hoisted(() => ({
   shoppingListFindFirst: vi.fn(),
   categoryFindMany: vi.fn(),
   budgetFindUnique: vi.fn(),
-  maintenanceTaskFindMany: vi.fn(),
-  maintenanceTaskFindFirst: vi.fn(),
+  projectFindMany: vi.fn(),
+  projectFindFirst: vi.fn(),
   plantFindMany: vi.fn(),
   plantFindFirst: vi.fn(),
 }))
@@ -23,9 +23,9 @@ vi.mock("@workspace/db", () => ({
     budget: {
       findUnique: mocks.budgetFindUnique,
     },
-    maintenanceTask: {
-      findMany: mocks.maintenanceTaskFindMany,
-      findFirst: mocks.maintenanceTaskFindFirst,
+    project: {
+      findMany: mocks.projectFindMany,
+      findFirst: mocks.projectFindFirst,
     },
     plant: {
       findMany: mocks.plantFindMany,
@@ -35,7 +35,7 @@ vi.mock("@workspace/db", () => ({
 }))
 
 import { getBudget } from "./budget/read"
-import { getMaintenanceTask, listMaintenanceTasks } from "./maintenance/read"
+import { getProject, listProjects } from "./projects/read"
 import { getPlant, listPlants } from "./garden/read"
 import {
   getShoppingList,
@@ -57,7 +57,7 @@ describe("application read-service authorization boundaries", () => {
     }
     mocks.shoppingListFindFirst.mockResolvedValue(null)
     mocks.budgetFindUnique.mockResolvedValue(null)
-    mocks.maintenanceTaskFindFirst.mockResolvedValue(null)
+    mocks.projectFindFirst.mockResolvedValue(null)
     mocks.plantFindFirst.mockResolvedValue(null)
   })
 
@@ -100,14 +100,14 @@ describe("application read-service authorization boundaries", () => {
     )
   })
 
-  it("scopes maintenance collection and detail reads in the query", async () => {
-    await listMaintenanceTasks(context)
-    await getMaintenanceTask(context, "task-1")
+  it("scopes project collection and detail reads in the query", async () => {
+    await listProjects(context)
+    await getProject(context, "task-1")
 
-    expect(mocks.maintenanceTaskFindMany).toHaveBeenCalledWith(
+    expect(mocks.projectFindMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { householdId: "household-1" } })
     )
-    expect(mocks.maintenanceTaskFindFirst).toHaveBeenCalledWith(
+    expect(mocks.projectFindFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: "task-1", householdId: "household-1" },
       })

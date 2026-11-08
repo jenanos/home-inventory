@@ -95,11 +95,28 @@ enum ItemStatus {
   SKIPPED
 }
 
-enum TaskStatus {
+/// Renamed from TaskStatus in migration 20261108170000.
+enum ProjectStatus {
   NOT_STARTED
   IN_PROGRESS
   COMPLETED
   ON_HOLD
+}
+
+/// What kind of project it is. Existing maintenance tasks became MAINTENANCE.
+enum ProjectType {
+  MAINTENANCE
+  REPAIR
+  RENOVATION
+  IMPROVEMENT
+  OTHER
+}
+
+/// Who does the work. Null means not decided yet.
+enum ProjectExecution {
+  SELF
+  VENDOR
+  MIXED
 }
 
 model Household {
@@ -107,13 +124,13 @@ model Household {
   name      String
   createdAt DateTime @default(now())
 
-  members          HouseholdMember[]
-  lists            ShoppingList[]
-  categories       Category[]
-  maintenanceTasks MaintenanceTask[]
-  plants           Plant[]
-  budget           Budget?
-  mcpAuditEvents   McpAuditEvent[]
+  members        HouseholdMember[]
+  lists          ShoppingList[]
+  categories     Category[]
+  projects       Project[]
+  plants         Plant[]
+  budget         Budget?
+  mcpAuditEvents McpAuditEvent[]
 }
 
 model HouseholdMember {
@@ -291,15 +308,20 @@ model ShoppingList {
   householdId String   @db.Uuid
   createdById String?  @db.Uuid
   isPrivate   Boolean  @default(false)
+  /// Optional project the list buys for. Must be in the same household; the
+  /// shopping write services enforce that. Deleting the project keeps the list.
+  projectId   String?  @db.Uuid
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   household  Household      @relation(fields: [householdId], references: [id], onDelete: Cascade)
   createdBy  User?          @relation("CreatedShoppingLists", fields: [createdById], references: [id], onDelete: SetNull)
+  project    Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
   items      ShoppingItem[]
   shareLinks ShareLink[]
 
   @@index([householdId, isPrivate])
+  @@index([projectId])
 }
 
 model ShoppingItem {
@@ -372,27 +394,36 @@ model ShareLink {
   creator User         @relation(fields: [createdBy], references: [id], onDelete: Cascade)
 }
 
-// ─── Maintenance models ─────────────────────────────────────────
+// ─── Project models ─────────────────────────────────────────────
+//
+// Renamed from MaintenanceTask, TaskVendor and TaskProgressEntry in migration
+// 20261108170000: the page started as a move-in maintenance list and now holds
+// every home project, whether done by a vendor or by the household itself.
 
-model MaintenanceTask {
-  id                String     @id @default(uuid()) @db.Uuid
+model Project {
+  id                String            @id @default(uuid()) @db.Uuid
   title             String
-  description       String?    @db.Text
-  priority          Priority   @default(MEDIUM)
-  status            TaskStatus @default(NOT_STARTED)
+  description       String?           @db.Text
+  type              ProjectType       @default(OTHER)
+  execution         ProjectExecution?
+  priority          Priority          @default(MEDIUM)
+  status            ProjectStatus     @default(NOT_STARTED)
   estimatedDuration String?
-  estimatedPrice    Decimal?   @db.Decimal(10, 2)
+  estimatedPrice    Decimal?          @db.Decimal(10, 2)
   dueDate           DateTime?
-  householdId       String     @db.Uuid
-  createdAt         DateTime   @default(now())
-  updatedAt         DateTime   @updatedAt
+  householdId       String            @db.Uuid
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
 
-  household       Household           @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  vendors         TaskVendor[]
-  progressEntries TaskProgressEntry[]
+  household     Household       @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  vendors       ProjectVendor[]
+  steps         ProjectStep[]
+  shoppingLists ShoppingList[]
+
+  @@index([householdId, status])
 }
 
-model TaskVendor {
+model ProjectVendor {
   id             String   @id @default(uuid()) @db.Uuid
   name           String
   description    String?  @db.Text
@@ -402,14 +433,16 @@ model TaskVendor {
   estimatedPrice Decimal? @db.Decimal(10, 2)
   notes          String?  @db.Text
   isSelected     Boolean  @default(false)
-  taskId         String   @db.Uuid
+  projectId      String   @db.Uuid
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  task MaintenanceTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
 }
 
-model TaskProgressEntry {
+model ProjectStep {
   id          String    @id @default(uuid()) @db.Uuid
   title       String
   description String?   @db.Text
@@ -417,13 +450,13 @@ model TaskProgressEntry {
   completed   Boolean   @default(false)
   completedAt DateTime?
   sortOrder   Int       @default(0)
-  taskId      String    @db.Uuid
+  projectId   String    @db.Uuid
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  task MaintenanceTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
-  @@index([taskId, sortOrder])
+  @@index([projectId, sortOrder])
 }
 
 // ─── Hage / Planter models ──────────────────────────────────────

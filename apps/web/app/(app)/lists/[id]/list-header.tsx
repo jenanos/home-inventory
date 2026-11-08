@@ -24,6 +24,7 @@ import {
   Share2,
   Copy,
   Check,
+  Hammer,
   Link as LinkIcon,
   Loader2,
   ShoppingCart,
@@ -47,6 +48,8 @@ interface ListHeaderProps {
   itemCount: number
   purchasedCount: number
   isPrivate: boolean
+  /** The project this list buys for, if any. */
+  project: { id: string; title: string } | null
   canManagePrivacy: boolean
   shareLinks: Array<{ id: string; token: string; isActive: boolean }>
 }
@@ -59,6 +62,7 @@ export function ListHeader({
   itemCount,
   purchasedCount,
   isPrivate,
+  project,
   canManagePrivacy,
   shareLinks,
 }: ListHeaderProps) {
@@ -211,6 +215,14 @@ export function ListHeader({
       </div>
 
       <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+        {project && (
+          <Badge variant="outline" className="gap-1 text-xs" asChild>
+            <Link href={`/prosjekter/${project.id}`}>
+              <Hammer className="h-3.5 w-3.5" />
+              {project.title}
+            </Link>
+          </Badge>
+        )}
         {isPrivateList && (
           <Badge variant="secondary" className="gap-1 text-xs">
             <Lock className="h-3.5 w-3.5" />

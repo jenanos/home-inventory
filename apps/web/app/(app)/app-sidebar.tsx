@@ -9,7 +9,7 @@ import {
   Settings,
   LogOut,
   Plus,
-  Wrench,
+  Hammer,
   Wallet,
   Flower2,
   Shield,
@@ -28,7 +28,11 @@ import {
   SidebarMenuItem,
   SidebarSeparator,
 } from "@workspace/ui/components/sidebar"
-import { Avatar, AvatarFallback, AvatarImage } from "@workspace/ui/components/avatar"
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+} from "@workspace/ui/components/avatar"
 import { Button } from "@workspace/ui/components/button"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -44,13 +48,18 @@ interface AppSidebarProps {
   isAdmin?: boolean
 }
 
-export function AppSidebar({ user, householdName, lists, isAdmin }: AppSidebarProps) {
+export function AppSidebar({
+  user,
+  householdName,
+  lists,
+  isAdmin,
+}: AppSidebarProps) {
   const pathname = usePathname()
 
   const navItems = [
     { href: "/", label: "Oversikt", icon: LayoutDashboard },
     { href: "/lists", label: "Innkjøp", icon: ShoppingCart },
-    { href: "/vedlikehold", label: "Vedlikehold", icon: Wrench },
+    { href: "/prosjekter", label: "Prosjekter", icon: Hammer },
     { href: "/budsjett", label: "Budsjett", icon: Wallet },
     { href: "/hage", label: "Hage", icon: Flower2 },
     { href: "/settings", label: "Innstillinger", icon: Settings },
@@ -115,10 +124,7 @@ export function AppSidebar({ user, householdName, lists, isAdmin }: AppSidebarPr
                 </SidebarMenuItem>
               ))}
               <SidebarMenuItem>
-                <SidebarMenuButton
-                  asChild
-                  className="text-muted-foreground"
-                >
+                <SidebarMenuButton asChild className="text-muted-foreground">
                   <Link href="/lists">
                     <Plus className="h-4 w-4" />
                     <span>Ny liste</span>
@@ -134,7 +140,7 @@ export function AppSidebar({ user, householdName, lists, isAdmin }: AppSidebarPr
         <div className="flex items-center gap-3">
           <Avatar className="h-8 w-8">
             <AvatarImage src={user.image} />
-            <AvatarFallback className="bg-primary/10 text-primary text-xs">
+            <AvatarFallback className="bg-primary/10 text-xs text-primary">
               {user.name
                 .split(" ")
                 .map((n) => n[0])
@@ -144,7 +150,7 @@ export function AppSidebar({ user, householdName, lists, isAdmin }: AppSidebarPr
           </Avatar>
           <div className="flex-1 truncate">
             <p className="truncate text-sm font-medium">{user.name}</p>
-            <p className="text-muted-foreground truncate text-xs">
+            <p className="truncate text-xs text-muted-foreground">
               {user.email}
             </p>
           </div>

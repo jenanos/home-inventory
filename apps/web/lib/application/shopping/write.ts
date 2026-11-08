@@ -85,6 +85,7 @@ export const SHOPPING_LIST_RESULT_SELECT = {
   isPrivate: true,
   createdById: true,
   householdId: true,
+  projectId: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.ShoppingListSelect
@@ -260,36 +261,79 @@ function normalizeColor(color: string | null | undefined) {
   throw validationError("Ukjent farge.")
 }
 
+/**
+ * A list may buy for a project in the same household. The project is checked
+ * inside the write's transaction; an id from another household is rejected
+ * exactly like an unknown one.
+ */
+async function assertProjectInHousehold(
+  tx: Tx,
+  context: ApplicationContext,
+  projectId: string | null | undefined
+) {
+  if (!projectId) return
+
+  const found =
+    UUID_PATTERN.test(projectId) &&
+    (await tx.project.count({
+      where: { id: projectId, householdId: context.householdId },
+    })) === 1
+
+  if (!found) {
+    throw validationError("Prosjektet finnes ikke i husstanden.")
+  }
+}
+
 export async function createShoppingList(
   context: ApplicationContext,
-  input: { name: string; isPrivate?: boolean; color?: string | null }
+  input: {
+    name: string
+    isPrivate?: boolean
+    color?: string | null
+    /** Project the list buys for, in the same household. */
+    projectId?: string | null
+  }
 ) {
   if (input.isPrivate !== undefined && typeof input.isPrivate !== "boolean") {
     throw validationError("Privat må være sann eller usann.")
   }
+  const name = requiredText(input.name, "Navn")
+  const color = normalizeColor(input.color) ?? null
 
-  return db.shoppingList.create({
-    data: {
-      name: requiredText(input.name, "Navn"),
-      color: normalizeColor(input.color) ?? null,
-      isPrivate: input.isPrivate ?? false,
-      householdId: context.householdId,
-      createdById: context.userId,
-    },
-    select: SHOPPING_LIST_RESULT_SELECT,
+  return db.$transaction(async (tx) => {
+    await assertProjectInHousehold(tx, context, input.projectId)
+
+    return tx.shoppingList.create({
+      data: {
+        name,
+        color,
+        isPrivate: input.isPrivate ?? false,
+        householdId: context.householdId,
+        createdById: context.userId,
+        projectId: input.projectId ?? null,
+      },
+      select: SHOPPING_LIST_RESULT_SELECT,
+    })
   })
 }
 
 export async function updateShoppingList(
   context: ApplicationContext,
   listId: string,
-  input: { name?: string; color?: string | null; expectedUpdatedAt?: Date }
+  input: {
+    name?: string
+    color?: string | null
+    /** `null` unlinks the list from its project. */
+    projectId?: string | null
+    expectedUpdatedAt?: Date
+  }
 ) {
   assertResourceId(listId, LIST)
   const data = definedFields({
     name:
       input.name === undefined ? undefined : requiredText(input.name, "Navn"),
     color: normalizeColor(input.color),
+    projectId: input.projectId,
   })
   const scope = { ...visibleLists(context), id: listId }
 
@@ -306,10 +350,14 @@ export async function updateShoppingList(
     resource: LIST,
     expectedUpdatedAt: input.expectedUpdatedAt,
     write: () =>
-      db.shoppingList.update({
-        where: { ...scope, ...freshness(input.expectedUpdatedAt) },
-        data,
-        select: SHOPPING_LIST_RESULT_SELECT,
+      db.$transaction(async (tx) => {
+        await assertProjectInHousehold(tx, context, input.projectId)
+
+        return tx.shoppingList.update({
+          where: { ...scope, ...freshness(input.expectedUpdatedAt) },
+          data,
+          select: SHOPPING_LIST_RESULT_SELECT,
+        })
       }),
     existsInScope: async () =>
       (await db.shoppingList.count({ where: scope })) > 0,

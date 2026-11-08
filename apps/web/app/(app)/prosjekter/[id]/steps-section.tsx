@@ -35,13 +35,13 @@ import {
   Pencil,
 } from "lucide-react"
 import {
-  createProgressEntry,
-  updateProgressEntry,
-  deleteProgressEntry,
-} from "@/lib/actions/maintenance-task"
+  createProjectStep,
+  updateProjectStep,
+  deleteProjectStep,
+} from "@/lib/actions/project"
 import { useMediaQuery } from "@/hooks/use-media-query"
 
-interface ProgressEntry {
+interface ProjectStep {
   id: string
   title: string
   description: string | null
@@ -49,18 +49,18 @@ interface ProgressEntry {
   completed: boolean
   completedAt: string | null
   sortOrder: number
-  taskId: string
+  projectId: string
 }
 
-interface ProgressSectionProps {
-  taskId: string
-  entries: ProgressEntry[]
+interface StepsSectionProps {
+  projectId: string
+  entries: ProjectStep[]
 }
 
-export function ProgressSection({ taskId, entries }: ProgressSectionProps) {
+export function StepsSection({ projectId, entries }: StepsSectionProps) {
   const [isPending, startTransition] = useTransition()
   const [addOpen, setAddOpen] = useState(false)
-  const [editingEntry, setEditingEntry] = useState<ProgressEntry | null>(null)
+  const [editingEntry, setEditingEntry] = useState<ProjectStep | null>(null)
   const isDesktop = useMediaQuery("(min-width: 768px)")
 
   // Add form state
@@ -79,7 +79,7 @@ export function ProgressSection({ taskId, entries }: ProgressSectionProps) {
     setDueDate(undefined)
   }
 
-  function openEditForm(entry: ProgressEntry) {
+  function openEditForm(entry: ProjectStep) {
     setEditingEntry(entry)
     setEditTitle(entry.title)
     setEditDescription(entry.description ?? "")
@@ -92,8 +92,8 @@ export function ProgressSection({ taskId, entries }: ProgressSectionProps) {
       const nextSortOrder =
         Math.max(...entries.map((entry) => entry.sortOrder), -1) + 1
 
-      await createProgressEntry({
-        taskId,
+      await createProjectStep({
+        projectId,
         title: title.trim(),
         description: description.trim() || undefined,
         dueDate: dueDate || undefined,
@@ -107,7 +107,7 @@ export function ProgressSection({ taskId, entries }: ProgressSectionProps) {
   function handleUpdate() {
     if (!editingEntry || !editTitle.trim()) return
     startTransition(async () => {
-      await updateProgressEntry({
+      await updateProjectStep({
         id: editingEntry.id,
         title: editTitle.trim(),
         description: editDescription.trim() || null,
@@ -119,13 +119,13 @@ export function ProgressSection({ taskId, entries }: ProgressSectionProps) {
 
   function handleToggle(entryId: string, completed: boolean) {
     startTransition(async () => {
-      await updateProgressEntry({ id: entryId, completed })
+      await updateProjectStep({ id: entryId, completed })
     })
   }
 
   function handleDelete(entryId: string) {
     startTransition(async () => {
-      await deleteProgressEntry(entryId)
+      await deleteProjectStep(entryId)
     })
   }
 
@@ -192,9 +192,9 @@ export function ProgressSection({ taskId, entries }: ProgressSectionProps) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h2 className="font-heading flex items-center gap-2 text-lg font-semibold">
+        <h2 className="flex items-center gap-2 font-heading text-lg font-semibold">
           <ListChecks className="h-5 w-5" />
-          Fremdriftsplan
+          Steg
         </h2>
         <Button variant="outline" size="sm" onClick={() => setAddOpen(true)}>
           <Plus className="mr-1 h-4 w-4" />
@@ -204,12 +204,10 @@ export function ProgressSection({ taskId, entries }: ProgressSectionProps) {
 
       {entries.length === 0 ? (
         <Card className="flex flex-col items-center justify-center py-8">
-          <ListChecks className="text-muted-foreground mb-3 h-8 w-8" />
-          <p className="text-muted-foreground text-sm">
-            Ingen steg i fremdriftsplanen ennå
-          </p>
-          <p className="text-muted-foreground text-xs">
-            Legg til steg for å planlegge oppgaven
+          <ListChecks className="mb-3 h-8 w-8 text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">Ingen steg ennå</p>
+          <p className="text-xs text-muted-foreground">
+            Del prosjektet opp i steg du kan krysse av underveis
           </p>
         </Card>
       ) : (
@@ -230,9 +228,9 @@ export function ProgressSection({ taskId, entries }: ProgressSectionProps) {
                 disabled={isPending}
                 className="mt-0.5"
               />
-              <div className="flex-1 min-w-0">
+              <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-muted-foreground text-xs font-medium">
+                  <span className="text-xs font-medium text-muted-foreground">
                     {index + 1}.
                   </span>
                   <p
@@ -245,19 +243,19 @@ export function ProgressSection({ taskId, entries }: ProgressSectionProps) {
                   </p>
                 </div>
                 {entry.description && (
-                  <p className="text-muted-foreground mt-0.5 text-xs">
+                  <p className="mt-0.5 text-xs text-muted-foreground">
                     {entry.description}
                   </p>
                 )}
                 <div className="mt-1 flex items-center gap-3 text-xs">
                   {entry.dueDate && (
-                    <span className="text-muted-foreground flex items-center gap-1">
+                    <span className="flex items-center gap-1 text-muted-foreground">
                       <CalendarIcon className="h-3 w-3" />
                       {new Date(entry.dueDate).toLocaleDateString("nb-NO")}
                     </span>
                   )}
                   {entry.completedAt && (
-                    <span className="text-green-600 dark:text-green-400 flex items-center gap-1">
+                    <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
                       Fullført{" "}
                       {new Date(entry.completedAt).toLocaleDateString("nb-NO")}
                     </span>
@@ -296,7 +294,7 @@ export function ProgressSection({ taskId, entries }: ProgressSectionProps) {
         <Sheet open={addOpen} onOpenChange={setAddOpen}>
           <SheetContent>
             <SheetHeader>
-              <SheetTitle>Nytt steg i fremdriftsplanen</SheetTitle>
+              <SheetTitle>Nytt steg</SheetTitle>
             </SheetHeader>
             {formContent(
               "add",
@@ -304,7 +302,11 @@ export function ProgressSection({ taskId, entries }: ProgressSectionProps) {
               { setTitle, setDescription, setDueDate }
             )}
             <div className="mt-4 px-1">
-              <Button onClick={handleAdd} disabled={isPending} className="w-full">
+              <Button
+                onClick={handleAdd}
+                disabled={isPending}
+                className="w-full"
+              >
                 {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Legg til steg
               </Button>
@@ -315,7 +317,7 @@ export function ProgressSection({ taskId, entries }: ProgressSectionProps) {
         <Drawer open={addOpen} onOpenChange={setAddOpen}>
           <DrawerContent>
             <DrawerHeader>
-              <DrawerTitle>Nytt steg i fremdriftsplanen</DrawerTitle>
+              <DrawerTitle>Nytt steg</DrawerTitle>
             </DrawerHeader>
             <div className="overflow-y-auto px-4 pb-6">
               {formContent(
@@ -324,8 +326,14 @@ export function ProgressSection({ taskId, entries }: ProgressSectionProps) {
                 { setTitle, setDescription, setDueDate }
               )}
               <div className="mt-4 px-1">
-                <Button onClick={handleAdd} disabled={isPending} className="w-full">
-                  {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                <Button
+                  onClick={handleAdd}
+                  disabled={isPending}
+                  className="w-full"
+                >
+                  {isPending && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
                   Legg til steg
                 </Button>
               </div>
@@ -398,7 +406,9 @@ export function ProgressSection({ taskId, entries }: ProgressSectionProps) {
                   disabled={isPending}
                   className="w-full"
                 >
-                  {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {isPending && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
                   Lagre endringer
                 </Button>
               </div>

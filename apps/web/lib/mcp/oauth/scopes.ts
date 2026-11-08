@@ -41,15 +41,18 @@ export const MCP_SCOPE_DESCRIPTIONS: Record<McpScope, ScopeDescription> = {
     description:
       "Opprette og endre budsjettposter, medlemmer, lån og reiser. Inkluderer lesetilgang.",
   },
+  // The scope keeps its original name so existing grants and the
+  // `HOME_OVERVIEW_MCP_WRITE_DOMAINS` setting keep working (ADR 0006). It
+  // covers projects of every kind, not only maintenance.
   "maintenance:read": {
-    title: "Se vedlikehold",
+    title: "Se prosjekter",
     description:
-      "Lese vedlikeholdsoppgaver, leverandører og fremdrift for husstanden.",
+      "Lese prosjekter for hjemmet (vedlikehold, oppussing og annet), med steg, leverandører og tilknyttede innkjøpslister.",
   },
   "maintenance:write": {
-    title: "Endre vedlikehold",
+    title: "Endre prosjekter",
     description:
-      "Opprette og endre vedlikeholdsoppgaver, leverandører og fremdrift. Inkluderer lesetilgang.",
+      "Opprette, endre og slette prosjekter, steg og leverandører. Inkluderer lesetilgang.",
   },
   "garden:read": {
     title: "Se hage",

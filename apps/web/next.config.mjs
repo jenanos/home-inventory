@@ -2,6 +2,22 @@
 const nextConfig = {
   output: "standalone",
   transpilePackages: ["@workspace/ui", "@workspace/db"],
+  async redirects() {
+    // The maintenance page became the projects page (ADR 0006). Old
+    // bookmarks and links keep working.
+    return [
+      {
+        source: "/vedlikehold",
+        destination: "/prosjekter",
+        permanent: true,
+      },
+      {
+        source: "/vedlikehold/:path*",
+        destination: "/prosjekter/:path*",
+        permanent: true,
+      },
+    ]
+  },
   async headers() {
     return [
       {

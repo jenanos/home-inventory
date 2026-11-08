@@ -102,6 +102,7 @@ export async function getShoppingList(
           { createdAt: "desc" },
         ],
       },
+      project: { select: { id: true, title: true } },
       shareLinks: {
         where: { isActive: true },
         select: {
@@ -158,19 +159,21 @@ type PageOptions = {
 
 function shoppingListFilter(
   context: ApplicationContext,
-  name?: string
+  name?: string,
+  projectId?: string
 ): Prisma.ShoppingListWhereInput {
   return {
     ...getVisibleShoppingListsWhere(context.householdId, context.userId),
     ...(name ? { name: { contains: name, mode: "insensitive" } } : {}),
+    ...(projectId ? { projectId } : {}),
   }
 }
 
 export async function listShoppingListsPage(
   context: ApplicationContext,
-  options: PageOptions & { name?: string }
+  options: PageOptions & { name?: string; projectId?: string }
 ) {
-  const where = shoppingListFilter(context, options.name)
+  const where = shoppingListFilter(context, options.name, options.projectId)
 
   const [totalCount, lists] = await Promise.all([
     db.shoppingList.count({ where }),
@@ -181,6 +184,7 @@ export async function listShoppingListsPage(
         name: true,
         color: true,
         isPrivate: true,
+        projectId: true,
         createdAt: true,
         updatedAt: true,
         items: {
@@ -222,6 +226,7 @@ export async function getShoppingListSummary(
       name: true,
       color: true,
       isPrivate: true,
+      projectId: true,
       createdAt: true,
       updatedAt: true,
     },

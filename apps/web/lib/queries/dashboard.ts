@@ -1,22 +1,22 @@
 import {
-  calculateMaintenanceStats,
+  calculateProjectStats,
   calculateShoppingStats,
 } from "../dashboard-stats"
 import type { ApplicationContext } from "@/lib/application/context"
 import { calculateBudgetStats } from "@/lib/application/budget/calculations"
 import { getBudget } from "@/lib/application/budget/read"
-import { listMaintenanceTasks } from "@/lib/application/maintenance/read"
+import { listProjects } from "@/lib/application/projects/read"
 import {
   listShoppingCategories,
   listShoppingListsForDashboard,
 } from "@/lib/application/shopping/read"
 
 export async function getDashboardData(context: ApplicationContext) {
-  const [lists, categories, budget, maintenanceTasks] = await Promise.all([
+  const [lists, categories, budget, projects] = await Promise.all([
     listShoppingListsForDashboard(context),
     listShoppingCategories(context),
     getBudget(context),
-    listMaintenanceTasks(context),
+    listProjects(context),
   ])
 
   const householdLists = lists.filter((list) => !list.isPrivate)
@@ -28,7 +28,7 @@ export async function getDashboardData(context: ApplicationContext) {
     privateLists.flatMap((list) => list.items)
   )
   const budgetStats = calculateBudgetStats(budget)
-  const maintenanceStats = calculateMaintenanceStats(maintenanceTasks)
+  const projectStats = calculateProjectStats(projects)
 
   return {
     householdLists,
@@ -37,7 +37,7 @@ export async function getDashboardData(context: ApplicationContext) {
     householdStats,
     privateStats,
     budgetStats,
-    maintenanceStats,
-    maintenanceTasks,
+    projectStats,
+    projects,
   }
 }

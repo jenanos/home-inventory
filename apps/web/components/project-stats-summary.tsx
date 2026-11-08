@@ -9,29 +9,29 @@ const formatNOK = (amount: number) =>
     maximumFractionDigits: 0,
   }).format(amount)
 
-interface MaintenanceStatsSummaryProps {
+interface ProjectStatsSummaryProps {
   totalEstimatedCost: number
-  totalTasks: number
+  totalProjects: number
   notStartedCount: number
   inProgressCount: number
   completedCount: number
   className?: string
 }
 
-export function MaintenanceStatsSummary({
+export function ProjectStatsSummary({
   totalEstimatedCost,
-  totalTasks,
+  totalProjects,
   notStartedCount,
   inProgressCount,
   completedCount,
   className,
-}: MaintenanceStatsSummaryProps) {
+}: ProjectStatsSummaryProps) {
   const completedPct =
-    totalTasks > 0 ? (completedCount / totalTasks) * 100 : 0
+    totalProjects > 0 ? (completedCount / totalProjects) * 100 : 0
   const inProgressPct =
-    totalTasks > 0 ? (inProgressCount / totalTasks) * 100 : 0
+    totalProjects > 0 ? (inProgressCount / totalProjects) * 100 : 0
   const notStartedPct =
-    totalTasks > 0 ? (notStartedCount / totalTasks) * 100 : 0
+    totalProjects > 0 ? (notStartedCount / totalProjects) * 100 : 0
 
   return (
     <Card size="sm" className={cn("shadow-sm", className)}>
@@ -44,12 +44,12 @@ export function MaintenanceStatsSummary({
             </p>
           </div>
           <span className="shrink-0 text-sm text-muted-foreground">
-            <span className="tabular-nums">{totalTasks}</span>{" "}
-            {totalTasks === 1 ? "oppgave" : "oppgaver"}
+            <span className="tabular-nums">{totalProjects}</span>{" "}
+            {totalProjects === 1 ? "prosjekt" : "prosjekter"}
           </span>
         </div>
 
-        {totalTasks > 0 && (
+        {totalProjects > 0 && (
           <div
             className="flex h-2 w-full overflow-hidden rounded-full bg-muted"
             role="img"
@@ -79,19 +79,23 @@ export function MaintenanceStatsSummary({
         <div className="flex items-center justify-between gap-2 text-xs sm:text-sm">
           <span className="flex items-center gap-1.5 text-muted-foreground">
             <AlertTriangle className="h-3.5 w-3.5" />
-            <span className="tabular-nums font-medium text-foreground">
+            <span className="font-medium text-foreground tabular-nums">
               {notStartedCount}
             </span>{" "}
             ikke startet
           </span>
           <span className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400">
             <Clock className="h-3.5 w-3.5" />
-            <span className="tabular-nums font-medium">{inProgressCount}</span>{" "}
+            <span className="font-medium tabular-nums">
+              {inProgressCount}
+            </span>{" "}
             pågår
           </span>
           <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
             <CheckCircle2 className="h-3.5 w-3.5" />
-            <span className="tabular-nums font-medium">{completedCount}</span>{" "}
+            <span className="font-medium tabular-nums">
+              {completedCount}
+            </span>{" "}
             fullført
           </span>
         </div>

@@ -52,36 +52,68 @@ import {
   RotateCcw,
 } from "lucide-react"
 import {
-  updateMaintenanceTask,
-  deleteMaintenanceTask,
-} from "@/lib/actions/maintenance-task"
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@workspace/ui/components/dialog"
+import { updateProject, deleteProject } from "@/lib/actions/project"
 import { useMediaQuery } from "@/hooks/use-media-query"
-import type { Priority, TaskStatus } from "@workspace/db"
+import type {
+  Priority,
+  ProjectExecution,
+  ProjectStatus,
+  ProjectType,
+} from "@workspace/db"
+import {
+  EXECUTION_UNSET,
+  PROJECT_EXECUTIONS,
+  PROJECT_EXECUTION_LABELS,
+  PROJECT_TYPES,
+  PROJECT_TYPE_LABELS,
+  executionFromSelect,
+} from "@/lib/project-labels"
 
-interface TaskActionsProps {
-  taskId: string
-  currentStatus: TaskStatus
-  task: {
+interface ProjectActionsProps {
+  projectId: string
+  currentStatus: ProjectStatus
+  /** Shown in the delete confirmation: linked lists are kept. */
+  shoppingListCount: number
+  project: {
     title: string
     description: string | null
+    type: ProjectType
+    execution: ProjectExecution | null
     priority: Priority
-    status: TaskStatus
+    status: ProjectStatus
     estimatedDuration: string | null
     estimatedPrice: number | null
     dueDate: string | null
   }
 }
 
-export function TaskActions({ taskId, currentStatus, task }: TaskActionsProps) {
+export function ProjectActions({
+  projectId,
+  currentStatus,
+  shoppingListCount,
+  project: task,
+}: ProjectActionsProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [editOpen, setEditOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
   const isDesktop = useMediaQuery("(min-width: 768px)")
 
   const [title, setTitle] = useState(task.title)
   const [description, setDescription] = useState(task.description ?? "")
+  const [type, setType] = useState<ProjectType>(task.type)
+  const [execution, setExecution] = useState<string>(
+    task.execution ?? EXECUTION_UNSET
+  )
   const [priority, setPriority] = useState<Priority>(task.priority)
-  const [status, setStatus] = useState<TaskStatus>(task.status)
+  const [status, setStatus] = useState<ProjectStatus>(task.status)
   const [estimatedDuration, setEstimatedDuration] = useState(
     task.estimatedDuration ?? ""
   )
@@ -95,10 +127,12 @@ export function TaskActions({ taskId, currentStatus, task }: TaskActionsProps) {
   function handleUpdate() {
     if (!title.trim()) return
     startTransition(async () => {
-      await updateMaintenanceTask({
-        id: taskId,
+      await updateProject({
+        id: projectId,
         title: title.trim(),
         description: description.trim() || null,
+        type,
+        execution: executionFromSelect(execution),
         priority,
         status,
         estimatedDuration: estimatedDuration.trim() || null,
@@ -111,18 +145,23 @@ export function TaskActions({ taskId, currentStatus, task }: TaskActionsProps) {
 
   function handleDelete() {
     startTransition(async () => {
-      await deleteMaintenanceTask(taskId)
-      router.push("/vedlikehold")
+      await deleteProject(projectId)
+      setDeleteOpen(false)
+      router.push("/prosjekter")
     })
   }
 
-  function handleStatusChange(newStatus: TaskStatus) {
+  function handleStatusChange(newStatus: ProjectStatus) {
     startTransition(async () => {
-      await updateMaintenanceTask({ id: taskId, status: newStatus })
+      await updateProject({ id: projectId, status: newStatus })
     })
   }
 
-  const statusActions: { status: TaskStatus; label: string; icon: React.ReactNode }[] = []
+  const statusActions: {
+    status: ProjectStatus
+    label: string
+    icon: React.ReactNode
+  }[] = []
   if (currentStatus !== "IN_PROGRESS") {
     statusActions.push({
       status: "IN_PROGRESS",
@@ -173,6 +212,41 @@ export function TaskActions({ taskId, currentStatus, task }: TaskActionsProps) {
         />
       </div>
 
+      <div className="grid grid-cols-2 gap-4">
+        <div className="flex flex-col gap-2">
+          <Label>Type</Label>
+          <Select value={type} onValueChange={(v) => setType(v as ProjectType)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PROJECT_TYPES.map((value) => (
+                <SelectItem key={value} value={value}>
+                  {PROJECT_TYPE_LABELS[value]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <Label>Hvem gjør jobben?</Label>
+          <Select value={execution} onValueChange={setExecution}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={EXECUTION_UNSET}>Ikke bestemt</SelectItem>
+              {PROJECT_EXECUTIONS.map((value) => (
+                <SelectItem key={value} value={value}>
+                  {PROJECT_EXECUTION_LABELS[value]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
       <Separator />
 
       <div className="grid grid-cols-2 gap-4">
@@ -197,7 +271,7 @@ export function TaskActions({ taskId, currentStatus, task }: TaskActionsProps) {
           <Label>Status</Label>
           <Select
             value={status}
-            onValueChange={(v) => setStatus(v as TaskStatus)}
+            onValueChange={(v) => setStatus(v as ProjectStatus)}
           >
             <SelectTrigger>
               <SelectValue />
@@ -234,7 +308,7 @@ export function TaskActions({ taskId, currentStatus, task }: TaskActionsProps) {
       </div>
 
       <div className="flex flex-col gap-2">
-        <Label>Forfallsdato</Label>
+        <Label>Frist</Label>
         <Popover>
           <PopoverTrigger asChild>
             <Button
@@ -245,17 +319,11 @@ export function TaskActions({ taskId, currentStatus, task }: TaskActionsProps) {
               )}
             >
               <CalendarIcon className="mr-2 h-4 w-4" />
-              {dueDate
-                ? dueDate.toLocaleDateString("nb-NO")
-                : "Velg dato"}
+              {dueDate ? dueDate.toLocaleDateString("nb-NO") : "Velg dato"}
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-auto p-0" align="start">
-            <Calendar
-              mode="single"
-              selected={dueDate}
-              onSelect={setDueDate}
-            />
+            <Calendar mode="single" selected={dueDate} onSelect={setDueDate} />
           </PopoverContent>
         </Popover>
       </div>
@@ -271,7 +339,12 @@ export function TaskActions({ taskId, currentStatus, task }: TaskActionsProps) {
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="icon" disabled={isPending} aria-label="Oppgavehandlinger">
+          <Button
+            variant="outline"
+            size="icon"
+            disabled={isPending}
+            aria-label="Prosjekthandlinger"
+          >
             {isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
@@ -296,11 +369,11 @@ export function TaskActions({ taskId, currentStatus, task }: TaskActionsProps) {
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
-            onClick={handleDelete}
+            onClick={() => setDeleteOpen(true)}
             className="text-red-600 dark:text-red-400"
           >
             <Trash2 className="mr-2 h-4 w-4" />
-            Slett oppgave
+            Slett prosjekt
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -309,7 +382,7 @@ export function TaskActions({ taskId, currentStatus, task }: TaskActionsProps) {
         <Sheet open={editOpen} onOpenChange={setEditOpen}>
           <SheetContent>
             <SheetHeader>
-              <SheetTitle>Rediger oppgave</SheetTitle>
+              <SheetTitle>Rediger prosjekt</SheetTitle>
             </SheetHeader>
             {editFormContent}
           </SheetContent>
@@ -318,14 +391,40 @@ export function TaskActions({ taskId, currentStatus, task }: TaskActionsProps) {
         <Drawer open={editOpen} onOpenChange={setEditOpen}>
           <DrawerContent>
             <DrawerHeader>
-              <DrawerTitle>Rediger oppgave</DrawerTitle>
+              <DrawerTitle>Rediger prosjekt</DrawerTitle>
             </DrawerHeader>
-            <div className="overflow-y-auto px-4 pb-6">
-              {editFormContent}
-            </div>
+            <div className="overflow-y-auto px-4 pb-6">{editFormContent}</div>
           </DrawerContent>
         </Drawer>
       )}
+
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Slette «{task.title}»?</DialogTitle>
+            <DialogDescription>
+              Steg og leverandører slettes sammen med prosjektet.
+              {shoppingListCount > 0 &&
+                ` ${shoppingListCount === 1 ? "Innkjøpslisten" : `De ${shoppingListCount} innkjøpslistene`} beholdes, men kobles fra.`}{" "}
+              Vil du heller ta vare på historikken, kan du markere det som
+              fullført.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteOpen(false)}>
+              Avbryt
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={isPending}
+            >
+              {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Slett prosjekt
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

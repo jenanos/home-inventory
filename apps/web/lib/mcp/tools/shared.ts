@@ -29,12 +29,22 @@ export const PRIORITIES = ["HIGH", "MEDIUM", "LOW"] as const
 
 export const TIMEFRAMES = ["NOW", "SOON", "LATER", "SOMEDAY"] as const
 
-export const TASK_STATUSES = [
+export const PROJECT_STATUSES = [
   "NOT_STARTED",
   "IN_PROGRESS",
   "COMPLETED",
   "ON_HOLD",
 ] as const
+
+export const PROJECT_TYPES = [
+  "MAINTENANCE",
+  "REPAIR",
+  "RENOVATION",
+  "IMPROVEMENT",
+  "OTHER",
+] as const
+
+export const PROJECT_EXECUTIONS = ["SELF", "VENDOR", "MIXED"] as const
 
 export const WATERING_NEEDS = ["LOW", "MEDIUM", "HIGH"] as const
 

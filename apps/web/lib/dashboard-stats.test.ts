@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   calculateBudgetStats,
-  calculateMaintenanceStats,
+  calculateProjectStats,
   calculateShoppingStats,
 } from "./dashboard-stats"
 
@@ -103,7 +103,7 @@ describe("calculateBudgetStats", () => {
   })
 })
 
-describe("calculateMaintenanceStats", () => {
+describe("calculateProjectStats", () => {
   it("tracks status, cost, and overdue/high-priority tasks", () => {
     const now = new Date("2026-04-24T20:09:39.325Z")
     const tasks = [
@@ -131,15 +131,15 @@ describe("calculateMaintenanceStats", () => {
       },
     ]
 
-    const stats = calculateMaintenanceStats(tasks, now)
+    const stats = calculateProjectStats(tasks, now)
 
-    expect(stats.totalTasks).toBe(4)
+    expect(stats.totalProjects).toBe(4)
     expect(stats.notStartedCount).toBe(1)
     expect(stats.inProgressCount).toBe(1)
     expect(stats.completedCount).toBe(1)
     expect(stats.onHoldCount).toBe(1)
     expect(stats.totalEstimatedCost).toBe(1550)
-    expect(stats.highPriorityTasks).toEqual([tasks[0]])
-    expect(stats.overdueTasks).toEqual([tasks[0]])
+    expect(stats.highPriorityProjects).toEqual([tasks[0]])
+    expect(stats.overdueProjects).toEqual([tasks[0]])
   })
 })

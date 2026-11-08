@@ -13,7 +13,7 @@ migrasjon og rollback av databaseskjemaet, se `mcp-oauth-migration.md`.
 | `HOME_OVERVIEW_MCP_ACCESS_TOKEN_TTL_SECONDS`  | nei     | 900–3600, standard 1800                          |
 | `HOME_OVERVIEW_MCP_REFRESH_TOKEN_TTL_SECONDS` | nei     | Maks 2592000 (30 dager), standard 30 dager       |
 | `HOME_OVERVIEW_MCP_CLOCK_SKEW_SECONDS`        | nei     | 0–60, standard 30                                |
-| `HOME_OVERVIEW_MCP_WRITE_DOMAINS`             | nei     | Domener som tar imot skriving: `shopping,budget,maintenance,garden` eller `all`. Standard: ingen |
+| `HOME_OVERVIEW_MCP_WRITE_DOMAINS`             | nei     | Domener som tar imot skriving: `shopping,budget,maintenance,garden` eller `all` (`maintenance` dekker prosjekter, se ADR 0006). Standard: ingen |
 
 Generer signeringssecreten med:
 

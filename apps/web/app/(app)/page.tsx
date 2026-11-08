@@ -2,7 +2,8 @@ import Link from "next/link"
 import { PrivateShoppingListsOverview } from "@/components/private-shopping-lists-overview"
 import { ShoppingStatsSummary } from "@/components/shopping-stats-summary"
 import { ShoppingListCard } from "@/components/shopping-list-card"
-import { MaintenanceStatsSummary } from "@/components/maintenance-stats-summary"
+import { ProjectCard } from "@/components/project-card"
+import { ProjectStatsSummary } from "@/components/project-stats-summary"
 import { BudgetStatsSummary } from "@/components/budget-stats-summary"
 import { getShoppingListItemEffectivePrice } from "@/lib/shopping-list-pricing"
 import { requireHousehold } from "@/lib/session"
@@ -13,24 +14,15 @@ import {
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
-import { Badge } from "@workspace/ui/components/badge"
 import {
   ArrowRight,
   ListChecks,
-  Wrench,
+  Hammer,
   Banknote,
   CalendarClock,
 } from "lucide-react"
 import { cn } from "@workspace/ui/lib/utils"
-import { Progress } from "@workspace/ui/components/progress"
 import { TIMEFRAME_LABELS } from "@/lib/shopping-timeframe"
-
-const formatNOK = (amount: number) =>
-  new Intl.NumberFormat("nb-NO", {
-    style: "currency",
-    currency: "NOK",
-    maximumFractionDigits: 0,
-  }).format(amount)
 
 const timeframeConfig = {
   NOW: {
@@ -58,46 +50,6 @@ const timeframeConfig = {
   },
 } as const
 
-const priorityConfig = {
-  HIGH: {
-    label: "Høy",
-    className: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
-  },
-  MEDIUM: {
-    label: "Medium",
-    className:
-      "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
-  },
-  LOW: {
-    label: "Lav",
-    className:
-      "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-  },
-}
-
-const statusConfig = {
-  NOT_STARTED: {
-    label: "Ikke startet",
-    className:
-      "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400",
-  },
-  IN_PROGRESS: {
-    label: "Pågår",
-    className:
-      "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-  },
-  COMPLETED: {
-    label: "Fullført",
-    className:
-      "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-  },
-  ON_HOLD: {
-    label: "På vent",
-    className:
-      "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400",
-  },
-}
-
 export default async function DashboardPage() {
   const { context } = await requireHousehold()
   const {
@@ -105,8 +57,8 @@ export default async function DashboardPage() {
     privateLists,
     householdStats,
     budgetStats,
-    maintenanceStats,
-    maintenanceTasks,
+    projectStats,
+    projects,
   } = await getDashboardData(context)
 
   const cashFlow = budgetStats.hasBudget ? budgetStats.disposable : 0
@@ -287,12 +239,12 @@ export default async function DashboardPage() {
         )}
       </section>
 
-      {/* ── MAINTENANCE SECTION ── */}
+      {/* ── PROJECTS SECTION ── */}
       <section className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
-          <h2 className="font-heading text-xl tracking-tight">Vedlikehold</h2>
+          <h2 className="font-heading text-xl tracking-tight">Prosjekter</h2>
           <Link
-            href="/vedlikehold"
+            href="/prosjekter"
             className="flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
             Se alle
@@ -300,40 +252,40 @@ export default async function DashboardPage() {
           </Link>
         </div>
 
-        {maintenanceStats.totalTasks > 0 ? (
+        {projectStats.totalProjects > 0 ? (
           <>
-            {/* Maintenance Stats */}
-            <MaintenanceStatsSummary
-              totalEstimatedCost={maintenanceStats.totalEstimatedCost}
-              totalTasks={maintenanceStats.totalTasks}
-              notStartedCount={maintenanceStats.notStartedCount}
-              inProgressCount={maintenanceStats.inProgressCount}
-              completedCount={maintenanceStats.completedCount}
+            <ProjectStatsSummary
+              totalEstimatedCost={projectStats.totalEstimatedCost}
+              totalProjects={projectStats.totalProjects}
+              notStartedCount={projectStats.notStartedCount}
+              inProgressCount={projectStats.inProgressCount}
+              completedCount={projectStats.completedCount}
             />
 
-            {/* Overdue tasks warning */}
-            {maintenanceStats.overdueTasks.length > 0 && (
+            {projectStats.overdueProjects.length > 0 && (
               <Card className="border-red-200 bg-red-50 shadow-sm dark:border-red-900/50 dark:bg-red-950/20">
                 <CardHeader className="pb-2">
                   <CardTitle className="flex items-center gap-2 text-sm font-medium text-red-800 dark:text-red-300">
                     <CalendarClock className="h-4 w-4" />
-                    Forfalte oppgaver
+                    Forfalte prosjekter
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="flex flex-col gap-2">
-                    {maintenanceStats.overdueTasks.map((task) => (
+                    {projectStats.overdueProjects.map((project) => (
                       <Link
-                        key={task.id}
-                        href={`/vedlikehold/${task.id}`}
+                        key={project.id}
+                        href={`/prosjekter/${project.id}`}
                         className="flex items-center justify-between rounded-md px-3 py-2 text-sm transition-colors hover:bg-red-100 dark:hover:bg-red-900/30"
                       >
                         <span className="font-medium text-red-900 dark:text-red-200">
-                          {task.title}
+                          {project.title}
                         </span>
                         <span className="text-xs text-red-600 dark:text-red-400">
                           Forfalt{" "}
-                          {new Date(task.dueDate!).toLocaleDateString("nb-NO")}
+                          {new Date(project.dueDate!).toLocaleDateString(
+                            "nb-NO"
+                          )}
                         </span>
                       </Link>
                     ))}
@@ -342,97 +294,21 @@ export default async function DashboardPage() {
               </Card>
             )}
 
-            {/* High priority + in-progress tasks */}
             {(() => {
-              const activeTasks = maintenanceTasks.filter(
-                (t) => t.status !== "COMPLETED"
-              )
-              const displayTasks = activeTasks.slice(0, 6)
-              if (displayTasks.length === 0) return null
+              const activeProjects = projects
+                .filter((project) => project.status !== "COMPLETED")
+                .slice(0, 6)
+              if (activeProjects.length === 0) return null
 
               return (
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {displayTasks.map((task) => {
-                    const totalEntries = task.progressEntries.length
-                    const completedEntries = task.progressEntries.filter(
-                      (e) => e.completed
-                    ).length
-                    const progressPercent =
-                      totalEntries > 0
-                        ? Math.round((completedEntries / totalEntries) * 100)
-                        : 0
-                    const selectedVendor = task.vendors.find(
-                      (v) => v.isSelected
-                    )
-
-                    return (
-                      <Link key={task.id} href={`/vedlikehold/${task.id}`}>
-                        <Card className="h-full shadow-sm transition-colors hover:bg-muted/50">
-                          <CardHeader className="pb-3">
-                            <div className="flex items-start justify-between gap-2">
-                              <CardTitle className="text-base leading-tight">
-                                {task.title}
-                              </CardTitle>
-                              <Badge
-                                variant="secondary"
-                                className={statusConfig[task.status].className}
-                              >
-                                {statusConfig[task.status].label}
-                              </Badge>
-                            </div>
-                          </CardHeader>
-                          <CardContent className="flex flex-col gap-2">
-                            <div className="flex flex-wrap gap-2">
-                              <Badge
-                                variant="outline"
-                                className={
-                                  priorityConfig[task.priority].className
-                                }
-                              >
-                                {priorityConfig[task.priority].label}
-                              </Badge>
-                              {task.dueDate && (
-                                <Badge variant="outline">
-                                  {new Date(task.dueDate).toLocaleDateString(
-                                    "nb-NO"
-                                  )}
-                                </Badge>
-                              )}
-                            </div>
-
-                            {task.estimatedPrice != null && (
-                              <p className="text-sm font-medium tabular-nums">
-                                {formatNOK(Number(task.estimatedPrice))}
-                              </p>
-                            )}
-
-                            {selectedVendor && (
-                              <p className="text-xs text-muted-foreground">
-                                Valgt aktør:{" "}
-                                <span className="font-medium text-foreground">
-                                  {selectedVendor.name}
-                                </span>
-                              </p>
-                            )}
-
-                            {totalEntries > 0 && (
-                              <div className="flex flex-col gap-1">
-                                <div className="flex items-center justify-between text-xs">
-                                  <span className="text-muted-foreground">
-                                    Fremdrift
-                                  </span>
-                                  <span className="font-medium">
-                                    {completedEntries}/{totalEntries}
-                                  </span>
-                                </div>
-                                <Progress value={progressPercent} />
-                              </div>
-                            )}
-                          </CardContent>
-                        </Card>
-                      </Link>
-                    )
-                  })}
+                  {activeProjects.map((project) => (
+                    <ProjectCard
+                      key={project.id}
+                      project={project}
+                      className="shadow-sm"
+                    />
+                  ))}
                 </div>
               )
             })()}
@@ -440,15 +316,15 @@ export default async function DashboardPage() {
         ) : (
           <Card className="shadow-sm">
             <CardContent className="flex flex-col items-center justify-center py-10 text-center">
-              <Wrench className="mb-3 h-10 w-10 text-muted-foreground/50" />
+              <Hammer className="mb-3 h-10 w-10 text-muted-foreground/50" />
               <p className="text-sm text-muted-foreground">
-                Ingen vedlikeholdsoppgaver ennå.
+                Ingen prosjekter ennå.
               </p>
               <Link
-                href="/vedlikehold"
+                href="/prosjekter"
                 className="mt-2 text-sm font-medium text-primary hover:underline"
               >
-                Legg til oppgaver
+                Legg til prosjekter
               </Link>
             </CardContent>
           </Card>
