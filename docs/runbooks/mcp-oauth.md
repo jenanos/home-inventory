@@ -303,6 +303,7 @@ men trygt.
 | `invalid_client` for en CIMD-klient                     | Metadatadokumentet er utilgjengelig, ikke JSON, eller `client_id` matcher ikke URL-en |
 | `invalid_client` med «utsteder ikke klienthemmeligheter» | Klienten tilbyr ingen metode serveren støtter. Bare `none` (PKCE) støttes; når dokumentet har `token_endpoint_auth_methods_supported` (som ChatGPT), holder det at `none` står der |
 | «Forespørselen ble avvist» (`invalid_request`) på `/api/oauth/authorize/decision` | Se `consent decision refused` i loggen: `origin-mismatch:null` betyr at samtykkesiden sendes med `Referrer-Policy: no-referrer` (skal være `same-origin`); `csrf-mismatch` betyr at samtykkesiden og innsendingen så ulike tilkoblingsforespørsler (f.eks. to faner) |
+| Etter «Koble til» blir du stående på samtykkesiden, og neste klikk gir «Vi fant ingen aktiv tilkoblingsforespørsel» | Nettleseren blokkerte redirecten til klienten. Sjekk at `Content-Security-Policy` på `/oauth/consent` ikke har `form-action`; loggen viser `consent granted` fulgt av `no-consent-cookie`, og koden i `McpOAuthAuthorizationCode` blir aldri brukt |
 | Discovery gir `503`                                     | MCP-konfigurasjonen mangler eller er ugyldig, eller `HOME_OVERVIEW_MCP_ENABLED` er av |
 | `/api/mcp` gir `403` med `FORBIDDEN`                    | Tokenets bruker er slettet, står uten husstand, eller har flere husstandsmedlemskap |
 | Et verktøy mangler i `tools/list`                       | Tokenet har ikke scopet; sjekk `grantedScopes` fra `get-server-info`  |

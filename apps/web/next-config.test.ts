@@ -14,4 +14,18 @@ describe("next.config headers", () => {
     // form POST, and /api/oauth/authorize/decision rejects that with 403.
     expect(referrerPolicy).toBe("same-origin")
   })
+
+  it("does not restrict form-action, so the redirect to the client is not blocked", async () => {
+    const rules = (await nextConfig.headers?.()) ?? []
+    const csp = rules
+      .find((rule) => rule.source === "/oauth/consent")
+      ?.headers.find(
+        (header) => header.key === "Content-Security-Policy"
+      )?.value
+
+    // Browsers apply form-action to the 303 that follows the consent POST, so
+    // `form-action 'self'` stopped the code from reaching e.g. chatgpt.com.
+    expect(csp).toContain("frame-ancestors 'none'")
+    expect(csp).not.toContain("form-action")
+  })
 })
