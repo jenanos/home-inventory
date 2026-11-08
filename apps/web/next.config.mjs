@@ -24,6 +24,12 @@ const nextConfig = {
         // The OAuth consent screen is the one page where a click grants a
         // third party access, so it must never be framed or cached, and it
         // must not leak the request context through a referrer.
+        //
+        // `same-origin`, not `no-referrer`: under `no-referrer` the browser
+        // sends `Origin: null` on the consent form POST, even though it is
+        // same-origin (Fetch spec, "serializing a request origin"), and the
+        // decision endpoint rightly refuses a null Origin. `same-origin` still
+        // sends nothing to other origins, including the client's redirect URI.
         source: "/oauth/consent",
         headers: [
           { key: "X-Frame-Options", value: "DENY" },
@@ -32,7 +38,7 @@ const nextConfig = {
             value:
               "frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
           },
-          { key: "Referrer-Policy", value: "no-referrer" },
+          { key: "Referrer-Policy", value: "same-origin" },
           { key: "Cache-Control", value: "no-store" },
         ],
       },
