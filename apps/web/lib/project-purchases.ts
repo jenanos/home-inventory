@@ -9,16 +9,20 @@ type SummaryItem = {
   alternatives: Array<{ price: { toString(): string } | null }>
 }
 
+/**
+ * Same precedence as the list page and `getShoppingListItemEffectivePrice`:
+ * the preferred alternative's price, else the item's own estimate.
+ */
 function effectivePrice(item: SummaryItem) {
-  if (item.estimatedPrice != null) return Number(item.estimatedPrice)
-  const first = item.alternatives[0]?.price
-  return first != null ? Number(first) : 0
+  const preferred = item.alternatives[0]?.price
+  if (preferred != null) return Number(preferred)
+  return item.estimatedPrice != null ? Number(item.estimatedPrice) : 0
 }
 
 /**
  * What a linked list amounts to: skipped items count for nothing, and an
- * item's price is its own estimate or else its first alternative's price, as
- * on the list page.
+ * item's price is its preferred alternative's price or else its own
+ * estimate, as on the list page.
  */
 export function summarizeShoppingList(items: SummaryItem[]) {
   const counted = items.filter((item) => item.status !== "SKIPPED")
