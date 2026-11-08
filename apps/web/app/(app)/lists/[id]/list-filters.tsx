@@ -18,6 +18,7 @@ import {
   DrawerTrigger,
 } from "@workspace/ui/components/drawer"
 import { X, SlidersHorizontal } from "lucide-react"
+import { TIMEFRAME_OPTIONS } from "@/lib/shopping-timeframe"
 import { CategoryIcon } from "@/components/category-icon"
 
 interface ListFiltersProps {
@@ -29,13 +30,6 @@ const PRIORITY_OPTIONS = [
   { value: "HIGH", label: "Hoy" },
   { value: "MEDIUM", label: "Medium" },
   { value: "LOW", label: "Lav" },
-] as const
-
-const PHASE_OPTIONS = [
-  { value: "BEFORE_MOVE", label: "For innflytting" },
-  { value: "FIRST_WEEK", label: "Forste uke" },
-  { value: "CAN_WAIT", label: "Kan vente" },
-  { value: "NO_RUSH", label: "Ingen hast" },
 ] as const
 
 const STATUS_OPTIONS = [
@@ -59,15 +53,15 @@ export function ListFilters({ categories, members }: ListFiltersProps) {
 
   const currentCategory = searchParams.get("category") ?? ""
   const currentPriority = searchParams.get("priority") ?? ""
-  const currentPhase = searchParams.get("phase") ?? ""
+  const currentTimeframe = searchParams.get("timeframe") ?? ""
   const currentAssigned = searchParams.get("assigned") ?? ""
   const currentStatus = searchParams.get("status") ?? ""
   const currentSort = searchParams.get("sort") ?? "priority"
 
   const hasFilters =
-    !!(currentCategory || currentPriority || currentPhase || currentAssigned || currentStatus)
+    !!(currentCategory || currentPriority || currentTimeframe || currentAssigned || currentStatus)
 
-  const activeFilterCount = [currentCategory, currentPriority, currentPhase, currentAssigned, currentStatus].filter(Boolean).length
+  const activeFilterCount = [currentCategory, currentPriority, currentTimeframe, currentAssigned, currentStatus].filter(Boolean).length
 
   const updateParam = useCallback(
     (key: string, value: string) => {
@@ -124,13 +118,13 @@ export function ListFilters({ categories, members }: ListFiltersProps) {
         </SelectContent>
       </Select>
 
-      <Select value={currentPhase || "all"} onValueChange={(v) => updateParam("phase", v)}>
+      <Select value={currentTimeframe || "all"} onValueChange={(v) => updateParam("timeframe", v)}>
         <SelectTrigger size="sm" className="h-8 w-auto text-xs">
-          <SelectValue placeholder="Fase" />
+          <SelectValue placeholder="Når" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="all">Alle faser</SelectItem>
-          {PHASE_OPTIONS.map((opt) => (
+          <SelectItem value="all">Alle tidspunkt</SelectItem>
+          {TIMEFRAME_OPTIONS.map((opt) => (
             <SelectItem key={opt.value} value={opt.value}>
               {opt.label}
             </SelectItem>
@@ -219,7 +213,7 @@ export function ListFilters({ categories, members }: ListFiltersProps) {
           updateParam={updateParam}
           currentCategory={currentCategory}
           currentPriority={currentPriority}
-          currentPhase={currentPhase}
+          currentTimeframe={currentTimeframe}
           currentAssigned={currentAssigned}
           currentStatus={currentStatus}
         />
@@ -239,7 +233,7 @@ function MobileFilterDrawer({
   updateParam,
   currentCategory,
   currentPriority,
-  currentPhase,
+  currentTimeframe,
   currentAssigned,
   currentStatus,
 }: {
@@ -251,7 +245,7 @@ function MobileFilterDrawer({
   updateParam: (key: string, value: string) => void
   currentCategory: string
   currentPriority: string
-  currentPhase: string
+  currentTimeframe: string
   currentAssigned: string
   currentStatus: string
 }) {
@@ -325,14 +319,14 @@ function MobileFilterDrawer({
             </div>
 
             <div className="grid gap-1.5">
-              <span className="text-xs font-medium text-muted-foreground">Fase</span>
-              <Select value={currentPhase || "all"} onValueChange={(v) => updateParam("phase", v)}>
+              <span className="text-xs font-medium text-muted-foreground">Når</span>
+              <Select value={currentTimeframe || "all"} onValueChange={(v) => updateParam("timeframe", v)}>
                 <SelectTrigger size="sm" className="h-9 w-full text-xs">
                   <SelectValue placeholder="Alle" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Alle</SelectItem>
-                  {PHASE_OPTIONS.map((opt) => (
+                  {TIMEFRAME_OPTIONS.map((opt) => (
                     <SelectItem key={opt.value} value={opt.value}>
                       {opt.label}
                     </SelectItem>

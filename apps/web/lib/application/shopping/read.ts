@@ -1,4 +1,10 @@
-import { db, type ItemStatus, type Prisma } from "@workspace/db"
+import {
+  db,
+  type ItemStatus,
+  type Priority,
+  type Prisma,
+  type Timeframe,
+} from "@workspace/db"
 
 import type { ApplicationContext } from "../context"
 import { getVisibleShoppingListsWhere } from "../../shopping-list-access"
@@ -249,6 +255,51 @@ export async function countShoppingItemsByStatus(
   })
 }
 
+/** The columns a tool may return for an item. No `assignedTo`. */
+function shoppingItemPageSelect(includeAlternatives: boolean) {
+  return {
+    id: true,
+    name: true,
+    description: true,
+    status: true,
+    priority: true,
+    timeframe: true,
+    dueDate: true,
+    estimatedPrice: true,
+    url: true,
+    imageUrl: true,
+    storeName: true,
+    purchasedAt: true,
+    createdAt: true,
+    updatedAt: true,
+    category: { select: { id: true, name: true } },
+    alternatives: includeAlternatives
+      ? {
+          select: {
+            id: true,
+            name: true,
+            price: true,
+            url: true,
+            imageUrl: true,
+            storeName: true,
+            notes: true,
+            rank: true,
+            updatedAt: true,
+          },
+          orderBy: { rank: "asc" as const },
+        }
+      : (false as const),
+    _count: { select: { alternatives: true } },
+  } satisfies Prisma.ShoppingItemSelect
+}
+
+const SHOPPING_ITEM_PAGE_ORDER = [
+  { status: "asc" },
+  { priority: "asc" },
+  { createdAt: "desc" },
+  { id: "asc" },
+] satisfies Prisma.ShoppingItemOrderByWithRelationInput[]
+
 export async function listShoppingItemsPage(
   context: ApplicationContext,
   listId: string,
@@ -263,44 +314,71 @@ export async function listShoppingItemsPage(
     db.shoppingItem.count({ where }),
     db.shoppingItem.findMany({
       where,
-      select: {
-        id: true,
-        name: true,
-        description: true,
-        status: true,
-        priority: true,
-        phase: true,
-        dueDate: true,
-        estimatedPrice: true,
-        url: true,
-        storeName: true,
-        purchasedAt: true,
-        createdAt: true,
-        updatedAt: true,
-        category: { select: { id: true, name: true } },
-        alternatives: options.includeAlternatives
-          ? {
-              select: {
-                id: true,
-                name: true,
-                price: true,
-                url: true,
-                storeName: true,
-                notes: true,
-                rank: true,
-                updatedAt: true,
+      select: shoppingItemPageSelect(options.includeAlternatives),
+      orderBy: SHOPPING_ITEM_PAGE_ORDER,
+      skip: options.offset,
+      take: options.limit,
+    }),
+  ])
+
+  return { totalCount, items }
+}
+
+export type ShoppingItemSearch = {
+  /** Case-insensitive match on name, description, store or alternative name. */
+  query?: string
+  listId?: string
+  status?: ItemStatus
+  priority?: Priority
+  timeframe?: Timeframe
+  /** `null` finds items without a category. */
+  categoryId?: string | null
+}
+
+/**
+ * Searches items across every list the caller can see. The visibility rule is
+ * part of the `where`, so another member's private list never contributes.
+ */
+export async function searchShoppingItemsPage(
+  context: ApplicationContext,
+  options: PageOptions & ShoppingItemSearch & { includeAlternatives: boolean }
+) {
+  const where: Prisma.ShoppingItemWhereInput = {
+    list: getVisibleShoppingListsWhere(context.householdId, context.userId),
+    ...(options.listId ? { listId: options.listId } : {}),
+    ...(options.status ? { status: options.status } : {}),
+    ...(options.priority ? { priority: options.priority } : {}),
+    ...(options.timeframe ? { timeframe: options.timeframe } : {}),
+    ...(options.categoryId !== undefined
+      ? { categoryId: options.categoryId }
+      : {}),
+    ...(options.query
+      ? {
+          OR: [
+            { name: { contains: options.query, mode: "insensitive" } },
+            { description: { contains: options.query, mode: "insensitive" } },
+            { storeName: { contains: options.query, mode: "insensitive" } },
+            {
+              alternatives: {
+                some: {
+                  name: { contains: options.query, mode: "insensitive" },
+                },
               },
-              orderBy: { rank: "asc" },
-            }
-          : false,
-        _count: { select: { alternatives: true } },
+            },
+          ],
+        }
+      : {}),
+  }
+
+  const [totalCount, items] = await Promise.all([
+    db.shoppingItem.count({ where }),
+    db.shoppingItem.findMany({
+      where,
+      select: {
+        ...shoppingItemPageSelect(options.includeAlternatives),
+        list: { select: { id: true, name: true } },
       },
-      orderBy: [
-        { status: "asc" },
-        { priority: "asc" },
-        { createdAt: "desc" },
-        { id: "asc" },
-      ],
+      orderBy: SHOPPING_ITEM_PAGE_ORDER,
       skip: options.offset,
       take: options.limit,
     }),

@@ -1,7 +1,4 @@
-import Link from "next/link"
 import { notFound } from "next/navigation"
-import { BotMessageSquare } from "lucide-react"
-import { Button } from "@workspace/ui/components/button"
 import { CategoryIcon } from "@/components/category-icon"
 import { canManageShoppingListPrivacy } from "@/lib/shopping-list-access"
 import { requireHousehold } from "@/lib/session"
@@ -64,7 +61,7 @@ export default async function ListPage({ params }: ListPageProps) {
       name: item.name,
       description: item.description,
       priority: item.priority,
-      phase: item.phase,
+      timeframe: item.timeframe,
       dueDate: item.dueDate ? item.dueDate.toISOString() : null,
       estimatedPrice: item.estimatedPrice ? Number(item.estimatedPrice) : null,
       effectivePrice,
@@ -157,12 +154,6 @@ export default async function ListPage({ params }: ListPageProps) {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <ListFilters categories={categories} members={members} />
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" asChild>
-            <Link href={`/lists/${list.id}/llm-import`}>
-              <BotMessageSquare className="h-4 w-4" data-icon="inline-start" />
-              LLM-import
-            </Link>
-          </Button>
           <AddItemSheet
             listId={list.id}
             categories={categories}

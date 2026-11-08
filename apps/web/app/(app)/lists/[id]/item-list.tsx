@@ -26,6 +26,7 @@ import {
 import { CategoryIcon } from "@/components/category-icon"
 import { toggleItemPurchased } from "@/lib/actions/shopping-item"
 import { EditItemDialog } from "./edit-item-dialog"
+import { timeframeLabel } from "@/lib/shopping-timeframe"
 
 const formatCurrency = (amount: number) =>
   new Intl.NumberFormat("nb-NO", {
@@ -46,13 +47,6 @@ const PRIORITY_CONFIG = {
   LOW: { label: "Lav", className: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
 } as const
 
-const PHASE_LABELS: Record<string, string> = {
-  BEFORE_MOVE: "For innflytting",
-  FIRST_WEEK: "Forste uke",
-  CAN_WAIT: "Kan vente",
-  NO_RUSH: "Ingen hast",
-}
-
 export interface AlternativeData {
   id: string
   name: string
@@ -69,7 +63,7 @@ export interface ShoppingItemData {
   name: string
   description: string | null
   priority: "HIGH" | "MEDIUM" | "LOW"
-  phase: "BEFORE_MOVE" | "FIRST_WEEK" | "CAN_WAIT" | "NO_RUSH" | null
+  timeframe: "NOW" | "SOON" | "LATER" | "SOMEDAY" | null
   dueDate: string | null
   estimatedPrice: number | null
   effectivePrice: number | null
@@ -113,7 +107,7 @@ export function ItemList({ items, categories, members, listId }: ItemListProps) 
 
     const categoryFilter = searchParams.get("category")
     const priorityFilter = searchParams.get("priority")
-    const phaseFilter = searchParams.get("phase")
+    const timeframeFilter = searchParams.get("timeframe")
     const assignedFilter = searchParams.get("assigned")
     const statusFilter = searchParams.get("status")
     const sort = searchParams.get("sort") ?? "priority"
@@ -124,8 +118,8 @@ export function ItemList({ items, categories, members, listId }: ItemListProps) 
     if (priorityFilter) {
       result = result.filter((item) => item.priority === priorityFilter)
     }
-    if (phaseFilter) {
-      result = result.filter((item) => item.phase === phaseFilter)
+    if (timeframeFilter) {
+      result = result.filter((item) => item.timeframe === timeframeFilter)
     }
     if (assignedFilter) {
       result = result.filter((item) => item.assignedTo?.id === assignedFilter)
@@ -348,9 +342,9 @@ function MobileItemCard({
             </Badge>
           )}
 
-          {item.phase && (
+          {item.timeframe && (
             <Badge variant="outline" className="text-[10px] px-1.5 h-4">
-              {PHASE_LABELS[item.phase]}
+              {timeframeLabel(item.timeframe)}
             </Badge>
           )}
 
@@ -459,9 +453,9 @@ function DesktopItemRow({
             </span>
           )}
           <div className="flex items-center gap-1.5 mt-0.5">
-            {item.phase && (
+            {item.timeframe && (
               <span className="text-[10px] text-muted-foreground">
-                {PHASE_LABELS[item.phase]}
+                {timeframeLabel(item.timeframe)}
               </span>
             )}
             {item.dueDate && (

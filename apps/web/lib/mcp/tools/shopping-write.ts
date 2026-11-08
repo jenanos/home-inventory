@@ -1,11 +1,17 @@
 import { z } from "zod"
 
 import { MAX_BATCH_SIZE } from "../../application/mutations"
+import { CATEGORY_ICON_NAMES } from "../../category-icons"
 import {
   MAX_ALTERNATIVES_PER_ITEM,
   addProductAlternative,
   addShoppingItems,
+  createShoppingCategory,
   createShoppingList,
+  deleteProductAlternative,
+  deleteShoppingItems,
+  moveShoppingItems,
+  reorderAlternatives,
   setPreferredAlternative,
   setShoppingItemStatus,
   updateProductAlternative,
@@ -14,14 +20,15 @@ import {
 } from "../../application/shopping/write"
 import {
   CREATE_ANNOTATIONS,
+  DELETE_ANNOTATIONS,
   defineWriteTool,
   UPDATE_ANNOTATIONS,
   type McpToolDefinition,
 } from "./define"
 import {
   ITEM_STATUSES,
-  PHASES,
   PRIORITIES,
+  TIMEFRAMES,
   calendarDateInputSchema,
   expectedUpdatedAtSchema,
   idSchema,
@@ -69,21 +76,40 @@ const itemFieldsInputSchema = {
     .nullable()
     .optional()
     .describe("Id from list-shopping-categories, or null for no category."),
-  priority: z.enum(PRIORITIES).optional(),
-  phase: z
-    .enum(PHASES)
+  priority: z
+    .enum(PRIORITIES)
+    .optional()
+    .describe("HIGH = must have, MEDIUM = should have, LOW = nice to have."),
+  timeframe: z
+    .enum(TIMEFRAMES)
     .nullable()
     .optional()
-    .describe("When in a move the item is needed."),
-  dueDate: calendarDateInputSchema.nullable().optional(),
-  estimatedPrice: moneyInputSchema.nullable().optional(),
+    .describe(
+      "When the item is needed: NOW (as soon as possible), SOON (within weeks), LATER (can wait), SOMEDAY (no rush)."
+    ),
+  dueDate: calendarDateInputSchema
+    .nullable()
+    .optional()
+    .describe("A hard deadline, if there is one."),
+  estimatedPrice: moneyInputSchema
+    .nullable()
+    .optional()
+    .describe(
+      "Amount in NOK. Leave it out when the item has alternatives: the preferred alternative's price is used."
+    ),
   url: urlInputSchema,
+  imageUrl: urlInputSchema.describe(
+    "Direct link to a product image (JPG/PNG/WebP), shown in the app."
+  ),
   storeName: shortTextInputSchema,
 }
 
 const alternativeFieldsInputSchema = {
   price: moneyInputSchema.nullable().optional(),
   url: urlInputSchema,
+  imageUrl: urlInputSchema.describe(
+    "Direct link to a product image (JPG/PNG/WebP), shown in the app."
+  ),
   storeName: shortTextInputSchema,
   notes: longTextInputSchema,
 }
@@ -150,7 +176,7 @@ export const addShoppingItemsTool = defineWriteTool({
   name: "add-shopping-items",
   scope: "shopping:write",
   title: "Add items to a shopping list",
-  description: `Adds 1–${MAX_BATCH_SIZE} items to one list in a single all-or-nothing call. By default an item whose name is already on the list (case-insensitive), or repeated in the batch, is skipped and reported with the existing item's id, so a retry does not create duplicates; set onDuplicate to "create" to add it anyway. Use update-shopping-item to change an existing item.`,
+  description: `Adds 1–${MAX_BATCH_SIZE} items to one list in a single all-or-nothing call. An item is a purchase need ("Washing machine"), not a specific product: put concrete products, models or offers for the same need under alternatives, best first, rather than as separate items. By default an item whose name is already on the list (case-insensitive), or repeated in the batch, is skipped and reported with the existing item's id, so a retry does not create duplicates; set onDuplicate to "create" to add it anyway. Use update-shopping-item to change an existing item.`,
   inputSchema: {
     listId: idSchema.describe("Id from list-shopping-lists."),
     items: z
@@ -390,6 +416,167 @@ export const setPreferredAlternativeTool = defineWriteTool({
   },
 })
 
+export const deleteShoppingItemsTool = defineWriteTool({
+  name: "delete-shopping-items",
+  scope: "shopping:write",
+  title: "Delete shopping items",
+  description:
+    "Permanently deletes one or more items and their product alternatives. Prefer set-shopping-item-status with SKIPPED when an item is merely no longer relevant, so the history is kept; delete is for mistakes and duplicates. If any id is not a visible item, nothing is deleted. Confirm with the user before deleting.",
+  inputSchema: {
+    itemIds: z
+      .array(idSchema)
+      .min(1)
+      .max(MAX_BATCH_SIZE)
+      .describe("Item ids from get-shopping-list or search-shopping-items."),
+  },
+  outputSchema: {
+    deleted: z.array(
+      z.object({ id: z.string(), name: z.string(), listId: z.string() })
+    ),
+  },
+  annotations: DELETE_ANNOTATIONS,
+  resourceType: "shopping_item",
+  handler: async (args, session) => {
+    const deleted = await deleteShoppingItems(session.context, args.itemIds)
+
+    return {
+      structuredContent: { deleted },
+      summary: `Slettet ${deleted.length} vare(r).`,
+      resourceId: deleted.length === 1 ? (deleted[0]?.id ?? null) : null,
+    }
+  },
+})
+
+export const moveShoppingItemsTool = defineWriteTool({
+  name: "move-shopping-items",
+  scope: "shopping:write",
+  title: "Move shopping items to another list",
+  description:
+    "Moves one or more items, with their alternatives, to another list the user can see. Items already on the target list stay there, so repeating the call is harmless. Moving an item from a private list to a shared one makes it visible to the household. If any id is not visible, nothing moves.",
+  inputSchema: {
+    itemIds: z
+      .array(idSchema)
+      .min(1)
+      .max(MAX_BATCH_SIZE)
+      .describe("Item ids from get-shopping-list or search-shopping-items."),
+    listId: idSchema.describe("Target list id from list-shopping-lists."),
+  },
+  outputSchema: { items: z.array(shoppingItemSchema) },
+  annotations: UPDATE_ANNOTATIONS,
+  resourceType: "shopping_list",
+  handler: async (args, session) => {
+    const items = await moveShoppingItems(
+      session.context,
+      args.itemIds,
+      args.listId
+    )
+
+    return {
+      structuredContent: {
+        items: items.map((item) => serializeShoppingItem(item, false)),
+      },
+      summary: `Flyttet ${items.length} vare(r).`,
+      resourceId: args.listId,
+    }
+  },
+})
+
+export const deleteProductAlternativeTool = defineWriteTool({
+  name: "delete-product-alternative",
+  scope: "shopping:write",
+  title: "Delete a product alternative",
+  description:
+    "Permanently removes one product alternative from its item. If it was the preferred one, the next alternative becomes preferred. Returns the item with its remaining alternatives.",
+  inputSchema: {
+    alternativeId: idSchema.describe(
+      "Id from get-shopping-list with includeAlternatives."
+    ),
+  },
+  outputSchema: { item: shoppingItemSchema },
+  annotations: DELETE_ANNOTATIONS,
+  resourceType: "product_alternative",
+  handler: async (args, session) => {
+    const { item } = await deleteProductAlternative(
+      session.context,
+      args.alternativeId
+    )
+
+    return {
+      structuredContent: { item: serializeShoppingItem(item, true) },
+      summary: `Fjernet et alternativ fra ${item.name}.`,
+      resourceId: args.alternativeId,
+    }
+  },
+})
+
+export const reorderProductAlternativesTool = defineWriteTool({
+  name: "reorder-product-alternatives",
+  scope: "shopping:write",
+  title: "Reorder product alternatives",
+  description:
+    "Sets the full preference order of an item's alternatives; the first becomes the preferred one and sets the effective price. alternativeIds must contain exactly the item's alternatives. To only change the favourite, use set-preferred-alternative.",
+  inputSchema: {
+    itemId: idSchema.describe("Id from get-shopping-list."),
+    alternativeIds: z
+      .array(idSchema)
+      .min(1)
+      .max(MAX_ALTERNATIVES_PER_ITEM)
+      .describe("Every alternative of the item, best first."),
+  },
+  outputSchema: { item: shoppingItemSchema },
+  annotations: UPDATE_ANNOTATIONS,
+  resourceType: "shopping_item",
+  handler: async (args, session) => {
+    const { item } = await reorderAlternatives(
+      session.context,
+      args.itemId,
+      args.alternativeIds
+    )
+
+    return {
+      structuredContent: { item: serializeShoppingItem(item, true) },
+      summary: `Ny rekkefølge på alternativene for ${item.name}.`,
+      resourceId: item.id,
+    }
+  },
+})
+
+export const createShoppingCategoryTool = defineWriteTool({
+  name: "create-shopping-category",
+  scope: "shopping:write",
+  title: "Create a shopping category",
+  description:
+    "Creates a household shopping category, e.g. 'Hage' or 'Verktøy'. Check list-shopping-categories first: names are unique per household and a duplicate is rejected. Returns the saved category.",
+  inputSchema: {
+    name: nameInputSchema,
+    icon: z
+      .enum(CATEGORY_ICON_NAMES)
+      .nullable()
+      .optional()
+      .describe("Icon shown next to the category in the app."),
+  },
+  outputSchema: {
+    category: z.object({
+      id: z.string(),
+      name: z.string(),
+      icon: z.string().nullable(),
+      color: z.string().nullable(),
+      isDefault: z.boolean(),
+    }),
+  },
+  annotations: CREATE_ANNOTATIONS,
+  resourceType: "shopping_category",
+  handler: async (args, session) => {
+    const category = await createShoppingCategory(session.context, args)
+
+    return {
+      structuredContent: { category },
+      summary: `Opprettet kategorien ${category.name}.`,
+      resourceId: category.id,
+    }
+  },
+})
+
 export const shoppingWriteTools: McpToolDefinition[] = [
   createShoppingListTool,
   updateShoppingListTool,
@@ -399,4 +586,9 @@ export const shoppingWriteTools: McpToolDefinition[] = [
   addProductAlternativeTool,
   updateProductAlternativeTool,
   setPreferredAlternativeTool,
+  reorderProductAlternativesTool,
+  deleteProductAlternativeTool,
+  moveShoppingItemsTool,
+  deleteShoppingItemsTool,
+  createShoppingCategoryTool,
 ]

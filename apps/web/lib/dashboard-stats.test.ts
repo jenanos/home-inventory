@@ -7,19 +7,19 @@ import {
 } from "./dashboard-stats"
 
 describe("calculateShoppingStats", () => {
-  it("summarizes items, phases, and assignees", () => {
+  it("summarizes items, timeframes, and assignees", () => {
     const stats = calculateShoppingStats([
       {
         status: "PENDING",
         estimatedPrice: "100",
         alternatives: [],
-        phase: "BEFORE_MOVE",
+        timeframe: "NOW",
         assignedTo: { name: "Ada" },
       },
       {
         status: "PENDING",
         alternatives: [{ price: "25" }],
-        phase: null,
+        timeframe: null,
         assignedTo: null,
       },
       {
@@ -39,11 +39,11 @@ describe("calculateShoppingStats", () => {
       purchasedCount: 1,
       totalEstimated: 175,
       purchasedTotal: 50,
-      itemsByPhase: {
-        BEFORE_MOVE: 1,
-        FIRST_WEEK: 0,
-        CAN_WAIT: 0,
-        NO_RUSH: 0,
+      itemsByTimeframe: {
+        NOW: 1,
+        SOON: 0,
+        LATER: 0,
+        SOMEDAY: 0,
         UNSET: 1,
       },
       itemsByPerson: {

@@ -27,12 +27,7 @@ export const ITEM_STATUSES = ["PENDING", "PURCHASED", "SKIPPED"] as const
 
 export const PRIORITIES = ["HIGH", "MEDIUM", "LOW"] as const
 
-export const PHASES = [
-  "BEFORE_MOVE",
-  "FIRST_WEEK",
-  "CAN_WAIT",
-  "NO_RUSH",
-] as const
+export const TIMEFRAMES = ["NOW", "SOON", "LATER", "SOMEDAY"] as const
 
 export const TASK_STATUSES = [
   "NOT_STARTED",
