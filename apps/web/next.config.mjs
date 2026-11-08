@@ -34,9 +34,15 @@ const nextConfig = {
         headers: [
           { key: "X-Frame-Options", value: "DENY" },
           {
+            // No `form-action`: browsers (Chrome first) apply it to the
+            // redirect that follows the consent POST as well, so
+            // `form-action 'self'` blocked the 303 to the client's redirect
+            // URI and the code never reached the client. That target differs
+            // per client (and `[::1]` loopback cannot be written as a CSP
+            // source at all), and the page renders no untrusted markup, so
+            // framing is the risk worth locking down.
             key: "Content-Security-Policy",
-            value:
-              "frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+            value: "frame-ancestors 'none'; base-uri 'self'",
           },
           { key: "Referrer-Policy", value: "same-origin" },
           { key: "Cache-Control", value: "no-store" },
