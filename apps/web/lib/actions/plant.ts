@@ -1,34 +1,45 @@
 "use server"
 
+import { db } from "@workspace/db"
 import {
-  db,
-  type Lifecycle,
-  type PlantType,
-  type SunNeed,
-  type WateringMethod,
-  type WateringNeed,
-} from "@workspace/db"
+  bulkCreatePlants as bulkCreatePlantsService,
+  createImportedPlants,
+  findExistingPlants as findExistingPlantsService,
+  importPlantsWithDuplicates,
+  type BulkPlantInput,
+  type ExistingPlant,
+  type PlantFieldUpdate,
+} from "@/lib/application/garden/import"
 import {
+  createGardenBed as createGardenBedService,
   createPlant as createPlantService,
+  deleteGardenBed as deleteGardenBedService,
   deletePlant as deletePlantService,
+  updateGardenBed as updateGardenBedService,
   updatePlant as updatePlantService,
-  type PlantFields,
+  type CreatePlantInput,
+  type GardenBedFields,
+  type UpdateGardenBedInput,
   type UpdatePlantInput,
 } from "@/lib/application/garden/write"
-import { assertBatchSize, lenientUrl } from "@/lib/application/mutations"
+import { assertBatchSize } from "@/lib/application/mutations"
 import { requireHousehold } from "@/lib/session"
 import { revalidatePath } from "next/cache"
 
-// --- Plant CRUD actions ---
+// --- Plant and bed actions ---
 //
 // Thin adapters: the browser context comes from the session, the rules and the
-// ownership boundary live in the garden write service shared with MCP.
+// ownership boundary live in the garden services shared with MCP.
 
-export async function createPlant(input: PlantFields) {
+function revalidateGarden() {
+  revalidatePath("/hage", "layout")
+}
+
+export async function createPlant(input: CreatePlantInput) {
   const { context } = await requireHousehold()
   const plant = await createPlantService(context, input)
 
-  revalidatePath("/hage")
+  revalidateGarden()
   return plant
 }
 
@@ -37,8 +48,7 @@ export async function updatePlant(input: { id: string } & UpdatePlantInput) {
   const { id, ...fields } = input
   const updated = await updatePlantService(context, id, fields)
 
-  revalidatePath("/hage")
-  revalidatePath(`/hage/${id}`)
+  revalidateGarden()
   return updated
 }
 
@@ -46,109 +56,51 @@ export async function deletePlant(plantId: string) {
   const { context } = await requireHousehold()
   await deletePlantService(context, plantId)
 
-  revalidatePath("/hage")
+  revalidateGarden()
+}
+
+export async function createGardenBed(input: GardenBedFields) {
+  const { context } = await requireHousehold()
+  const bed = await createGardenBedService(context, input)
+
+  revalidateGarden()
+  return bed
+}
+
+export async function updateGardenBed(
+  input: { id: string } & UpdateGardenBedInput
+) {
+  const { context } = await requireHousehold()
+  const { id, ...fields } = input
+  const bed = await updateGardenBedService(context, id, fields)
+
+  revalidateGarden()
+  return bed
+}
+
+export async function deleteGardenBed(bedId: string) {
+  const { context } = await requireHousehold()
+  await deleteGardenBedService(context, bedId)
+
+  revalidateGarden()
 }
 
 // ─── Bulk Import (LLM) ──────────────────────────────────────────
 
-interface BulkPlantInput {
-  name: string
-  species?: string
-  location?: string
-  description?: string
-  careInstructions?: string
-  wateringNeed?: string
-  wateringMethod?: string
-  sunNeed?: string
-  pruningSeason?: string
-  isToxic?: boolean
-  toxicityNotes?: string
-  plantType?: string
-  soilType?: string
-  fertilizer?: string
-  hardinessZone?: string
-  lifecycle?: string
-  bloomTime?: string
-  pests?: string
-  notes?: string
-  imageUrl?: string
-  sourceUrl?: string
+export async function bulkCreatePlants(input: { plants: BulkPlantInput[] }) {
+  const { context } = await requireHousehold()
+  const result = await bulkCreatePlantsService(context, input.plants)
+
+  revalidateGarden()
+  return result
 }
 
-const validWateringNeed = new Set<WateringNeed>(["LOW", "MEDIUM", "HIGH"])
-const validWateringMethod = new Set<WateringMethod>(["MANUAL", "AUTOMATIC"])
-const validSunNeed = new Set<SunNeed>(["FULL_SUN", "PARTIAL_SHADE", "SHADE"])
-const validPlantType = new Set<PlantType>([
-  "TREE",
-  "SHRUB",
-  "PERENNIAL",
-  "ANNUAL",
-  "FLOWER",
-  "HERB",
-  "VEGETABLE",
-  "CLIMBER",
-  "GRASS",
-  "OTHER",
-])
-const validLifecycle = new Set<Lifecycle>(["ANNUAL", "BIENNIAL", "PERENNIAL"])
-
-function coerceEnum<T extends string>(
-  value: string | undefined,
-  valid: Set<T>
-): T | undefined {
-  if (!value) return undefined
-  const upper = value.toUpperCase() as T
-  return valid.has(upper) ? upper : undefined
-}
-
-function toPlantData(plant: BulkPlantInput, householdId: string) {
-  return {
-    name: plant.name,
-    species: plant.species || undefined,
-    location: plant.location || undefined,
-    description: plant.description || undefined,
-    careInstructions: plant.careInstructions || undefined,
-    wateringNeed: coerceEnum(plant.wateringNeed, validWateringNeed),
-    wateringMethod: coerceEnum(plant.wateringMethod, validWateringMethod),
-    sunNeed: coerceEnum(plant.sunNeed, validSunNeed),
-    pruningSeason: plant.pruningSeason || undefined,
-    isToxic: plant.isToxic ?? false,
-    toxicityNotes: plant.toxicityNotes || undefined,
-    plantType: coerceEnum(plant.plantType, validPlantType),
-    soilType: plant.soilType || undefined,
-    fertilizer: plant.fertilizer || undefined,
-    hardinessZone: plant.hardinessZone || undefined,
-    lifecycle: coerceEnum(plant.lifecycle, validLifecycle),
-    bloomTime: plant.bloomTime || undefined,
-    pests: plant.pests || undefined,
-    notes: plant.notes || undefined,
-    imageUrl: lenientUrl(plant.imageUrl),
-    sourceUrl: lenientUrl(plant.sourceUrl),
-    householdId,
-  }
-}
-
-interface BulkPlantImportInput {
-  plants: BulkPlantInput[]
-}
-
-export async function bulkCreatePlants(input: BulkPlantImportInput) {
-  const { membership } = await requireHousehold()
-  assertBatchSize(input.plants.length, "Planter")
-
-  const results = await db.$transaction(
-    input.plants.map((plant) =>
-      db.plant.create({
-        data: toPlantData(plant, membership.householdId),
-      })
-    )
-  )
-
-  revalidatePath("/hage")
-  return { count: results.length }
-}
-
-export async function replacePlants(input: BulkPlantImportInput) {
+/**
+ * Full replace stays a server action outside `lib/application/`, so no MCP
+ * tool can reach it (ADR 0004). Beds are kept: they are places in the garden,
+ * not part of the plant list, and the import reuses them by name.
+ */
+export async function replacePlants(input: { plants: BulkPlantInput[] }) {
   const { membership } = await requireHousehold()
   assertBatchSize(input.plants.length, "Planter", { allowEmpty: true })
 
@@ -156,198 +108,27 @@ export async function replacePlants(input: BulkPlantImportInput) {
     await tx.plant.deleteMany({
       where: { householdId: membership.householdId },
     })
-
-    for (const plant of input.plants) {
-      await tx.plant.create({
-        data: toPlantData(plant, membership.householdId),
-      })
-    }
+    await createImportedPlants(tx, membership.householdId, input.plants)
   })
 
-  revalidatePath("/hage")
+  revalidateGarden()
   return { count: input.plants.length }
-}
-
-// ─── Duplicate Detection ────────────────────────────────────────
-
-export interface ExistingPlant {
-  id: string
-  name: string
-  species: string | null
-  location: string | null
-  description: string | null
-  careInstructions: string | null
-  wateringNeed: string | null
-  wateringMethod: string | null
-  sunNeed: string | null
-  pruningSeason: string | null
-  isToxic: boolean
-  toxicityNotes: string | null
-  plantType: string | null
-  soilType: string | null
-  fertilizer: string | null
-  hardinessZone: string | null
-  lifecycle: string | null
-  bloomTime: string | null
-  pests: string | null
-  notes: string | null
-  imageUrl: string | null
-  sourceUrl: string | null
 }
 
 export async function findExistingPlants(
   names: string[]
 ): Promise<ExistingPlant[]> {
-  const { membership } = await requireHousehold()
-
-  const lowerNames = names.map((n) => n.toLowerCase())
-
-  const existing = await db.plant.findMany({
-    where: { householdId: membership.householdId },
-  })
-
-  return existing
-    .filter((plant) => lowerNames.includes(plant.name.toLowerCase()))
-    .map((plant) => ({
-      id: plant.id,
-      name: plant.name,
-      species: plant.species,
-      location: plant.location,
-      description: plant.description,
-      careInstructions: plant.careInstructions,
-      wateringNeed: plant.wateringNeed,
-      wateringMethod: plant.wateringMethod,
-      sunNeed: plant.sunNeed,
-      pruningSeason: plant.pruningSeason,
-      isToxic: plant.isToxic,
-      toxicityNotes: plant.toxicityNotes,
-      plantType: plant.plantType,
-      soilType: plant.soilType,
-      fertilizer: plant.fertilizer,
-      hardinessZone: plant.hardinessZone,
-      lifecycle: plant.lifecycle,
-      bloomTime: plant.bloomTime,
-      pests: plant.pests,
-      notes: plant.notes,
-      imageUrl: plant.imageUrl,
-      sourceUrl: plant.sourceUrl,
-    }))
+  const { context } = await requireHousehold()
+  return findExistingPlantsService(context, names)
 }
 
-// ─── Bulk Import With Duplicate Handling ────────────────────────
-
-export interface PlantFieldUpdate {
-  id: string
-  fields: {
-    species?: string
-    location?: string
-    description?: string
-    careInstructions?: string
-    wateringNeed?: string
-    wateringMethod?: string
-    sunNeed?: string
-    pruningSeason?: string
-    isToxic?: boolean
-    toxicityNotes?: string
-    plantType?: string
-    soilType?: string
-    fertilizer?: string
-    hardinessZone?: string
-    lifecycle?: string
-    bloomTime?: string
-    pests?: string
-    notes?: string
-    imageUrl?: string
-    sourceUrl?: string
-  }
-}
-
-interface BulkPlantImportWithDuplicatesInput {
+export async function bulkImportPlantsWithDuplicates(input: {
   newPlants: BulkPlantInput[]
   updates: PlantFieldUpdate[]
-}
+}) {
+  const { context } = await requireHousehold()
+  const result = await importPlantsWithDuplicates(context, input)
 
-export async function bulkImportPlantsWithDuplicates(
-  input: BulkPlantImportWithDuplicatesInput
-) {
-  const { membership } = await requireHousehold()
-  assertBatchSize(input.newPlants.length + input.updates.length, "Planter", {
-    allowEmpty: true,
-  })
-
-  const createOps = input.newPlants.map((plant) =>
-    db.plant.create({
-      data: toPlantData(plant, membership.householdId),
-    })
-  )
-
-  const updateOps = input.updates.map((update) => {
-    const f = update.fields
-    const data: {
-      species?: string
-      location?: string
-      description?: string
-      careInstructions?: string
-      wateringNeed?: WateringNeed
-      wateringMethod?: WateringMethod
-      sunNeed?: SunNeed
-      pruningSeason?: string
-      isToxic?: boolean
-      toxicityNotes?: string
-      plantType?: PlantType
-      soilType?: string
-      fertilizer?: string
-      hardinessZone?: string
-      lifecycle?: Lifecycle
-      bloomTime?: string
-      pests?: string
-      notes?: string
-      imageUrl?: string
-      sourceUrl?: string
-    } = {}
-
-    if (f.species !== undefined) data.species = f.species || undefined
-    if (f.location !== undefined) data.location = f.location || undefined
-    if (f.description !== undefined)
-      data.description = f.description || undefined
-    if (f.careInstructions !== undefined)
-      data.careInstructions = f.careInstructions || undefined
-    if (f.wateringNeed !== undefined)
-      data.wateringNeed = coerceEnum(f.wateringNeed, validWateringNeed)
-    if (f.wateringMethod !== undefined)
-      data.wateringMethod = coerceEnum(f.wateringMethod, validWateringMethod)
-    if (f.sunNeed !== undefined)
-      data.sunNeed = coerceEnum(f.sunNeed, validSunNeed)
-    if (f.pruningSeason !== undefined)
-      data.pruningSeason = f.pruningSeason || undefined
-    if (f.isToxic !== undefined) data.isToxic = f.isToxic
-    if (f.toxicityNotes !== undefined)
-      data.toxicityNotes = f.toxicityNotes || undefined
-    if (f.plantType !== undefined)
-      data.plantType = coerceEnum(f.plantType, validPlantType)
-    if (f.soilType !== undefined) data.soilType = f.soilType || undefined
-    if (f.fertilizer !== undefined) data.fertilizer = f.fertilizer || undefined
-    if (f.hardinessZone !== undefined)
-      data.hardinessZone = f.hardinessZone || undefined
-    if (f.lifecycle !== undefined)
-      data.lifecycle = coerceEnum(f.lifecycle, validLifecycle)
-    if (f.bloomTime !== undefined) data.bloomTime = f.bloomTime || undefined
-    if (f.pests !== undefined) data.pests = f.pests || undefined
-    if (f.notes !== undefined) data.notes = f.notes || undefined
-    if (f.imageUrl !== undefined) data.imageUrl = lenientUrl(f.imageUrl)
-    if (f.sourceUrl !== undefined) data.sourceUrl = lenientUrl(f.sourceUrl)
-
-    return db.plant.update({
-      where: { id: update.id, householdId: membership.householdId },
-      data,
-    })
-  })
-
-  // Run creates and updates in a single transaction so a failed update (e.g. a
-  // duplicate plant deleted between preview and import) doesn't leave the newly
-  // created plants behind as partial data.
-  await db.$transaction([...createOps, ...updateOps])
-
-  revalidatePath("/hage")
-  return { count: createOps.length + updateOps.length }
+  revalidateGarden()
+  return result
 }

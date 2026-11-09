@@ -1,7 +1,15 @@
-import type { Plant } from "@workspace/db"
+import type { GardenBed } from "@workspace/db"
 import { z } from "zod"
 
-import { getPlant, listPlantsPage } from "../../application/garden/read"
+import {
+  getGardenBed,
+  getPlant,
+  listGardenBeds,
+  listPlantsPage,
+  type GardenBedWithPlants,
+  type PlantPlacementWithBed,
+  type PlantWithPlacements,
+} from "../../application/garden/read"
 import {
   buildPageInfo,
   pageInfoSchema,
@@ -26,19 +34,39 @@ import {
   timestampSchema,
 } from "./shared"
 
+/** Where a plant grows: one entry per bed. */
+export const placementSchema = z.object({
+  bedId: z.string(),
+  bedName: z.string(),
+  quantity: z.number().int().nullable(),
+  notes: z.string().nullable(),
+})
+
+export function serializePlacements(placements: PlantPlacementWithBed[]) {
+  return placements.map((placement) => ({
+    bedId: placement.bed.id,
+    bedName: placement.bed.name,
+    quantity: placement.quantity,
+    notes: placement.notes,
+  }))
+}
+
 export const listPlantsTool = defineTool({
   name: "list-plants",
   scope: "garden:read",
   title: "List plants",
   description:
-    "Lists the household's plants in name order, with the care attributes needed to answer watering and placement questions. Use get-plant for the full card.",
+    "Lists the household's plants in name order, with the beds each one grows in and the care attributes needed to answer watering and placement questions. One plant can grow in several beds. Use get-plant for the full card.",
   inputSchema: {
     name: filterTextSchema
       .optional()
       .describe("Case-insensitive substring match on the plant name."),
-    location: filterTextSchema
+    bed: filterTextSchema
       .optional()
-      .describe("Case-insensitive substring match on the location."),
+      .describe(
+        "Case-insensitive substring match on the name of a bed the plant grows in."
+      ),
+    bedId: idSchema.optional().describe("Only plants in this bed."),
     plantType: z.enum(PLANT_TYPES).optional(),
     wateringNeed: z.enum(WATERING_NEEDS).optional(),
     sunNeed: z.enum(SUN_NEEDS).optional(),
@@ -50,7 +78,7 @@ export const listPlantsTool = defineTool({
         id: z.string(),
         name: z.string(),
         species: z.string().nullable(),
-        location: z.string().nullable(),
+        placements: z.array(placementSchema),
         plantType: z.enum(PLANT_TYPES).nullable(),
         lifecycle: z.enum(LIFECYCLES).nullable(),
         wateringNeed: z.enum(WATERING_NEEDS).nullable(),
@@ -66,10 +94,12 @@ export const listPlantsTool = defineTool({
   annotations: READ_ONLY_ANNOTATIONS,
   handler: async (args, session) => {
     const page = resolvePageRequest(args)
+    if (args.bedId) assertId(args.bedId, "bedId")
     const { totalCount, plants } = await listPlantsPage(session.context, {
       ...page,
       name: args.name,
-      location: args.location,
+      bed: args.bed,
+      bedId: args.bedId,
       plantType: args.plantType,
       wateringNeed: args.wateringNeed,
       sunNeed: args.sunNeed,
@@ -77,6 +107,7 @@ export const listPlantsTool = defineTool({
 
     const serialized = plants.map((plant) => ({
       ...plant,
+      placements: serializePlacements(plant.placements),
       lastWateredAt: optionalTimestamp(plant.lastWateredAt),
       updatedAt: timestamp(plant.updatedAt),
     }))
@@ -99,7 +130,7 @@ export const plantCardSchema = z.object({
   id: z.string(),
   name: z.string(),
   species: z.string().nullable(),
-  location: z.string().nullable(),
+  placements: z.array(placementSchema),
   description: z.string().nullable(),
   careInstructions: z.string().nullable(),
   plantType: z.enum(PLANT_TYPES).nullable(),
@@ -128,13 +159,13 @@ export const plantCardSchema = z.object({
 })
 
 export function serializePlantCard(
-  plant: Plant
+  plant: PlantWithPlacements
 ): z.infer<typeof plantCardSchema> {
   return {
     id: plant.id,
     name: plant.name,
     species: plant.species,
-    location: plant.location,
+    placements: serializePlacements(plant.placements),
     description: plant.description,
     careInstructions: plant.careInstructions,
     plantType: plant.plantType,
@@ -184,9 +215,120 @@ export const getPlantTool = defineTool({
 
     return toolSuccess(
       { plant: serializePlantCard(plant) },
-      `${plant.name}${plant.location ? ` (${plant.location})` : ""}.`
+      `${plant.name}${describeBeds(plant.placements)}.`
     )
   },
 })
 
-export const gardenTools = [listPlantsTool, getPlantTool]
+function describeBeds(placements: PlantPlacementWithBed[]) {
+  return placements.length > 0
+    ? ` (${placements.map((placement) => placement.bed.name).join(", ")})`
+    : ""
+}
+
+// ─── Beds ───────────────────────────────────────────────────────
+
+export const gardenBedSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  sunExposure: z.enum(SUN_NEEDS).nullable(),
+  notes: z.string().nullable(),
+  createdAt: timestampSchema,
+  updatedAt: timestampSchema,
+})
+
+export function serializeGardenBed(
+  bed: GardenBed
+): z.infer<typeof gardenBedSchema> {
+  return {
+    id: bed.id,
+    name: bed.name,
+    description: bed.description,
+    sunExposure: bed.sunExposure,
+    notes: bed.notes,
+    createdAt: timestamp(bed.createdAt),
+    updatedAt: timestamp(bed.updatedAt),
+  }
+}
+
+const bedPlantSchema = z.object({
+  plantId: z.string(),
+  name: z.string(),
+  species: z.string().nullable(),
+  quantity: z.number().int().nullable(),
+  notes: z.string().nullable(),
+})
+
+const gardenBedWithPlantsSchema = gardenBedSchema.extend({
+  plants: z.array(bedPlantSchema),
+})
+
+function serializeGardenBedWithPlants(bed: GardenBedWithPlants) {
+  return {
+    ...serializeGardenBed(bed),
+    plants: bed.placements.map((placement) => ({
+      plantId: placement.plant.id,
+      name: placement.plant.name,
+      species: placement.plant.species,
+      quantity: placement.quantity,
+      notes: placement.notes,
+    })),
+  }
+}
+
+export const listGardenBedsTool = defineTool({
+  name: "list-garden-beds",
+  scope: "garden:read",
+  title: "List garden beds",
+  description:
+    "Lists the household's garden beds in name order, each with the plants growing in it. Use the bed ids to place plants with create-plant or update-plant.",
+  inputSchema: {},
+  outputSchema: {
+    beds: z.array(gardenBedWithPlantsSchema),
+  },
+  annotations: READ_ONLY_ANNOTATIONS,
+  handler: async (_args, session) => {
+    const beds = await listGardenBeds(session.context)
+
+    return toolSuccess(
+      { beds: beds.map(serializeGardenBedWithPlants) },
+      `Fant ${beds.length} bed.`
+    )
+  },
+})
+
+export const getGardenBedTool = defineTool({
+  name: "get-garden-bed",
+  scope: "garden:read",
+  title: "Get a garden bed",
+  description:
+    "Returns one garden bed with its description, sun exposure, notes and the plants growing in it.",
+  inputSchema: {
+    bedId: idSchema.describe("Id from list-garden-beds."),
+  },
+  outputSchema: {
+    bed: gardenBedWithPlantsSchema,
+  },
+  annotations: READ_ONLY_ANNOTATIONS,
+  handler: async (args, session) => {
+    assertId(args.bedId, "bedId")
+
+    const bed = await getGardenBed(session.context, args.bedId)
+    if (!bed) {
+      return notFoundError("bed")
+    }
+
+    return toolSuccess(
+      { bed: serializeGardenBedWithPlants(bed) },
+      `${bed.name}: ${bed.placements.length} plante(r).`
+    )
+  },
+})
+
+export const gardenTools = [
+  listPlantsTool,
+  getPlantTool,
+  listGardenBedsTool,
+  getGardenBedTool,
+]

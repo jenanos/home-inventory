@@ -29,9 +29,12 @@ import {
   Sprout,
   Loader2,
   ExternalLink,
+  MapPin,
 } from "lucide-react"
-import type { Plant } from "@workspace/db"
+import Link from "next/link"
+import type { PlantWithPlacements } from "@/lib/application/garden/read"
 import { deletePlant } from "@/lib/actions/plant"
+import type { BedOption } from "./placement-editor"
 import { PlantFormDialog } from "./plant-form-dialog"
 
 const plantTypeLabel: Record<string, string> = {
@@ -67,7 +70,13 @@ const wateringMethodLabel: Record<string, string> = {
   AUTOMATIC: "Automatisk vanning",
 }
 
-export function PlantCard({ plant }: { plant: Plant }) {
+export function PlantCard({
+  plant,
+  beds,
+}: {
+  plant: PlantWithPlacements
+  beds: BedOption[]
+}) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [confirming, setConfirming] = useState(false)
@@ -128,6 +137,7 @@ export function PlantCard({ plant }: { plant: Plant }) {
             <DropdownMenuContent align="end">
               <PlantFormDialog
                 plant={plant}
+                beds={beds}
                 trigger={
                   <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
                     <Pencil className="mr-2 h-4 w-4" />
@@ -155,8 +165,22 @@ export function PlantCard({ plant }: { plant: Plant }) {
         </div>
       </CardHeader>
       <CardContent className="flex flex-1 flex-col gap-3">
-        {plant.location && (
-          <p className="text-sm text-muted-foreground">📍 {plant.location}</p>
+        {plant.placements.length > 0 && (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+            <MapPin className="h-3.5 w-3.5 shrink-0" />
+            {plant.placements.map((placement, index) => (
+              <span key={placement.id}>
+                <Link
+                  href={`/hage?bed=${placement.bed.id}`}
+                  className="hover:text-foreground hover:underline"
+                >
+                  {placement.bed.name}
+                </Link>
+                {placement.quantity ? ` (${placement.quantity})` : ""}
+                {index < plant.placements.length - 1 ? "," : ""}
+              </span>
+            ))}
+          </div>
         )}
         {plant.description && (
           <p className="line-clamp-2 text-sm text-muted-foreground">
@@ -204,7 +228,7 @@ export function PlantCard({ plant }: { plant: Plant }) {
             href={plant.sourceUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-primary inline-flex items-center gap-1 text-sm hover:underline"
+            className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
           >
             <ExternalLink className="h-3.5 w-3.5" />
             Mer info

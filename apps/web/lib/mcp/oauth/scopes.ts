@@ -56,12 +56,12 @@ export const MCP_SCOPE_DESCRIPTIONS: Record<McpScope, ScopeDescription> = {
   },
   "garden:read": {
     title: "Se hage",
-    description: "Lese planter, plassering og stellinformasjon.",
+    description: "Lese planter, bed og stellinformasjon.",
   },
   "garden:write": {
     title: "Endre hage",
     description:
-      "Opprette og endre planter og stellinformasjon. Inkluderer lesetilgang.",
+      "Opprette, endre og slette planter og bed, og flytte planter mellom bed. Inkluderer lesetilgang.",
   },
 }
 

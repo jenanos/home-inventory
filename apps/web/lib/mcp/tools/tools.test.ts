@@ -24,6 +24,8 @@ const mocks = vi.hoisted(() => ({
   plantCount: vi.fn(),
   plantFindMany: vi.fn(),
   plantFindFirst: vi.fn(),
+  gardenBedFindMany: vi.fn(),
+  gardenBedFindFirst: vi.fn(),
 }))
 
 vi.mock("@workspace/db", async (importOriginal) => ({
@@ -67,6 +69,10 @@ vi.mock("@workspace/db", async (importOriginal) => ({
       findMany: mocks.plantFindMany,
       findFirst: mocks.plantFindFirst,
     },
+    gardenBed: {
+      findMany: mocks.gardenBedFindMany,
+      findFirst: mocks.gardenBedFindFirst,
+    },
   },
 }))
 
@@ -82,6 +88,36 @@ function decimal(value: string) {
 const LIST_ID = "11111111-1111-4111-8111-111111111111"
 const PROJECT_ID = "22222222-2222-4222-8222-222222222222"
 const PLANT_ID = "33333333-3333-4333-8333-333333333333"
+const BED_ID = "44444444-4444-4444-8444-444444444444"
+
+const PLACEMENT = {
+  id: "55555555-5555-4555-8555-555555555555",
+  bedId: BED_ID,
+  quantity: 2,
+  notes: null,
+  updatedAt: new Date("2026-08-01T07:00:00Z"),
+  bed: { id: BED_ID, name: "Kjøkkenvindu" },
+}
+
+const BED = {
+  id: BED_ID,
+  name: "Kjøkkenvindu",
+  description: null,
+  sunExposure: "FULL_SUN",
+  notes: null,
+  householdId: "household-1",
+  createdAt: new Date("2026-04-01T00:00:00Z"),
+  updatedAt: new Date("2026-08-01T07:00:00Z"),
+  placements: [
+    {
+      id: PLACEMENT.id,
+      quantity: 2,
+      notes: null,
+      updatedAt: new Date("2026-08-01T07:00:00Z"),
+      plant: { id: PLANT_ID, name: "Basilikum", species: null },
+    },
+  ],
+}
 
 /**
  * Values that must never appear in a tool response: fields that exist in the
@@ -407,7 +443,7 @@ beforeEach(() => {
       id: PLANT_ID,
       name: "Basilikum",
       species: null,
-      location: "Kjøkkenvindu",
+      placements: [PLACEMENT],
       plantType: "HERB",
       lifecycle: "ANNUAL",
       wateringNeed: "HIGH",
@@ -422,7 +458,7 @@ beforeEach(() => {
     id: PLANT_ID,
     name: "Basilikum",
     species: "Ocimum basilicum",
-    location: "Kjøkkenvindu",
+    placements: [PLACEMENT],
     description: null,
     careInstructions: "Vann ofte",
     plantType: "HERB",
@@ -448,6 +484,8 @@ beforeEach(() => {
     createdAt: new Date("2026-04-01T00:00:00Z"),
     updatedAt: new Date("2026-08-01T07:00:00Z"),
   })
+  mocks.gardenBedFindMany.mockResolvedValue([BED])
+  mocks.gardenBedFindFirst.mockResolvedValue(BED)
 })
 
 const HAPPY_PATH_ARGS: Array<[string, Record<string, unknown>]> = [
@@ -462,6 +500,8 @@ const HAPPY_PATH_ARGS: Array<[string, Record<string, unknown>]> = [
   ["get-project", { projectId: PROJECT_ID }],
   ["list-plants", {}],
   ["get-plant", { plantId: PLANT_ID }],
+  ["list-garden-beds", {}],
+  ["get-garden-bed", { bedId: BED_ID }],
 ]
 
 describe("level 1 tool contracts", () => {

@@ -10,9 +10,11 @@ import {
   findExistingPlants,
   bulkImportPlantsWithDuplicates,
   replacePlants,
-  type ExistingPlant,
-  type PlantFieldUpdate,
 } from "@/lib/actions/plant"
+import type {
+  ExistingPlant,
+  PlantFieldUpdate,
+} from "@/lib/application/garden/import"
 import {
   DuplicateFieldDiffCard,
   DuplicateSummary,
@@ -39,7 +41,7 @@ interface LlmImportPageClientProps {
 interface ParsedPlant {
   name: string
   species?: string
-  location?: string
+  beds?: string[]
   description?: string
   careInstructions?: string
   wateringNeed?: string
@@ -88,7 +90,7 @@ Svar KUN med en gyldig JSON-array, uten noe annet tekst rundt. Hvert objekt repr
   "name": "Navn på planten (obligatorisk)",
   "species": "Art / latinsk navn",
   "plantType": "TREE | SHRUB | PERENNIAL | ANNUAL | FLOWER | HERB | VEGETABLE | CLIMBER | GRASS | OTHER",
-  "location": "Plassering i hagen",
+  "beds": ["Navn på bedet planten står i", "Eventuelt et bed til"],
   "description": "Kort beskrivelse av planten",
   "careInstructions": "Instruksjoner om stell",
   "wateringNeed": "LOW | MEDIUM | HIGH",
@@ -110,6 +112,8 @@ Svar KUN med en gyldig JSON-array, uten noe annet tekst rundt. Hvert objekt repr
 
 Regler:
 - "name" er obligatorisk, alle andre felter er valgfrie
+- Står samme plante i flere bed, skal den bare være med én gang, med alle bedene i "beds"
+- Bruk samme bednavn hver gang, så havner plantene i samme bed
 - Enum-feltene ("plantType", "wateringNeed", "wateringMethod", "sunNeed", "lifecycle") MÅ bruke nøyaktig en av de tillatte verdiene over (store bokstaver)
   - wateringNeed: LOW = lite vann, MEDIUM = middels, HIGH = mye vann
   - wateringMethod: MANUAL = manuell vanning, AUTOMATIC = automatisk vanningsanlegg
@@ -126,7 +130,7 @@ Eksempel:
     "name": "Lavendel",
     "species": "Lavandula angustifolia",
     "plantType": "PERENNIAL",
-    "location": "Bed langs sørveggen",
+    "beds": ["Bed langs sørveggen", "Krukker på terrassen"],
     "description": "Lilla, duftende halvbusk",
     "careInstructions": "Beskjær lett etter blomstring for å holde formen.",
     "wateringNeed": "LOW",
@@ -237,7 +241,20 @@ function parseJsonInput(
       }
 
       textField("species")
-      textField("location")
+
+      // `beds` is the current format; a single `location` is still accepted
+      // from older prompts and conversations.
+      const beds = [
+        ...(Array.isArray(entry.beds) ? entry.beds : []),
+        ...(typeof entry.location === "string" ? [entry.location] : []),
+      ]
+        .filter((name): name is string => typeof name === "string")
+        .map((name) => name.trim())
+        .filter(Boolean)
+      const uniqueBeds = [
+        ...new Map(beds.map((name) => [name.toLowerCase(), name])).values(),
+      ]
+      if (uniqueBeds.length > 0) plant.beds = uniqueBeds
       textField("description")
       textField("careInstructions")
       textField("pruningSeason")
@@ -319,6 +336,14 @@ const lifecycleLabel: Record<string, string> = {
 
 type PlantDuplicate = DuplicateItem<ParsedPlant>
 
+/** Beds named in the import that the existing plant is not in yet. */
+function addedBeds(imported: ParsedPlant, existing: ExistingPlant) {
+  const current = new Set(existing.beds.map((name) => name.toLowerCase()))
+  return (imported.beds ?? []).filter(
+    (name) => !current.has(name.toLowerCase())
+  )
+}
+
 function buildPlantDiffs(
   imported: ParsedPlant,
   existing: ExistingPlant
@@ -332,10 +357,12 @@ function buildPlantDiffs(
       newValue: imported.species,
     },
     {
-      key: "location",
-      label: "Plassering",
-      existingValue: existing.location,
-      newValue: imported.location,
+      key: "beds",
+      label: "Legg til i bed",
+      existingValue: existing.beds.join(", ") || null,
+      newValue: addedBeds(imported, existing).length
+        ? [...existing.beds, ...addedBeds(imported, existing)].join(", ")
+        : null,
     },
     {
       key: "plantType",
@@ -456,7 +483,6 @@ function buildPlantDiffs(
 
 const UPDATABLE_FIELDS = [
   "species",
-  "location",
   "plantType",
   "description",
   "careInstructions",
@@ -653,7 +679,11 @@ export function PlantLlmImportPageClient({
                   ;(fields as Record<string, string>)[key] = value
                 }
               }
-              return { id: d.existingId, fields }
+              return {
+                id: d.existingId,
+                fields,
+                addBeds: selected.has("beds") ? item.beds : undefined,
+              }
             })
 
           await bulkImportPlantsWithDuplicates({ newPlants, updates })
@@ -905,9 +935,9 @@ export function PlantLlmImportPageClient({
                           </span>
                         )}
                       </div>
-                      {plant.location && (
+                      {plant.beds && plant.beds.length > 0 && (
                         <p className="mt-1 text-xs text-muted-foreground">
-                          📍 {plant.location}
+                          📍 {plant.beds.join(", ")}
                         </p>
                       )}
                       {plant.description && (

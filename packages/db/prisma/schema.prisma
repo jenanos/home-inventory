@@ -129,6 +129,7 @@ model Household {
   categories     Category[]
   projects       Project[]
   plants         Plant[]
+  gardenBeds     GardenBed[]
   budget         Budget?
   mcpAuditEvents McpAuditEvent[]
 }
@@ -501,7 +502,6 @@ model Plant {
   id               String          @id @default(uuid()) @db.Uuid
   name             String
   species          String?
-  location         String?
   description      String?         @db.Text
   careInstructions String?         @db.Text
   wateringNeed     WateringNeed?
@@ -527,9 +527,45 @@ model Plant {
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
 
-  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  household  Household        @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  placements PlantPlacement[]
 
   @@index([householdId])
+}
+
+/// A named bed or area in the garden. One plant can grow in several beds, so
+/// placement is a separate join row rather than a field on the plant.
+model GardenBed {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  description String?  @db.Text
+  sunExposure SunNeed?
+  notes       String?  @db.Text
+  householdId String   @db.Uuid
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  household  Household        @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  placements PlantPlacement[]
+
+  @@unique([householdId, name])
+}
+
+/// Where a plant grows. At most one row per plant and bed.
+model PlantPlacement {
+  id        String   @id @default(uuid()) @db.Uuid
+  plantId   String   @db.Uuid
+  bedId     String   @db.Uuid
+  quantity  Int?
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  plant Plant     @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  bed   GardenBed @relation(fields: [bedId], references: [id], onDelete: Cascade)
+
+  @@unique([plantId, bedId])
+  @@index([bedId])
 }
 
 // ─── Budget models ──────────────────────────────────────────────

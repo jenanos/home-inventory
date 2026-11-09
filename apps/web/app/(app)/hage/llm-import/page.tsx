@@ -12,7 +12,9 @@ export default async function HageLlmImportPage() {
       existingPlants={plants.map((plant) => ({
         name: plant.name,
         species: plant.species ?? undefined,
-        location: plant.location ?? undefined,
+        beds: plant.placements.length
+          ? plant.placements.map((placement) => placement.bed.name)
+          : undefined,
         description: plant.description ?? undefined,
         careInstructions: plant.careInstructions ?? undefined,
         wateringNeed: plant.wateringNeed ?? undefined,
