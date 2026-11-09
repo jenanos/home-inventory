@@ -1,10 +1,16 @@
 import type { Metadata, Viewport } from "next"
 import { Plus_Jakarta_Sans, DM_Serif_Display } from "next/font/google"
+import { cookies } from "next/headers"
 
 import "@workspace/ui/globals.css"
 import { ServiceWorkerRegister } from "@/components/sw-register"
 import { ThemeProvider } from "@/components/theme-provider"
 import { cn } from "@workspace/ui/lib/utils"
+import {
+  COLOR_PALETTE_COOKIE,
+  getColorPalette,
+  parseColorPalette,
+} from "@/lib/color-palettes"
 
 export const metadata: Metadata = {
   title: {
@@ -28,11 +34,18 @@ export const metadata: Metadata = {
   },
 }
 
-export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#fbfaf7" },
-    { media: "(prefers-color-scheme: dark)", color: "#1a1c25" },
-  ],
+async function readColorPalette() {
+  return parseColorPalette((await cookies()).get(COLOR_PALETTE_COOKIE)?.value)
+}
+
+export async function generateViewport(): Promise<Viewport> {
+  const { themeColor } = getColorPalette(await readColorPalette())
+  return {
+    themeColor: [
+      { media: "(prefers-color-scheme: light)", color: themeColor.light },
+      { media: "(prefers-color-scheme: dark)", color: themeColor.dark },
+    ],
+  }
 }
 
 const fontSans = Plus_Jakarta_Sans({
@@ -46,14 +59,17 @@ const fontHeading = DM_Serif_Display({
   variable: "--font-heading",
 })
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const palette = await readColorPalette()
+
   return (
     <html
       lang="no"
+      data-palette={palette}
       suppressHydrationWarning
       className={cn(
         "antialiased",

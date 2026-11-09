@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { cookies } from "next/headers"
 import { Shield } from "lucide-react"
 import { requireHousehold, isCurrentUserAdmin } from "@/lib/session"
 import { db } from "@workspace/db"
@@ -15,6 +16,8 @@ import { ProfileForm } from "./profile-form"
 import { MembersSection } from "./members-section"
 import { CategoriesSection } from "./categories-section"
 import { ConnectedAppsSection } from "./connected-apps-section"
+import { AppearanceSection } from "./appearance-section"
+import { COLOR_PALETTE_COOKIE, parseColorPalette } from "@/lib/color-palettes"
 
 // Explicit time zone: the server runs in UTC, the household does not.
 const dateFormatter = new Intl.DateTimeFormat("nb-NO", {
@@ -27,7 +30,7 @@ export default async function SettingsPage() {
   const { session, membership } = await requireHousehold()
   const isAdmin = await isCurrentUserAdmin()
 
-  const [user, members, categories, grants] = await Promise.all([
+  const [user, members, categories, grants, cookieStore] = await Promise.all([
     db.user.findUnique({ where: { id: session.user.id } }),
     db.householdMember.findMany({
       where: { householdId: membership.householdId },
@@ -38,7 +41,11 @@ export default async function SettingsPage() {
       orderBy: { name: "asc" },
     }),
     listConnectedApps(session.user.id),
+    cookies(),
   ])
+  const palette = parseColorPalette(
+    cookieStore.get(COLOR_PALETTE_COOKIE)?.value
+  )
 
   const isOwner = membership.role === "OWNER"
   const connectedApps = grants.map((grant) => ({
@@ -72,6 +79,19 @@ export default async function SettingsPage() {
         </CardHeader>
         <CardContent>
           <ProfileForm name={user?.name ?? ""} email={user?.email ?? ""} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Utseende</CardTitle>
+          <CardDescription>
+            Velg fargepalett for appen. Valget lagres på denne enheten og
+            gjelder både lys og mørk modus.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <AppearanceSection palette={palette} />
         </CardContent>
       </Card>
 
