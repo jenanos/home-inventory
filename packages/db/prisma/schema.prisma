@@ -30,6 +30,7 @@ model User {
   mcpGrants                McpOAuthGrant[]
   mcpAuditEvents           McpAuditEvent[]
   uploadedAttachments      Attachment[]
+  attachmentUploadLinks    AttachmentUploadLink[]
 }
 
 model Account {
@@ -132,6 +133,7 @@ model Household {
   plants         Plant[]
   gardenBeds     GardenBed[]
   attachments    Attachment[]
+  uploadLinks    AttachmentUploadLink[]
   budget         Budget?
   mcpAuditEvents McpAuditEvent[]
 }
@@ -790,4 +792,29 @@ model AttachmentContent {
   thumbnail    Bytes?
 
   attachment Attachment @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
+}
+
+/// A short-lived link that lets whoever holds it upload files to one plant,
+/// bed or project, without logging in: an MCP client hands it to the user, or
+/// uses it from its own sandbox. Only a hash of the token is stored.
+model AttachmentUploadLink {
+  id          String   @id @default(uuid()) @db.Uuid
+  tokenHash   String   @unique
+  householdId String   @db.Uuid
+  createdById String   @db.Uuid
+  /// "plant", "bed" or "project"; checked again on every upload.
+  targetType  String
+  targetId    String   @db.Uuid
+  caption     String?
+  maxFiles    Int
+  usedCount   Int      @default(0)
+  /// The MCP client that asked for the link, if any.
+  clientId    String?
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  createdBy User      @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
 }

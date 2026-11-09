@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import type { McpSession } from "./auth/session"
 import { MCP_SERVER_NAME, MCP_SERVER_VERSION } from "./constants"
 import { createToolRegistry, type McpToolDefinition } from "./tools"
+import { sessionHasToolScope } from "./tools/define"
 
 /**
  * Sent once at initialization. Most clients put it in the model's context, so
@@ -43,6 +44,12 @@ Garden:
 - Record watering and pruning with record-plant-care; list-plants with notWateredSince finds plants that need water.
 - Delete only mistakes, duplicates and plants that are gone, and confirm with the user first.
 
+Photos and documents:
+- Plants, garden beds and projects can have attached images and PDFs (list-attachments). get-attachment shows you an image, e.g. to identify a plant or judge its health.
+- To attach a file the user shared in this chat: if the client passes it to attach-uploaded-file as a file object (ChatGPT), use that. Otherwise create an upload link with create-attachment-upload-link and either upload the file yourself from your sandbox (curl -F file=@photo.jpg <uploadUrl>) or give the link to the user. Never invent file contents.
+- attach-file-from-url copies a public image or PDF from the web, e.g. a reference photo of a species. Only when the user wants it.
+- The first image is the cover picture; update-attachment with makeCover changes it.
+
 Every update tool accepts expectedUpdatedAt from your last read; a CONFLICT error means someone changed the data, so read again before retrying. get-server-info shows which domains this token may change.`
 
 type McpServerDependencies = {
@@ -73,7 +80,7 @@ export function createMcpServer({
   for (const tool of tools) {
     const registered = tool.register(server, session)
 
-    if (tool.scope !== null && !session.scopes.includes(tool.scope)) {
+    if (!sessionHasToolScope(session, tool.scope)) {
       registered.disable()
     }
   }

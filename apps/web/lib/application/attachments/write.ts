@@ -34,7 +34,7 @@ export const MAX_HOUSEHOLD_ATTACHMENT_BYTES = 2 * 1024 * 1024 * 1024
  * The target must be in the caller's household. Unknown and foreign ids get
  * the same NOT_FOUND (plan 9.4).
  */
-async function assertTargetInHousehold(
+export async function assertTargetInHousehold(
   tx: Prisma.TransactionClient,
   context: ApplicationContext,
   target: AttachmentTarget

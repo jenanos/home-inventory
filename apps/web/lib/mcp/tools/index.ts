@@ -1,7 +1,8 @@
 import type { McpSession } from "../auth/session"
+import { createAttachmentTools } from "./attachments"
 import { budgetTools } from "./budget"
 import { budgetWriteTools } from "./budget-write"
-import type { McpToolDefinition } from "./define"
+import { sessionHasToolScope, type McpToolDefinition } from "./define"
 import { gardenTools } from "./garden"
 import { gardenWriteTools } from "./garden-write"
 import { projectTools } from "./projects"
@@ -34,6 +35,7 @@ export function createToolRegistry(
     ...projectWriteTools,
     ...gardenTools,
     ...gardenWriteTools,
+    ...createAttachmentTools(),
   ]
 }
 
@@ -41,7 +43,5 @@ export function toolsVisibleToSession(
   tools: readonly McpToolDefinition[],
   session: McpSession
 ) {
-  return tools.filter(
-    (tool) => tool.scope === null || session.scopes.includes(tool.scope)
-  )
+  return tools.filter((tool) => sessionHasToolScope(session, tool.scope))
 }

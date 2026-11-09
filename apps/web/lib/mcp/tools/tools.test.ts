@@ -26,6 +26,8 @@ const mocks = vi.hoisted(() => ({
   plantFindFirst: vi.fn(),
   gardenBedFindMany: vi.fn(),
   gardenBedFindFirst: vi.fn(),
+  attachmentFindMany: vi.fn(),
+  attachmentFindFirst: vi.fn(),
 }))
 
 vi.mock("@workspace/db", async (importOriginal) => ({
@@ -73,11 +75,16 @@ vi.mock("@workspace/db", async (importOriginal) => ({
       findMany: mocks.gardenBedFindMany,
       findFirst: mocks.gardenBedFindFirst,
     },
+    attachment: {
+      findMany: mocks.attachmentFindMany,
+      findFirst: mocks.attachmentFindFirst,
+    },
   },
 }))
 
 import type { McpSession } from "../auth/session"
 import { MCP_SCOPES, type McpScope } from "../oauth/scopes"
+import { toolScopes } from "./define"
 import { createToolRegistry, type McpToolDefinition } from "./index"
 
 /** Stand-in for `Prisma.Decimal`: only `toString` and `toNumber` are used. */
@@ -412,9 +419,33 @@ beforeEach(() => {
   mocks.plantFindFirst.mockResolvedValue(PLANT_ROW)
   mocks.gardenBedFindMany.mockResolvedValue([BED])
   mocks.gardenBedFindFirst.mockResolvedValue(BED)
+  mocks.attachmentFindMany.mockResolvedValue([ATTACHMENT])
+  mocks.attachmentFindFirst.mockResolvedValue(ATTACHMENT)
 })
 
 const BED_ID = "44444444-4444-4444-8444-444444444444"
+const ATTACHMENT_ID = "66666666-6666-4666-8666-666666666666"
+
+/** A PDF, so the read path needs no image decoding in a unit test. */
+const ATTACHMENT = {
+  id: ATTACHMENT_ID,
+  plantId: PLANT_ID,
+  bedId: null,
+  projectId: null,
+  kind: "DOCUMENT",
+  fileName: "stell.pdf",
+  contentType: "application/pdf",
+  byteSize: 2048,
+  width: null,
+  height: null,
+  sha256: "abc",
+  caption: null,
+  sortOrder: 0,
+  source: "UPLOAD",
+  sourceUrl: null,
+  createdAt: new Date("2026-08-01T07:00:00Z"),
+  updatedAt: new Date("2026-08-01T07:00:00Z"),
+}
 
 const PLACEMENT = {
   id: "55555555-5555-4555-8555-555555555555",
@@ -490,6 +521,8 @@ const HAPPY_PATH_ARGS: Array<[string, Record<string, unknown>]> = [
   ["get-plant", { plantId: PLANT_ID }],
   ["list-garden-beds", {}],
   ["get-garden-bed", { bedId: BED_ID }],
+  ["list-attachments", { targetType: "plant", targetId: PLANT_ID }],
+  ["get-attachment", { attachmentId: ATTACHMENT_ID }],
 ]
 
 describe("level 1 tool contracts", () => {
@@ -533,10 +566,15 @@ describe("scope enforcement in tools/call", () => {
     async (name, args) => {
       // Every scope except the one this tool needs, so the failure cannot be
       // explained by an empty scope set.
-      const required = tool(name).scope
+      // For a multi-domain tool that is the domain of the call's target: the
+      // fixtures here all belong to the garden.
+      const domains = toolScopes(tool(name).scope).map(
+        (scope) => scope.split(":")[0]
+      )
+      const targetDomain = name.includes("attachment") ? ["garden"] : domains
       const scopes = MCP_SCOPES.filter(
         (scope) =>
-          scope !== required && !scope.startsWith(`${required?.split(":")[0]}:`)
+          !targetDomain.some((domain) => scope.startsWith(`${domain}:`))
       )
 
       const { result, structured } = await callTool(name, args, scopes)
