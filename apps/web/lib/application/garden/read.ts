@@ -1,8 +1,10 @@
 import {
   db,
+  type Lifecycle,
   type PlantType,
   type Prisma,
   type SunNeed,
+  type WateringMethod,
   type WateringNeed,
 } from "@workspace/db"
 
@@ -99,27 +101,57 @@ type PageOptions = {
 }
 
 export type PlantFilter = {
+  /** Substring of the name, species or the name of a bed it grows in. */
+  query?: string
   name?: string
-  /** Case-insensitive substring of the name of any bed the plant grows in. */
+  /** Substring of the name of a bed the plant grows in. */
   bed?: string
   bedId?: string
   plantType?: PlantType
+  lifecycle?: Lifecycle
   wateringNeed?: WateringNeed
+  wateringMethod?: WateringMethod
   sunNeed?: SunNeed
+  isToxic?: boolean
+  /** Plants never watered, or last watered before this moment. */
+  notWateredSince?: Date
 }
 
 function plantFilter(
   context: ApplicationContext,
   filter: PlantFilter
 ): Prisma.PlantWhereInput {
-  const placementFilter: Prisma.PlantPlacementWhereInput[] = []
+  const and: Prisma.PlantWhereInput[] = []
+
+  if (filter.query) {
+    const contains = { contains: filter.query, mode: "insensitive" } as const
+    and.push({
+      OR: [
+        { name: contains },
+        { species: contains },
+        { placements: { some: { bed: { name: contains } } } },
+      ],
+    })
+  }
   if (filter.bed) {
-    placementFilter.push({
-      bed: { name: { contains: filter.bed, mode: "insensitive" } },
+    and.push({
+      placements: {
+        some: {
+          bed: { name: { contains: filter.bed, mode: "insensitive" } },
+        },
+      },
     })
   }
   if (filter.bedId) {
-    placementFilter.push({ bedId: filter.bedId })
+    and.push({ placements: { some: { bedId: filter.bedId } } })
+  }
+  if (filter.notWateredSince) {
+    and.push({
+      OR: [
+        { lastWateredAt: null },
+        { lastWateredAt: { lt: filter.notWateredSince } },
+      ],
+    })
   }
 
   return {
@@ -127,15 +159,20 @@ function plantFilter(
     ...(filter.name
       ? { name: { contains: filter.name, mode: "insensitive" } }
       : {}),
-    ...(placementFilter.length > 0
-      ? { placements: { some: { AND: placementFilter } } }
-      : {}),
     ...(filter.plantType ? { plantType: filter.plantType } : {}),
+    ...(filter.lifecycle ? { lifecycle: filter.lifecycle } : {}),
     ...(filter.wateringNeed ? { wateringNeed: filter.wateringNeed } : {}),
+    ...(filter.wateringMethod ? { wateringMethod: filter.wateringMethod } : {}),
     ...(filter.sunNeed ? { sunNeed: filter.sunNeed } : {}),
+    ...(filter.isToxic !== undefined ? { isToxic: filter.isToxic } : {}),
+    ...(and.length > 0 ? { AND: and } : {}),
   }
 }
 
+/**
+ * Whole rows with their placements, so the caller can report missing fields
+ * and, on request, the full card. The page size bounds the response.
+ */
 export async function listPlantsPage(
   context: ApplicationContext,
   options: PageOptions & PlantFilter
@@ -146,20 +183,7 @@ export async function listPlantsPage(
     db.plant.count({ where }),
     db.plant.findMany({
       where,
-      select: {
-        id: true,
-        name: true,
-        species: true,
-        plantType: true,
-        lifecycle: true,
-        wateringNeed: true,
-        wateringMethod: true,
-        sunNeed: true,
-        isToxic: true,
-        lastWateredAt: true,
-        updatedAt: true,
-        placements: plantPlacementsInclude.placements,
-      },
+      include: plantPlacementsInclude,
       orderBy: [{ name: "asc" }, { id: "asc" }],
       skip: options.offset,
       take: options.limit,

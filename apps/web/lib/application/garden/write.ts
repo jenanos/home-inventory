@@ -13,11 +13,13 @@ import type { ApplicationContext } from "../context"
 import {
   MAX_BATCH_SIZE,
   MAX_LONG_TEXT_LENGTH,
+  assertBatchSize,
   definedFields,
   enumValue,
   freshness,
   integerInRange,
   isUniqueConstraintError,
+  notFound,
   optionalCalendarDate,
   optionalText,
   optionalTimestampInput,
@@ -26,10 +28,16 @@ import {
   scopedWrite,
   validationError,
 } from "../mutations"
-import { plantPlacementsInclude } from "./read"
+import { plantPlacementsInclude, type PlantWithPlacements } from "./read"
 
 const RESOURCE = "plante"
 const BED_RESOURCE = "bed"
+
+/** Room for a batch of up to 100 plants on a slow database. */
+const BATCH_TRANSACTION_OPTIONS = { timeout: 20_000, maxWait: 5_000 }
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /** Upper bound for a quantity on a placement; more is a typo, not a garden. */
 export const MAX_PLACEMENT_QUANTITY = 10_000
@@ -205,7 +213,7 @@ async function assertBedsInHousehold(
 ) {
   if (placements.length === 0) return
 
-  const bedIds = placements.map((placement) => placement.bedId)
+  const bedIds = [...new Set(placements.map((placement) => placement.bedId))]
   const found = await db.gardenBed.count({
     where: { id: { in: bedIds }, householdId: context.householdId },
   })
@@ -328,7 +336,184 @@ export async function deletePlant(
     write: () =>
       db.plant.delete({
         where: { id: plantId, householdId: context.householdId },
+        select: { id: true, name: true },
       }),
+  })
+}
+
+// ─── Batches ────────────────────────────────────────────────────
+
+const plantNameCollator = new Intl.Collator("nb-NO", { sensitivity: "base" })
+
+function sameName(a: string, b: string) {
+  return plantNameCollator.compare(a.trim(), b.trim()) === 0
+}
+
+export type SkippedPlant = {
+  name: string
+  /** The plant that already has this name. */
+  existingPlantId: string
+}
+
+export type AddPlantsResult = {
+  created: PlantWithPlacements[]
+  skipped: SkippedPlant[]
+}
+
+/**
+ * Adds up to 100 plants in one transaction, so a whole garden can be laid out
+ * in one call. With `onDuplicate: "skip"` a plant whose name is already in the
+ * garden, ignoring case, or earlier in the same batch, is reported with the
+ * existing plant's id instead of being created. Any invalid plant fails the
+ * whole call and nothing is saved.
+ */
+export async function addPlants(
+  context: ApplicationContext,
+  plants: CreatePlantInput[],
+  { onDuplicate = "skip" }: { onDuplicate?: "skip" | "create" } = {}
+): Promise<AddPlantsResult> {
+  assertBatchSize(plants.length, "Planter")
+
+  const prepared = plants.map(({ placements, ...plant }, index) => {
+    try {
+      const normalizedPlacements = normalizePlacements(placements ?? [])
+      assertUuids(
+        normalizedPlacements.map((placement) => placement.bedId),
+        "bedId"
+      )
+      return {
+        fields: {
+          ...normalizePlantFields(plant),
+          name: requiredText(plant.name, "Navn"),
+        },
+        placements: normalizedPlacements,
+      }
+    } catch (error) {
+      if (error instanceof ApplicationError) {
+        throw new ApplicationError(
+          error.code,
+          `Plante ${index + 1}: ${error.message}`
+        )
+      }
+      throw error
+    }
+  })
+
+  await assertBedsInHousehold(
+    context,
+    prepared.flatMap((plant) => plant.placements)
+  )
+
+  return db.$transaction(async (tx) => {
+    const known =
+      onDuplicate === "skip"
+        ? await tx.plant.findMany({
+            where: { householdId: context.householdId },
+            select: { id: true, name: true },
+          })
+        : []
+
+    const result: AddPlantsResult = { created: [], skipped: [] }
+
+    for (const { fields: data, placements } of prepared) {
+      const existing = known.find((plant) => sameName(plant.name, data.name))
+      if (existing) {
+        result.skipped.push({ name: data.name, existingPlantId: existing.id })
+        continue
+      }
+
+      const created = await tx.plant.create({
+        data: {
+          ...data,
+          householdId: context.householdId,
+          placements: {
+            create: placements.map((placement) => ({
+              bedId: placement.bedId,
+              quantity: placement.quantity ?? null,
+              notes: placement.notes ?? null,
+            })),
+          },
+        },
+        include: plantPlacementsInclude,
+      })
+      result.created.push(created)
+      if (onDuplicate === "skip") known.push(created)
+    }
+
+    return result
+  }, BATCH_TRANSACTION_OPTIONS)
+}
+
+/** How far ahead of the server clock a care time may be. */
+const CARE_CLOCK_SKEW_MS = 5 * 60 * 1000
+
+export type RecordPlantCareInput = {
+  watered?: boolean
+  pruned?: boolean
+  /** When it was done. Defaults to now. */
+  at?: Date | string
+}
+
+/**
+ * Records that one or more plants were watered and/or pruned. A plant already
+ * recorded at the same time or later keeps its newer value, so repeating the
+ * call, or recording an older event, never moves a date backwards. Every id
+ * must be a plant in the household, or nothing changes and the call is
+ * NOT_FOUND.
+ */
+export async function recordPlantCare(
+  context: ApplicationContext,
+  plantIds: string[],
+  input: RecordPlantCareInput,
+  now: Date = new Date()
+): Promise<PlantWithPlacements[]> {
+  assertBatchSize(plantIds.length, "Planter")
+  const ids = [...new Set(plantIds)]
+  if (ids.some((id) => typeof id !== "string" || !UUID_PATTERN.test(id))) {
+    throw notFound(RESOURCE)
+  }
+  if (input.watered !== true && input.pruned !== true) {
+    throw validationError("Oppgi watered, pruned eller begge.")
+  }
+
+  const at =
+    input.at === undefined
+      ? now
+      : (optionalTimestampInput(input.at, "Tidspunkt") ?? now)
+  if (at.getTime() > now.getTime() + CARE_CLOCK_SKEW_MS) {
+    throw validationError("Tidspunkt kan ikke være i fremtiden.")
+  }
+
+  const where = { id: { in: ids }, householdId: context.householdId }
+
+  return db.$transaction(async (tx) => {
+    const found = await tx.plant.count({ where })
+    if (found !== ids.length) throw notFound(RESOURCE)
+
+    if (input.watered) {
+      await tx.plant.updateMany({
+        where: {
+          ...where,
+          OR: [{ lastWateredAt: null }, { lastWateredAt: { lt: at } }],
+        },
+        data: { lastWateredAt: at },
+      })
+    }
+    if (input.pruned) {
+      await tx.plant.updateMany({
+        where: {
+          ...where,
+          OR: [{ lastPrunedAt: null }, { lastPrunedAt: { lt: at } }],
+        },
+        data: { lastPrunedAt: at },
+      })
+    }
+
+    return tx.plant.findMany({
+      where,
+      include: plantPlacementsInclude,
+      orderBy: [{ name: "asc" }, { id: "asc" }],
+    })
   })
 }
 
@@ -454,43 +639,4 @@ export async function deleteGardenBed(
         where: { id: bedId, householdId: context.householdId },
       }),
   })
-}
-
-/**
- * Resolves bed names to ids for the import flows, creating the beds that do
- * not exist yet. Matching ignores case and surrounding whitespace.
- */
-export async function findOrCreateBedsByName(
-  tx: Prisma.TransactionClient,
-  householdId: string,
-  names: Iterable<string>
-): Promise<Map<string, string>> {
-  const wanted = new Map<string, string>()
-  for (const raw of names) {
-    const name = raw.trim()
-    if (name) wanted.set(name.toLowerCase(), name)
-  }
-
-  const result = new Map<string, string>()
-  if (wanted.size === 0) return result
-
-  const existing = await tx.gardenBed.findMany({
-    where: { householdId },
-    select: { id: true, name: true },
-  })
-  for (const bed of existing) {
-    const key = bed.name.toLowerCase()
-    if (wanted.has(key)) result.set(key, bed.id)
-  }
-
-  for (const [key, name] of wanted) {
-    if (result.has(key)) continue
-    const bed = await tx.gardenBed.create({
-      data: { name: requiredText(name, "Bednavn"), householdId },
-      select: { id: true },
-    })
-    result.set(key, bed.id)
-  }
-
-  return result
 }

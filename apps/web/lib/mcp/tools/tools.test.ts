@@ -88,36 +88,6 @@ function decimal(value: string) {
 const LIST_ID = "11111111-1111-4111-8111-111111111111"
 const PROJECT_ID = "22222222-2222-4222-8222-222222222222"
 const PLANT_ID = "33333333-3333-4333-8333-333333333333"
-const BED_ID = "44444444-4444-4444-8444-444444444444"
-
-const PLACEMENT = {
-  id: "55555555-5555-4555-8555-555555555555",
-  bedId: BED_ID,
-  quantity: 2,
-  notes: null,
-  updatedAt: new Date("2026-08-01T07:00:00Z"),
-  bed: { id: BED_ID, name: "Kjøkkenvindu" },
-}
-
-const BED = {
-  id: BED_ID,
-  name: "Kjøkkenvindu",
-  description: null,
-  sunExposure: "FULL_SUN",
-  notes: null,
-  householdId: "household-1",
-  createdAt: new Date("2026-04-01T00:00:00Z"),
-  updatedAt: new Date("2026-08-01T07:00:00Z"),
-  placements: [
-    {
-      id: PLACEMENT.id,
-      quantity: 2,
-      notes: null,
-      updatedAt: new Date("2026-08-01T07:00:00Z"),
-      plant: { id: PLANT_ID, name: "Basilikum", species: null },
-    },
-  ],
-}
 
 /**
  * Values that must never appear in a tool response: fields that exist in the
@@ -438,55 +408,73 @@ beforeEach(() => {
   })
 
   mocks.plantCount.mockResolvedValue(1)
-  mocks.plantFindMany.mockResolvedValue([
-    {
-      id: PLANT_ID,
-      name: "Basilikum",
-      species: null,
-      placements: [PLACEMENT],
-      plantType: "HERB",
-      lifecycle: "ANNUAL",
-      wateringNeed: "HIGH",
-      wateringMethod: "MANUAL",
-      sunNeed: "FULL_SUN",
-      isToxic: false,
-      lastWateredAt: new Date("2026-08-01T07:00:00Z"),
-      updatedAt: new Date("2026-08-01T07:00:00Z"),
-    },
-  ])
-  mocks.plantFindFirst.mockResolvedValue({
-    id: PLANT_ID,
-    name: "Basilikum",
-    species: "Ocimum basilicum",
-    placements: [PLACEMENT],
-    description: null,
-    careInstructions: "Vann ofte",
-    plantType: "HERB",
-    lifecycle: "ANNUAL",
-    wateringNeed: "HIGH",
-    wateringMethod: "MANUAL",
-    sunNeed: "FULL_SUN",
-    soilType: null,
-    fertilizer: null,
-    hardinessZone: null,
-    bloomTime: null,
-    pruningSeason: null,
-    pests: null,
-    notes: null,
-    isToxic: false,
-    toxicityNotes: null,
-    plantedAt: new Date("2026-04-01T00:00:00Z"),
-    lastWateredAt: new Date("2026-08-01T07:00:00Z"),
-    lastPrunedAt: null,
-    imageUrl: "https://example.com/basil.png",
-    sourceUrl: null,
-    householdId: "household-1",
-    createdAt: new Date("2026-04-01T00:00:00Z"),
-    updatedAt: new Date("2026-08-01T07:00:00Z"),
-  })
+  mocks.plantFindMany.mockResolvedValue([{ ...PLANT_ROW, species: null }])
+  mocks.plantFindFirst.mockResolvedValue(PLANT_ROW)
   mocks.gardenBedFindMany.mockResolvedValue([BED])
   mocks.gardenBedFindFirst.mockResolvedValue(BED)
 })
+
+const BED_ID = "44444444-4444-4444-8444-444444444444"
+
+const PLACEMENT = {
+  id: "55555555-5555-4555-8555-555555555555",
+  bedId: BED_ID,
+  quantity: 2,
+  notes: null,
+  updatedAt: new Date("2026-08-01T07:00:00Z"),
+  bed: { id: BED_ID, name: "Kjøkkenvindu" },
+}
+
+const BED = {
+  id: BED_ID,
+  name: "Kjøkkenvindu",
+  description: null,
+  sunExposure: "FULL_SUN",
+  notes: null,
+  householdId: "household-1",
+  createdAt: new Date("2026-04-01T00:00:00Z"),
+  updatedAt: new Date("2026-08-01T07:00:00Z"),
+  placements: [
+    {
+      id: PLACEMENT.id,
+      quantity: 2,
+      notes: null,
+      updatedAt: new Date("2026-08-01T07:00:00Z"),
+      plant: { id: PLANT_ID, name: "Basilikum", species: null },
+    },
+  ],
+}
+
+const PLANT_ROW = {
+  id: PLANT_ID,
+  name: "Basilikum",
+  species: "Ocimum basilicum",
+  placements: [PLACEMENT],
+  description: null,
+  careInstructions: "Vann ofte",
+  plantType: "HERB",
+  lifecycle: "ANNUAL",
+  wateringNeed: "HIGH",
+  wateringMethod: "MANUAL",
+  sunNeed: "FULL_SUN",
+  soilType: null,
+  fertilizer: null,
+  hardinessZone: null,
+  bloomTime: null,
+  pruningSeason: null,
+  pests: null,
+  notes: null,
+  isToxic: false,
+  toxicityNotes: null,
+  plantedAt: new Date("2026-04-01T00:00:00Z"),
+  lastWateredAt: new Date("2026-08-01T07:00:00Z"),
+  lastPrunedAt: null,
+  imageUrl: "https://example.com/basil.png",
+  sourceUrl: null,
+  householdId: "household-1",
+  createdAt: new Date("2026-04-01T00:00:00Z"),
+  updatedAt: new Date("2026-08-01T07:00:00Z"),
+}
 
 const HAPPY_PATH_ARGS: Array<[string, Record<string, unknown>]> = [
   ["get-server-info", {}],
@@ -765,6 +753,67 @@ describe("pagination in responses", () => {
     expect(
       (structured.pageInfo as { nextCursor: string }).nextCursor
     ).toBeTruthy()
+  })
+
+  it("list-plants reports missing fields and returns full cards on request", async () => {
+    const short = await callTool("list-plants", {})
+    const [row] = short.structured.plants as Array<Record<string, unknown>>
+    expect(row).not.toHaveProperty("careInstructions")
+    expect(row?.missingFields).toEqual(
+      expect.arrayContaining(["species", "soilType", "hardinessZone"])
+    )
+    expect(row?.missingFields).not.toContain("pruningSeason")
+
+    const detailed = await callTool("list-plants", {
+      includeDetails: true,
+      limit: 100,
+    })
+    expect(detailed.result.isError).toBeUndefined()
+    expectMatchesOutputSchema("list-plants", detailed.structured)
+    const [card] = detailed.structured.plants as Array<Record<string, unknown>>
+    expect(card).toMatchObject({ careInstructions: "Vann ofte" })
+    // A detailed page is capped, whatever the client asked for.
+    expect(mocks.plantFindMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({ take: 25 })
+    )
+  })
+
+  it("list-plants filters on watering, toxicity and free text in the query", async () => {
+    await callTool("list-plants", {
+      query: "vindu",
+      isToxic: false,
+      notWateredSince: "2026-08-02T00:00:00Z",
+    })
+
+    expect(mocks.plantFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          householdId: "household-1",
+          isToxic: false,
+          AND: [
+            {
+              OR: [
+                { name: { contains: "vindu", mode: "insensitive" } },
+                { species: { contains: "vindu", mode: "insensitive" } },
+                {
+                  placements: {
+                    some: {
+                      bed: { name: { contains: "vindu", mode: "insensitive" } },
+                    },
+                  },
+                },
+              ],
+            },
+            {
+              OR: [
+                { lastWateredAt: null },
+                { lastWateredAt: { lt: new Date("2026-08-02T00:00:00Z") } },
+              ],
+            },
+          ],
+        }),
+      })
+    )
   })
 
   it("applies the default page size to the query", async () => {

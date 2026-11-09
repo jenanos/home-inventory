@@ -34,6 +34,15 @@ Budget:
 - Rows list missingFields: optional details that are empty, such as provider, paymentDay, renewalDate, a member's actual netMonthlyIncome or the budget's propertyValue. Fill them from what the user tells you or shows you, e.g. a payslip or an invoice; never guess.
 - Use dryRun to show the effect before saving anything the user has not confirmed. Delete only what the user wants gone, and confirm first.
 
+Garden:
+- One plant record per kind of plant the user tracks, however many beds it grows in. Beds are separate records (list-garden-beds, create-garden-bed); a plant's placements list the beds it grows in, with an optional quantity. To add a plant to another bed or move it, update its placements with update-plant instead of creating a duplicate.
+- Check list-plants before adding; add-plants takes many at once and skips names that exist, so update those instead.
+- Enums: plantType TREE, SHRUB, PERENNIAL, ANNUAL, FLOWER, HERB, VEGETABLE, CLIMBER, GRASS, OTHER; lifecycle ANNUAL, BIENNIAL, PERENNIAL; wateringNeed LOW, MEDIUM, HIGH; wateringMethod MANUAL or AUTOMATIC (irrigation); sunNeed FULL_SUN, PARTIAL_SHADE, SHADE. Hardiness zones use the Norwegian H1–H8 scale.
+- Plants list missingFields: empty care details such as species, sunNeed or careInstructions. Fill them from what the user tells you or a reliable source, and leave out what you are unsure of; never guess. isToxic means toxic to people or pets; put details in toxicityNotes.
+- imageUrl and sourceUrl are plain absolute https URLs you have seen, not markdown links; the server never fetches them.
+- Record watering and pruning with record-plant-care; list-plants with notWateredSince finds plants that need water.
+- Delete only mistakes, duplicates and plants that are gone, and confirm with the user first.
+
 Every update tool accepts expectedUpdatedAt from your last read; a CONFLICT error means someone changed the data, so read again before retrying. get-server-info shows which domains this token may change.`
 
 type McpServerDependencies = {

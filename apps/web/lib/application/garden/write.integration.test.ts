@@ -3,12 +3,13 @@ import { afterAll, describe, expect, it } from "vitest"
 
 import { createHouseholdFixtures } from "../../test/household-fixtures"
 import { createToolRegistry } from "../../mcp/tools"
-import { importPlantsWithDuplicates, bulkCreatePlants } from "./import"
 import {
+  addPlants,
   createGardenBed,
   createPlant,
   deleteGardenBed,
   deletePlant,
+  recordPlantCare,
   updateGardenBed,
   updatePlant,
 } from "./write"
@@ -272,75 +273,149 @@ describe("garden beds and placements", () => {
   })
 })
 
-describe("garden LLM import", () => {
-  it("creates beds by name, reusing existing ones regardless of case", async () => {
+describe("garden batches", () => {
+  it("adds plants and skips names already in the garden or the batch", async () => {
     const { context, householdId } = await fixtures.createHousehold()
-    await createGardenBed(context, { name: "Høyre staudebed" })
+    const existing = await createPlant(context, { name: "Lavendel" })
 
-    await bulkCreatePlants(context, [
-      { name: "Hosta", beds: ["høyre staudebed ", "Venstre staudebed"] },
-      { name: "Buksbom", location: "Venstre staudebed" },
+    const { created, skipped } = await addPlants(context, [
+      { name: "lavendel", notes: "Sørvegg" },
+      { name: "Rosmarin", plantType: "HERB" },
+      { name: "ROSMARIN" },
     ])
 
-    const beds = await db.gardenBed.findMany({
-      where: { householdId },
-      orderBy: { name: "asc" },
-      include: { placements: { include: { plant: true } } },
-    })
-    expect(
-      beds.map((bed) => [
-        bed.name,
-        bed.placements.map((placement) => placement.plant.name).sort(),
-      ])
-    ).toEqual([
-      ["Høyre staudebed", ["Hosta"]],
-      ["Venstre staudebed", ["Buksbom", "Hosta"]],
+    expect(created.map((plant) => plant.name)).toEqual(["Rosmarin"])
+    expect(skipped).toEqual([
+      { name: "lavendel", existingPlantId: existing.id },
+      { name: "ROSMARIN", existingPlantId: created[0]?.id },
     ])
+    expect(await db.plant.count({ where: { householdId } })).toBe(2)
   })
 
-  it("adds beds to an existing plant without removing its current ones", async () => {
+  it("creates repeated names on request", async () => {
     const { context } = await fixtures.createHousehold()
-    const bed = await createGardenBed(context, { name: "Bed A" })
-    const plant = await createPlant(context, {
-      name: "Rose",
-      placements: [{ bedId: bed.id }],
-    })
+    await createPlant(context, { name: "Rose", species: "Rosa" })
 
-    await importPlantsWithDuplicates(context, {
-      newPlants: [],
-      updates: [
-        { id: plant.id, fields: { notes: "Ny" }, addBeds: ["Bed A", "Bed B"] },
-      ],
-    })
+    const { created, skipped } = await addPlants(
+      context,
+      [{ name: "Rose", species: "Rosa rugosa" }],
+      { onDuplicate: "create" }
+    )
 
-    const updated = await db.plant.findUniqueOrThrow({
-      where: { id: plant.id },
-      include: { placements: { include: { bed: true } } },
-    })
-    expect(updated.notes).toBe("Ny")
-    expect(
-      updated.placements.map((placement) => placement.bed.name).sort()
-    ).toEqual(["Bed A", "Bed B"])
+    expect(created).toHaveLength(1)
+    expect(skipped).toEqual([])
   })
 
-  it("refuses an update of another household's plant and imports nothing", async () => {
-    const owner = await fixtures.createHousehold()
-    const intruder = await fixtures.createHousehold()
-    const plant = await createPlant(owner.context, { name: "Eple" })
+  it("places batch plants in beds, and checks every bed first", async () => {
+    const { context, householdId } = await fixtures.createHousehold()
+    const other = await fixtures.createHousehold()
+    const bed = await createGardenBed(context, { name: "Kjøkkenhage" })
+    const foreign = await createGardenBed(other.context, { name: "Fremmed" })
+
+    const { created } = await addPlants(context, [
+      { name: "Gressløk", placements: [{ bedId: bed.id, quantity: 2 }] },
+      { name: "Persille", placements: [{ bedId: bed.id }] },
+    ])
+    expect(
+      created.map((plant) => [plant.name, plant.placements[0]?.bed.name])
+    ).toEqual([
+      ["Gressløk", "Kjøkkenhage"],
+      ["Persille", "Kjøkkenhage"],
+    ])
 
     await expect(
-      importPlantsWithDuplicates(intruder.context, {
-        newPlants: [{ name: "Ny plante", beds: ["Nytt bed"] }],
-        updates: [{ id: plant.id, fields: { notes: "Stjålet" } }],
-      })
-    ).rejects.toThrow()
+      addPlants(context, [
+        { name: "Dill", placements: [{ bedId: bed.id }] },
+        { name: "Mynte", placements: [{ bedId: foreign.id }] },
+      ])
+    ).rejects.toMatchObject({ code: "NOT_FOUND" })
+    expect(await db.plant.count({ where: { householdId } })).toBe(2)
+  })
+
+  it("saves nothing when one plant in the batch is invalid", async () => {
+    const { context, householdId } = await fixtures.createHousehold()
+
+    await expect(
+      addPlants(context, [
+        { name: "Tulipan" },
+        { name: "Krokus", wateringNeed: "LOTS" as never },
+      ])
+    ).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+      message: expect.stringContaining("Plante 2"),
+    })
+    expect(await db.plant.count({ where: { householdId } })).toBe(0)
+  })
+
+  it("records care and never moves a date backwards", async () => {
+    const { context } = await fixtures.createHousehold()
+    const now = new Date("2026-07-10T12:00:00Z")
+    const recent = await createPlant(context, {
+      name: "Hortensia",
+      lastWateredAt: "2026-07-09T08:00:00Z",
+    })
+    const dry = await createPlant(context, { name: "Tomat" })
+
+    const plants = await recordPlantCare(
+      context,
+      [recent.id, dry.id],
+      { watered: true, at: "2026-07-08T18:00:00Z" },
+      now
+    )
 
     expect(
-      await db.plant.count({ where: { householdId: intruder.householdId } })
-    ).toBe(0)
-    expect(
-      await db.gardenBed.count({ where: { householdId: intruder.householdId } })
-    ).toBe(0)
+      Object.fromEntries(
+        plants.map((plant) => [plant.name, plant.lastWateredAt?.toISOString()])
+      )
+    ).toEqual({
+      Hortensia: "2026-07-09T08:00:00.000Z",
+      Tomat: "2026-07-08T18:00:00.000Z",
+    })
+    expect(plants.every((plant) => plant.lastPrunedAt === null)).toBe(true)
+
+    const pruned = await recordPlantCare(
+      context,
+      [dry.id],
+      { pruned: true },
+      now
+    )
+    expect(pruned[0]?.lastPrunedAt?.toISOString()).toBe(now.toISOString())
+  })
+
+  it("rejects care in the future or with nothing to record", async () => {
+    const { context } = await fixtures.createHousehold()
+    const plant = await createPlant(context, { name: "Bregne" })
+    const now = new Date("2026-07-10T12:00:00Z")
+
+    await expect(
+      recordPlantCare(
+        context,
+        [plant.id],
+        { watered: true, at: "2026-07-11T12:00:00Z" },
+        now
+      )
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" })
+    await expect(
+      recordPlantCare(context, [plant.id], {}, now)
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" })
+  })
+
+  it("changes nothing when one plant belongs to another household", async () => {
+    const owner = await fixtures.createHousehold()
+    const intruder = await fixtures.createHousehold()
+    const own = await createPlant(intruder.context, { name: "Egen" })
+    const foreign = await createPlant(owner.context, { name: "Fremmed" })
+
+    await expect(
+      recordPlantCare(intruder.context, [own.id, foreign.id], {
+        watered: true,
+      })
+    ).rejects.toMatchObject({ code: "NOT_FOUND" })
+
+    const untouched = await db.plant.findMany({
+      where: { id: { in: [own.id, foreign.id] } },
+    })
+    expect(untouched.every((plant) => plant.lastWateredAt === null)).toBe(true)
   })
 })
 
@@ -451,5 +526,73 @@ describe("garden write tools", () => {
     expect(
       await db.plant.count({ where: { householdId: context.householdId } })
     ).toBe(0)
+  })
+
+  it("add-plants reports created and skipped plants with missing fields", async () => {
+    const { context } = await fixtures.createHousehold()
+    const existing = await createPlant(context, { name: "Syrin" })
+    const session = fixtures.session(context, ["garden:write"])
+
+    const result = await tool("add-plants").invoke(
+      {
+        plants: [
+          { name: "Syrin" },
+          { name: "Eplehage", plantType: "TREE", species: "Malus domestica" },
+        ],
+      },
+      session
+    )
+
+    expect(result.isError).toBeUndefined()
+    const structured = result.structuredContent as {
+      created: Array<{ name: string; missingFields: string[] }>
+      skipped: Array<{ existingPlantId: string }>
+    }
+    expect(structured.skipped).toEqual([
+      { name: "Syrin", existingPlantId: existing.id },
+    ])
+    expect(structured.created[0]?.missingFields).toContain("pruningSeason")
+    expect(structured.created[0]?.missingFields).not.toContain("species")
+  })
+
+  it("record-plant-care and delete-plant are audited", async () => {
+    const { context } = await fixtures.createHousehold()
+    const plant = await createPlant(context, { name: "Gressløk" })
+    const careSession = fixtures.session(context, ["garden:write"])
+
+    const care = await tool("record-plant-care").invoke(
+      { plantIds: [plant.id], watered: true },
+      careSession
+    )
+    expect(care.isError).toBeUndefined()
+    expect(
+      (care.structuredContent as { plants: Array<{ lastWateredAt: string }> })
+        .plants[0]?.lastWateredAt
+    ).toBeTruthy()
+
+    const deleteSession = fixtures.session(context, ["garden:write"])
+    const deleted = await tool("delete-plant").invoke(
+      { plantId: plant.id },
+      deleteSession
+    )
+    expect(deleted.structuredContent).toEqual({
+      deleted: { id: plant.id, name: "Gressløk" },
+    })
+    expect(await db.plant.count({ where: { id: plant.id } })).toBe(0)
+
+    const audits = await db.mcpAuditEvent.findMany({
+      where: {
+        correlationId: {
+          in: [careSession, deleteSession].map(
+            (session) => session.correlationId ?? ""
+          ),
+        },
+      },
+      orderBy: { createdAt: "asc" },
+    })
+    expect(audits.map((audit) => [audit.toolName, audit.outcome])).toEqual([
+      ["record-plant-care", "success"],
+      ["delete-plant", "success"],
+    ])
   })
 })

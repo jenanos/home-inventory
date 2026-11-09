@@ -1,8 +1,8 @@
-# ADR 0008: Bed som egen enhet, og én plante i flere bed
+# ADR 0009: Bed som egen enhet, og én plante i flere bed
 
 - Status: Akseptert
 - Dato: 2026-11-09
-- Bygger på: [ADR 0004](0004-mcp-write-tools.md)
+- Bygger på: [ADR 0004](0004-mcp-write-tools.md), [ADR 0008](0008-hage-mcp-i-stedet-for-llm-import.md)
 
 ## Kontekst
 
@@ -53,24 +53,27 @@ oppdaterer plantens `updatedAt`, så `expectedUpdatedAt` fanger også den.
 
 - `list-plants` og `get-plant` returnerer `placements: [{ bedId, bedName,
   quantity, notes }]` i stedet for `location`. Filteret `location` heter nå
-  `bed` (delstreng av bednavnet), og `bedId` er nytt.
+  `bed` (delstreng av bednavnet), `bedId` er nytt, og `query` søker i bednavn
+  i stedet for plassering.
+- `missingFields` rapporterer `placements` når planten ikke står i noe bed.
 - Nye leseverktøy: `list-garden-beds` og `get-garden-bed`, med plantene i
   hvert bed.
-- Nye skriveverktøy: `create-garden-bed`, `update-garden-bed`,
-  `delete-garden-bed` og `delete-plant`. `create-plant` og `update-plant` tar
-  `placements`.
+- Nye skriveverktøy: `create-garden-bed`, `update-garden-bed` og
+  `delete-garden-bed`. `create-plant`, `add-plants` og `update-plant` tar
+  `placements`. I `add-plants` valideres alle bed før noe lagres.
+- Serverinstruksjonene sier at samme plante i flere bed er én plante med flere
+  plasseringer, ikke flere planter. `add-plants` med `onDuplicate: "create"`
+  er bare for ulike planter med samme navn.
 
-Sletting av planter og bed tillates nå. ADR 0004 holdt sletting ute til bruken
-viste et behov. Med plasseringer blir opprydding av duplikater, og av bed som
-ikke finnes lenger, en vanlig oppgave for en assistent. Verktøybeskrivelsene ber
-klienten bekrefte med brukeren først, som for prosjekter og budsjett.
+Sletting av bed tillates, i tråd med sletting av planter (ADR 0008). Å slette
+et bed fjerner bare plasseringene. Beskrivelsen ber klienten bekrefte med
+brukeren først. Serverversjonen er `0.10.0`.
 
-### LLM-importen
+### Web
 
-Importformatet bruker `beds: string[]`. Det gamle `location`-feltet godtas
-fortsatt og tolkes som ett bed. Bed opprettes ved navn ved behov og gjenbrukes
-uten hensyn til store og små bokstaver. Ved duplikater kan brukeren velge å
-legge planten til i nye bed. Eksisterende plasseringer fjernes aldri av en
-import. Full erstatning (`replacePlants`) sletter plantene, men beholder bedene.
-Importen er flyttet fra Server Actions til `lib/application/garden/import.ts`,
-som for de andre domenene. `replacePlants` blir liggende i `lib/actions/`.
+- Planteskjemaet har en bedvelger med avkrysning og antall, og kan opprette nye
+  bed direkte.
+- `/hage` har et bedfilter (`?bed=<id>`, eller `?bed=uten` for planter uten
+  bed).
+- `/hage/bed` viser bedene med plantene sine, og der kan bed opprettes,
+  endres og slettes.

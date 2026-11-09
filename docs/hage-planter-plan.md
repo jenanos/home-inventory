@@ -20,7 +20,7 @@ Rekkefølgen er ment som anbefalt utviklingsrekkefølge.
 | 3 — Server Actions (CRUD) | ✅ Ferdig |
 | 4 — Hovedside `/hage` med oversikt | ✅ Ferdig |
 | 5 — Opprett/rediger plante (dialog + skjema) | ✅ Ferdig |
-| 6 — LLM-import | ✅ Ferdig |
+| 6 — LLM-import | ✅ Ferdig, senere erstattet av MCP ([ADR 0008](decisions/0008-hage-mcp-i-stedet-for-llm-import.md)) |
 | 7 — Navigasjon | ✅ Ferdig |
 | 8 — Detaljside og stell-logg | ⬜ Gjenstår (valgfri utvidelse) |
 | 9 — Verifisering og opprydding | 🟡 Delvis (`typecheck` + `lint` grønne; se note) |

@@ -93,7 +93,9 @@ describe("write tool contracts", () => {
         "set-selected-project-vendor",
         "delete-project-vendor",
         "create-plant",
+        "add-plants",
         "update-plant",
+        "record-plant-care",
         "delete-plant",
         "create-garden-bed",
         "update-garden-bed",
@@ -168,8 +170,8 @@ describe("write tool contracts", () => {
   })
 
   // Deleting is allowed for shopping items and alternatives (ADR 0005), for
-  // projects with their steps and vendors (ADR 0006) and for budget rows
-  // (ADR 0007), and for plants and garden beds (ADR 0008). A new delete tool is a decision, not a side effect of adding a
+  // projects with their steps and vendors (ADR 0006), for budget rows
+  // (ADR 0007), for plants (ADR 0008) and for garden beds (ADR 0009). A new delete tool is a decision, not a side effect of adding a
   // feature.
   it("allows deletion only where it was decided", () => {
     const deleting = registry

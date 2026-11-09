@@ -29,11 +29,13 @@ import {
   Sprout,
   Loader2,
   ExternalLink,
+  Scissors,
   MapPin,
 } from "lucide-react"
 import Link from "next/link"
 import type { PlantWithPlacements } from "@/lib/application/garden/read"
-import { deletePlant } from "@/lib/actions/plant"
+import { deletePlant, recordPlantCare } from "@/lib/actions/plant"
+import { toast } from "sonner"
 import type { BedOption } from "./placement-editor"
 import { PlantFormDialog } from "./plant-form-dialog"
 
@@ -70,6 +72,13 @@ const wateringMethodLabel: Record<string, string> = {
   AUTOMATIC: "Automatisk vanning",
 }
 
+function formatCareDate(date: Date) {
+  return new Date(date).toLocaleDateString("nb-NO", {
+    day: "numeric",
+    month: "short",
+  })
+}
+
 export function PlantCard({
   plant,
   beds,
@@ -80,6 +89,20 @@ export function PlantCard({
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [confirming, setConfirming] = useState(false)
+
+  function handleCare(care: { watered?: boolean; pruned?: boolean }) {
+    startTransition(async () => {
+      try {
+        await recordPlantCare({ plantId: plant.id, ...care })
+        toast.success(
+          care.watered ? "Registrert vanning" : "Registrert beskjæring"
+        )
+        router.refresh()
+      } catch {
+        toast.error("Kunne ikke lagre")
+      }
+    })
+  }
 
   function handleDelete() {
     if (!confirming) {
@@ -135,6 +158,20 @@ export function PlantCard({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onSelect={() => handleCare({ watered: true })}
+                disabled={isPending}
+              >
+                <Droplets className="mr-2 h-4 w-4" />
+                Vannet i dag
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => handleCare({ pruned: true })}
+                disabled={isPending}
+              >
+                <Scissors className="mr-2 h-4 w-4" />
+                Beskåret i dag
+              </DropdownMenuItem>
               <PlantFormDialog
                 plant={plant}
                 beds={beds}
@@ -185,6 +222,18 @@ export function PlantCard({
         {plant.description && (
           <p className="line-clamp-2 text-sm text-muted-foreground">
             {plant.description}
+          </p>
+        )}
+        {(plant.lastWateredAt || plant.lastPrunedAt) && (
+          <p className="text-xs text-muted-foreground">
+            {[
+              plant.lastWateredAt &&
+                `Vannet ${formatCareDate(plant.lastWateredAt)}`,
+              plant.lastPrunedAt &&
+                `Beskåret ${formatCareDate(plant.lastPrunedAt)}`,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
           </p>
         )}
 

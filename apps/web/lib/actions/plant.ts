@@ -1,20 +1,11 @@
 "use server"
 
-import { db } from "@workspace/db"
-import {
-  bulkCreatePlants as bulkCreatePlantsService,
-  createImportedPlants,
-  findExistingPlants as findExistingPlantsService,
-  importPlantsWithDuplicates,
-  type BulkPlantInput,
-  type ExistingPlant,
-  type PlantFieldUpdate,
-} from "@/lib/application/garden/import"
 import {
   createGardenBed as createGardenBedService,
   createPlant as createPlantService,
   deleteGardenBed as deleteGardenBedService,
   deletePlant as deletePlantService,
+  recordPlantCare as recordPlantCareService,
   updateGardenBed as updateGardenBedService,
   updatePlant as updatePlantService,
   type CreatePlantInput,
@@ -22,7 +13,6 @@ import {
   type UpdateGardenBedInput,
   type UpdatePlantInput,
 } from "@/lib/application/garden/write"
-import { assertBatchSize } from "@/lib/application/mutations"
 import { requireHousehold } from "@/lib/session"
 import { revalidatePath } from "next/cache"
 
@@ -59,6 +49,21 @@ export async function deletePlant(plantId: string) {
   revalidateGarden()
 }
 
+/** "Vannet i dag" / "Beskåret i dag" on the plant card. */
+export async function recordPlantCare(input: {
+  plantId: string
+  watered?: boolean
+  pruned?: boolean
+}) {
+  const { context } = await requireHousehold()
+  await recordPlantCareService(context, [input.plantId], {
+    watered: input.watered,
+    pruned: input.pruned,
+  })
+
+  revalidateGarden()
+}
+
 export async function createGardenBed(input: GardenBedFields) {
   const { context } = await requireHousehold()
   const bed = await createGardenBedService(context, input)
@@ -83,52 +88,4 @@ export async function deleteGardenBed(bedId: string) {
   await deleteGardenBedService(context, bedId)
 
   revalidateGarden()
-}
-
-// ─── Bulk Import (LLM) ──────────────────────────────────────────
-
-export async function bulkCreatePlants(input: { plants: BulkPlantInput[] }) {
-  const { context } = await requireHousehold()
-  const result = await bulkCreatePlantsService(context, input.plants)
-
-  revalidateGarden()
-  return result
-}
-
-/**
- * Full replace stays a server action outside `lib/application/`, so no MCP
- * tool can reach it (ADR 0004). Beds are kept: they are places in the garden,
- * not part of the plant list, and the import reuses them by name.
- */
-export async function replacePlants(input: { plants: BulkPlantInput[] }) {
-  const { membership } = await requireHousehold()
-  assertBatchSize(input.plants.length, "Planter", { allowEmpty: true })
-
-  await db.$transaction(async (tx) => {
-    await tx.plant.deleteMany({
-      where: { householdId: membership.householdId },
-    })
-    await createImportedPlants(tx, membership.householdId, input.plants)
-  })
-
-  revalidateGarden()
-  return { count: input.plants.length }
-}
-
-export async function findExistingPlants(
-  names: string[]
-): Promise<ExistingPlant[]> {
-  const { context } = await requireHousehold()
-  return findExistingPlantsService(context, names)
-}
-
-export async function bulkImportPlantsWithDuplicates(input: {
-  newPlants: BulkPlantInput[]
-  updates: PlantFieldUpdate[]
-}) {
-  const { context } = await requireHousehold()
-  const result = await importPlantsWithDuplicates(context, input)
-
-  revalidateGarden()
-  return result
 }

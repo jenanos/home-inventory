@@ -2,10 +2,12 @@ import { z } from "zod"
 
 import {
   MAX_PLACEMENT_QUANTITY,
+  addPlants,
   createGardenBed,
   createPlant,
   deleteGardenBed,
   deletePlant,
+  recordPlantCare,
   updateGardenBed,
   updatePlant,
 } from "../../application/garden/write"
@@ -15,12 +17,15 @@ import {
   DELETE_ANNOTATIONS,
   defineWriteTool,
   UPDATE_ANNOTATIONS,
+  type McpToolDefinition,
 } from "./define"
 import {
   gardenBedSchema,
   plantCardSchema,
+  plantListRowSchema,
   serializeGardenBed,
   serializePlantCard,
+  serializePlantListRow,
 } from "./garden"
 import {
   LIFECYCLES,
@@ -87,20 +92,22 @@ const placementsInputSchema = z
   )
   .max(MAX_BATCH_SIZE)
 
+const newPlacementsInputSchema = placementsInputSchema
+  .optional()
+  .describe(
+    "The beds the plant grows in. Find them with list-garden-beds and create missing ones with create-garden-bed."
+  )
+
 export const createPlantTool = defineWriteTool({
   name: "create-plant",
   scope: "garden:write",
   title: "Create a plant",
   description:
-    "Adds a plant to the household's garden. One plant record covers every bed it grows in, so check list-plants first: if the plant already exists, add the bed to it with update-plant instead of creating a duplicate. Returns the saved plant card.",
+    "Adds one plant to the household's garden and always creates it, even if the name exists. One plant record covers every bed it grows in, so check list-plants first: if the plant exists, add the bed to it with update-plant instead. Use add-plants for several. Returns the saved plant card.",
   inputSchema: {
     name: nameInputSchema,
     ...plantFieldsInputSchema,
-    placements: placementsInputSchema
-      .optional()
-      .describe(
-        "The beds the plant grows in. Create missing beds first with create-garden-bed."
-      ),
+    placements: newPlacementsInputSchema,
   },
   outputSchema: { plant: plantCardSchema },
   annotations: CREATE_ANNOTATIONS,
@@ -121,7 +128,7 @@ export const updatePlantTool = defineWriteTool({
   scope: "garden:write",
   title: "Update a plant",
   description:
-    "Changes the given fields of one plant and leaves every omitted field as it is; null clears a field. Use it to record watering or pruning by setting lastWateredAt or lastPrunedAt, and to move a plant or add it to another bed through placements. Returns the saved plant card.",
+    "Changes the given fields of one plant and leaves every omitted field as it is; null clears a field. Use it to fill missingFields, correct details, and move a plant or add it to another bed through placements; record watering and pruning with record-plant-care. Returns the saved plant card.",
   inputSchema: {
     plantId: idSchema.describe("Id from list-plants."),
     name: nameInputSchema.optional(),
@@ -151,25 +158,123 @@ export const updatePlantTool = defineWriteTool({
   },
 })
 
+export const addPlantsTool = defineWriteTool({
+  name: "add-plants",
+  scope: "garden:write",
+  title: "Add plants",
+  description: `Adds 1–${MAX_BATCH_SIZE} plants in a single all-or-nothing call, e.g. to lay out a garden from what the user describes or shows. By default a plant whose name is already in the garden (case-insensitive), or repeated in the batch, is skipped and reported with the existing plant's id, so a retry does not create duplicates; fill in or correct that plant with update-plant instead. The same plant in several beds is one plant with several placements, not several plants. Set onDuplicate to "create" only for genuinely different plants that share a name.`,
+  inputSchema: {
+    plants: z
+      .array(
+        z.object({
+          name: nameInputSchema,
+          ...plantFieldsInputSchema,
+          placements: newPlacementsInputSchema,
+        })
+      )
+      .min(1)
+      .max(MAX_BATCH_SIZE),
+    onDuplicate: z
+      .enum(["skip", "create"])
+      .optional()
+      .describe(
+        'What to do with a name already in the garden. Defaults to "skip".'
+      ),
+  },
+  outputSchema: {
+    created: z.array(plantCardSchema),
+    skipped: z.array(
+      z.object({
+        name: z.string(),
+        existingPlantId: z
+          .string()
+          .describe("The plant that already has this name."),
+      })
+    ),
+  },
+  annotations: CREATE_ANNOTATIONS,
+  resourceType: "plant",
+  handler: async (args, session) => {
+    const { created, skipped } = await addPlants(session.context, args.plants, {
+      onDuplicate: args.onDuplicate ?? "skip",
+    })
+
+    return {
+      structuredContent: {
+        created: created.map(serializePlantCard),
+        skipped,
+      },
+      summary:
+        `La til ${created.length} plante(r)` +
+        (skipped.length > 0
+          ? `; hoppet over ${skipped.length} som finnes fra før.`
+          : "."),
+      resourceId: created.length === 1 ? (created[0]?.id ?? null) : null,
+    }
+  },
+})
+
+export const recordPlantCareTool = defineWriteTool({
+  name: "record-plant-care",
+  scope: "garden:write",
+  title: "Record watering or pruning",
+  description: `Records that 1–${MAX_BATCH_SIZE} plants were watered and/or pruned, now or at the given time, e.g. "I watered the whole terrace bed". A plant that already has the same or a later date keeps it, so repeating the call, or recording an older event, changes nothing. If any id is not a plant in the household, nothing changes. Returns the plants as list rows.`,
+  inputSchema: {
+    plantIds: z
+      .array(idSchema)
+      .min(1)
+      .max(MAX_BATCH_SIZE)
+      .describe("Plant ids from list-plants."),
+    watered: z.boolean().optional().describe("Set lastWateredAt."),
+    pruned: z.boolean().optional().describe("Set lastPrunedAt."),
+    at: timestampInputSchema
+      .optional()
+      .describe(
+        "When it was done, as an ISO 8601 timestamp. Defaults to now; cannot be in the future."
+      ),
+  },
+  outputSchema: { plants: z.array(plantListRowSchema) },
+  annotations: UPDATE_ANNOTATIONS,
+  resourceType: "plant",
+  handler: async (args, session) => {
+    const plants = await recordPlantCare(session.context, args.plantIds, {
+      watered: args.watered,
+      pruned: args.pruned,
+      at: args.at,
+    })
+    const done = [args.watered && "vanning", args.pruned && "beskjæring"]
+      .filter(Boolean)
+      .join(" og ")
+
+    return {
+      structuredContent: { plants: plants.map(serializePlantListRow) },
+      summary: `Registrerte ${done} for ${plants.length} plante(r).`,
+      resourceId: plants.length === 1 ? (plants[0]?.id ?? null) : null,
+    }
+  },
+})
+
 export const deletePlantTool = defineWriteTool({
   name: "delete-plant",
   scope: "garden:write",
   title: "Delete a plant",
   description:
-    "Permanently deletes one plant with its placements in every bed. To take a plant out of one bed only, use update-plant with the remaining placements. Delete only mistakes, duplicates and plants that are gone, and confirm with the user first.",
+    "Permanently deletes one plant. For mistakes, duplicates and plants that are gone from the garden; confirm with the user before deleting. To merge a duplicate, copy what is worth keeping to the other plant with update-plant first.",
   inputSchema: {
     plantId: idSchema.describe("Id from list-plants."),
   },
-  outputSchema: { deletedPlantId: z.string() },
+  outputSchema: {
+    deleted: z.object({ id: z.string(), name: z.string() }),
+  },
   annotations: DELETE_ANNOTATIONS,
   resourceType: "plant",
   handler: async (args, session) => {
-    const plant = await deletePlant(session.context, args.plantId)
+    const deleted = await deletePlant(session.context, args.plantId)
 
     return {
-      structuredContent: { deletedPlantId: plant.id },
-      summary: `Slettet planten ${plant.name}.`,
-      resourceId: plant.id,
+      structuredContent: { deleted },
+      summary: `Slettet planten ${deleted.name}.`,
+      resourceId: deleted.id,
     }
   },
 })
@@ -263,9 +368,11 @@ export const deleteGardenBedTool = defineWriteTool({
   },
 })
 
-export const gardenWriteTools = [
+export const gardenWriteTools: McpToolDefinition[] = [
   createPlantTool,
+  addPlantsTool,
   updatePlantTool,
+  recordPlantCareTool,
   deletePlantTool,
   createGardenBedTool,
   updateGardenBedTool,
