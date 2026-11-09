@@ -1,8 +1,10 @@
 import {
   db,
+  type Lifecycle,
   type PlantType,
   type Prisma,
   type SunNeed,
+  type WateringMethod,
   type WateringNeed,
 } from "@workspace/db"
 
@@ -32,17 +34,42 @@ type PageOptions = {
 }
 
 export type PlantFilter = {
+  /** Substring of the name, species or location. */
+  query?: string
   name?: string
   location?: string
   plantType?: PlantType
+  lifecycle?: Lifecycle
   wateringNeed?: WateringNeed
+  wateringMethod?: WateringMethod
   sunNeed?: SunNeed
+  isToxic?: boolean
+  /** Plants never watered, or last watered before this moment. */
+  notWateredSince?: Date
 }
 
 function plantFilter(
   context: ApplicationContext,
   filter: PlantFilter
 ): Prisma.PlantWhereInput {
+  const and: Prisma.PlantWhereInput[] = []
+
+  if (filter.query) {
+    and.push({
+      OR: (["name", "species", "location"] as const).map((field) => ({
+        [field]: { contains: filter.query, mode: "insensitive" },
+      })),
+    })
+  }
+  if (filter.notWateredSince) {
+    and.push({
+      OR: [
+        { lastWateredAt: null },
+        { lastWateredAt: { lt: filter.notWateredSince } },
+      ],
+    })
+  }
+
   return {
     householdId: context.householdId,
     ...(filter.name
@@ -52,11 +79,19 @@ function plantFilter(
       ? { location: { contains: filter.location, mode: "insensitive" } }
       : {}),
     ...(filter.plantType ? { plantType: filter.plantType } : {}),
+    ...(filter.lifecycle ? { lifecycle: filter.lifecycle } : {}),
     ...(filter.wateringNeed ? { wateringNeed: filter.wateringNeed } : {}),
+    ...(filter.wateringMethod ? { wateringMethod: filter.wateringMethod } : {}),
     ...(filter.sunNeed ? { sunNeed: filter.sunNeed } : {}),
+    ...(filter.isToxic !== undefined ? { isToxic: filter.isToxic } : {}),
+    ...(and.length > 0 ? { AND: and } : {}),
   }
 }
 
+/**
+ * Whole rows, so the caller can report missing fields and, on request, the
+ * full card. The page size bounds the response.
+ */
 export async function listPlantsPage(
   context: ApplicationContext,
   options: PageOptions & PlantFilter
@@ -67,20 +102,6 @@ export async function listPlantsPage(
     db.plant.count({ where }),
     db.plant.findMany({
       where,
-      select: {
-        id: true,
-        name: true,
-        species: true,
-        location: true,
-        plantType: true,
-        lifecycle: true,
-        wateringNeed: true,
-        wateringMethod: true,
-        sunNeed: true,
-        isToxic: true,
-        lastWateredAt: true,
-        updatedAt: true,
-      },
       orderBy: [{ name: "asc" }, { id: "asc" }],
       skip: options.offset,
       take: options.limit,

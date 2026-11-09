@@ -161,21 +161,6 @@ export function optionalUrl(
   return text
 }
 
-/**
- * Lenient variant for the bulk import flows, which take pasted LLM output: an
- * unusable URL is dropped instead of failing the whole import. This is the
- * behaviour those flows have always had.
- */
-export function lenientUrl(
-  value: string | null | undefined
-): string | undefined {
-  try {
-    return optionalUrl(value, "URL") ?? undefined
-  } catch {
-    return undefined
-  }
-}
-
 function assertFiniteNumber(value: number, field: string) {
   if (!Number.isFinite(value)) {
     throw validationError(`${field} må være et tall.`)

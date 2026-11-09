@@ -1,7 +1,6 @@
 import { requireHousehold } from "@/lib/session"
 import { getPlants } from "@/lib/queries/plant"
-import { Flower2, BotMessageSquare, Plus } from "lucide-react"
-import Link from "next/link"
+import { Flower2, Plus } from "lucide-react"
 import { Button } from "@workspace/ui/components/button"
 import { Card } from "@workspace/ui/components/card"
 import { PlantCard } from "./plant-card"
@@ -23,12 +22,6 @@ export default async function HagePage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/hage/llm-import">
-              <BotMessageSquare className="h-4 w-4" data-icon="inline-start" />
-              LLM-import
-            </Link>
-          </Button>
           <PlantFormDialog
             trigger={
               <Button>
@@ -47,7 +40,8 @@ export default async function HagePage() {
             Ingen planter ennå
           </h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            Legg til din første plante, eller importer flere med LLM-import
+            Legg til din første plante her, eller be en assistent koblet til via
+            MCP om å legge inn hagen
           </p>
         </Card>
       ) : (
