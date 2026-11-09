@@ -4,6 +4,7 @@ import { useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Badge } from "@workspace/ui/components/badge"
+import { cn } from "@workspace/ui/lib/utils"
 import { Button } from "@workspace/ui/components/button"
 import {
   Card,
@@ -26,7 +27,8 @@ import {
   Sun,
   Trash2,
 } from "lucide-react"
-import type { GardenBedWithPlants } from "@/lib/application/garden/read"
+import type { GardenBedForWeb } from "@/lib/application/garden/read"
+import { attachmentUrl } from "@/lib/attachment-urls"
 import { deleteGardenBed } from "@/lib/actions/plant"
 import { BedFormDialog } from "./bed-form-dialog"
 
@@ -36,11 +38,12 @@ const sunConfig = {
   SHADE: { label: "Skygge", icon: Cloud },
 } as const
 
-export function BedCard({ bed }: { bed: GardenBedWithPlants }) {
+export function BedCard({ bed }: { bed: GardenBedForWeb }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [confirming, setConfirming] = useState(false)
   const sun = bed.sunExposure ? sunConfig[bed.sunExposure] : undefined
+  const cover = bed.attachments[0]
 
   function handleDelete() {
     if (!confirming) {
@@ -58,12 +61,25 @@ export function BedCard({ bed }: { bed: GardenBedWithPlants }) {
   }
 
   return (
-    <Card className="flex h-full flex-col">
+    <Card
+      className={cn("flex h-full flex-col", cover && "overflow-hidden pt-0")}
+    >
+      {cover && (
+        <Link href={`/hage/bed/${bed.id}`} tabIndex={-1} aria-hidden>
+          {/* eslint-disable-next-line @next/next/no-img-element -- authenticated API route */}
+          <img
+            src={attachmentUrl(cover.id, { thumbnail: true })}
+            alt=""
+            className="h-40 w-full object-cover"
+            loading="lazy"
+          />
+        </Link>
+      )}
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <CardTitle className="text-base leading-tight break-words">
-              <Link href={`/hage?bed=${bed.id}`} className="hover:underline">
+              <Link href={`/hage/bed/${bed.id}`} className="hover:underline">
                 {bed.name}
               </Link>
             </CardTitle>

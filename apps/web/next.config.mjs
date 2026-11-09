@@ -2,6 +2,11 @@
 const nextConfig = {
   output: "standalone",
   transpilePackages: ["@workspace/ui", "@workspace/db"],
+  experimental: {
+    // Requests pass through middleware, which buffers the body and cuts it off
+    // at 10 MB by default. Attachment uploads are up to 25 MB (ADR 0010).
+    proxyClientMaxBodySize: "30mb",
+  },
   async redirects() {
     // The maintenance page became the projects page (ADR 0006). Old
     // bookmarks and links keep working.

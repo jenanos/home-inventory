@@ -29,6 +29,7 @@ model User {
   mcpAuthorizationCodes    McpOAuthAuthorizationCode[]
   mcpGrants                McpOAuthGrant[]
   mcpAuditEvents           McpAuditEvent[]
+  uploadedAttachments      Attachment[]
 }
 
 model Account {
@@ -130,6 +131,7 @@ model Household {
   projects       Project[]
   plants         Plant[]
   gardenBeds     GardenBed[]
+  attachments    Attachment[]
   budget         Budget?
   mcpAuditEvents McpAuditEvent[]
 }
@@ -420,6 +422,7 @@ model Project {
   vendors       ProjectVendor[]
   steps         ProjectStep[]
   shoppingLists ShoppingList[]
+  attachments   Attachment[]
 
   @@index([householdId, status])
 }
@@ -527,8 +530,9 @@ model Plant {
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
 
-  household  Household        @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  placements PlantPlacement[]
+  household   Household        @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  placements  PlantPlacement[]
+  attachments Attachment[]
 
   @@index([householdId])
 }
@@ -545,8 +549,9 @@ model GardenBed {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  household  Household        @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  placements PlantPlacement[]
+  household   Household        @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  placements  PlantPlacement[]
+  attachments Attachment[]
 
   @@unique([householdId, name])
 }
@@ -700,27 +705,89 @@ model BudgetTrip {
 }
 
 model BudgetEntry {
-  id            String          @id @default(uuid()) @db.Uuid
-  budgetId      String          @db.Uuid
-  name          String
-  categoryId    String?         @db.Uuid
-  type          BudgetEntryType
+  id          String          @id @default(uuid()) @db.Uuid
+  budgetId    String          @db.Uuid
+  name        String
+  categoryId  String?         @db.Uuid
+  type        BudgetEntryType
   /// The amount per occurrence, in NOK. See `frequency`.
-  amount        Decimal         @db.Decimal(10, 2)
-  frequency     BudgetFrequency @default(MONTHLY)
-  provider      String?
+  amount      Decimal         @db.Decimal(10, 2)
+  frequency   BudgetFrequency @default(MONTHLY)
+  provider    String?
   /// Day of the month the money comes in or goes out, 1–31.
-  paymentDay    Int?
+  paymentDay  Int?
   /// When a contract's binding period ends or it renews.
-  renewalDate   DateTime?       @db.Date
-  notes         String?
-  sortOrder     Int             @default(0)
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  renewalDate DateTime?       @db.Date
+  notes       String?
+  sortOrder   Int             @default(0)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
 
   budget   Budget               @relation(fields: [budgetId], references: [id], onDelete: Cascade)
   category BudgetEntryCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
   @@index([budgetId, sortOrder])
   @@index([categoryId])
+}
+
+// ─── Attachments ────────────────────────────────────────────────
+//
+// Uploaded images and documents, stored in PostgreSQL (ADR 0010). The bytes
+// live in AttachmentContent so listing attachments never reads them.
+
+enum AttachmentKind {
+  IMAGE
+  DOCUMENT
+}
+
+enum AttachmentSource {
+  UPLOAD // The web app
+  UPLOAD_LINK // A short-lived upload link, e.g. handed out by an MCP client
+  MCP_FILE // A file a chat client passed to an MCP tool
+  URL // Downloaded from a URL on request
+}
+
+/// Belongs to exactly one plant, bed or project (a check constraint in the
+/// migration enforces it).
+model Attachment {
+  id           String           @id @default(uuid()) @db.Uuid
+  householdId  String           @db.Uuid
+  plantId      String?          @db.Uuid
+  bedId        String?          @db.Uuid
+  projectId    String?          @db.Uuid
+  kind         AttachmentKind
+  fileName     String
+  contentType  String
+  byteSize     Int
+  width        Int?
+  height       Int?
+  sha256       String
+  caption      String?
+  sortOrder    Int              @default(0)
+  source       AttachmentSource @default(UPLOAD)
+  sourceUrl    String?
+  uploadedById String?          @db.Uuid
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  household  Household          @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  plant      Plant?             @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  bed        GardenBed?         @relation(fields: [bedId], references: [id], onDelete: Cascade)
+  project    Project?           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  uploadedBy User?              @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  content    AttachmentContent?
+
+  @@index([householdId])
+  @@index([plantId, sortOrder])
+  @@index([bedId, sortOrder])
+  @@index([projectId, sortOrder])
+}
+
+model AttachmentContent {
+  attachmentId String @id @db.Uuid
+  data         Bytes
+  /// Small WebP preview for images; null for documents.
+  thumbnail    Bytes?
+
+  attachment Attachment @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
 }

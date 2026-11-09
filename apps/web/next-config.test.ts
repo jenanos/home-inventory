@@ -29,3 +29,11 @@ describe("next.config headers", () => {
     expect(csp).not.toContain("form-action")
   })
 })
+
+describe("next.config body limit", () => {
+  it("lets attachment uploads through middleware", () => {
+    // Middleware buffers request bodies and cuts them at 10 MB by default;
+    // uploads are up to 25 MB (ADR 0010).
+    expect(nextConfig.experimental?.proxyClientMaxBodySize).toBe("30mb")
+  })
+})
