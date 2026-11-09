@@ -65,6 +65,9 @@ importers:
       resend:
         specifier: ^6.9.4
         version: 6.9.4
+      sharp:
+        specifier: ^0.34.5
+        version: 0.34.5
       sonner:
         specifier: ^2.0.7
         version: 2.0.7(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -96,9 +99,6 @@ importers:
       eslint:
         specifier: ^9.39.2
         version: 9.39.2(jiti@2.6.1)
-      sharp:
-        specifier: ^0.34.5
-        version: 0.34.5
       typescript:
         specifier: ^5.9.3
         version: 5.9.3

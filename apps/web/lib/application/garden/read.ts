@@ -8,6 +8,7 @@ import {
   type WateringNeed,
 } from "@workspace/db"
 
+import { attachmentOrder } from "../attachments/read"
 import type { ApplicationContext } from "../context"
 
 /** Placements in bed-name order, with the bed's name for display. */
@@ -31,12 +32,26 @@ export type PlantWithPlacements = Prisma.PlantGetPayload<{
 
 export type PlantPlacementWithBed = PlantWithPlacements["placements"][number]
 
+/** The first image, which the web app shows as the cover picture. */
+const coverImageInclude = {
+  attachments: {
+    where: { kind: "IMAGE" },
+    orderBy: attachmentOrder,
+    take: 1,
+    select: { id: true },
+  },
+} satisfies Prisma.PlantInclude & Prisma.GardenBedInclude
+
+export type PlantForWeb = PlantWithPlacements & {
+  attachments: Array<{ id: string }>
+}
+
 export async function listPlants(
   context: ApplicationContext
-): Promise<PlantWithPlacements[]> {
+): Promise<PlantForWeb[]> {
   return db.plant.findMany({
     where: { householdId: context.householdId },
-    include: plantPlacementsInclude,
+    include: { ...plantPlacementsInclude, ...coverImageInclude },
     orderBy: { name: "asc" },
   })
 }
@@ -73,12 +88,16 @@ export type GardenBedWithPlants = Prisma.GardenBedGetPayload<{
   include: typeof bedPlantsInclude
 }>
 
+export type GardenBedForWeb = GardenBedWithPlants & {
+  attachments: Array<{ id: string }>
+}
+
 export async function listGardenBeds(
   context: ApplicationContext
-): Promise<GardenBedWithPlants[]> {
+): Promise<GardenBedForWeb[]> {
   return db.gardenBed.findMany({
     where: { householdId: context.householdId },
-    include: bedPlantsInclude,
+    include: { ...bedPlantsInclude, ...coverImageInclude },
     orderBy: [{ name: "asc" }, { id: "asc" }],
   })
 }

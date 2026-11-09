@@ -28,7 +28,9 @@ import {
   formatNOK,
   showsVendors,
 } from "@/lib/project-labels"
+import { AttachmentGallery } from "@/components/attachments/attachment-gallery"
 import { summarizeShoppingList } from "@/lib/project-purchases"
+import { getGalleryAttachments } from "@/lib/queries/attachments"
 import { getProject, getUnlinkedShoppingLists } from "@/lib/queries/projects"
 import { requireHousehold } from "@/lib/session"
 import { ProjectActions } from "./project-actions"
@@ -43,9 +45,10 @@ interface ProjectPageProps {
 export default async function ProjectPage({ params }: ProjectPageProps) {
   const { id } = await params
   const { context } = await requireHousehold()
-  const [project, unlinkedLists] = await Promise.all([
+  const [project, unlinkedLists, attachments] = await Promise.all([
     getProject(context, id),
     getUnlinkedShoppingLists(context),
+    getGalleryAttachments(context, { type: "project", id }),
   ])
 
   if (!project) {
@@ -224,6 +227,15 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
           <VendorSection projectId={project.id} vendors={vendors} />
         </>
       )}
+
+      <Separator />
+
+      <AttachmentGallery
+        targetType="project"
+        targetId={project.id}
+        attachments={attachments}
+        title="Bilder og dokumenter"
+      />
     </div>
   )
 }

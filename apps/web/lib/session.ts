@@ -3,7 +3,10 @@ import {
   type ApplicationContext,
   getApplicationContext,
 } from "@/lib/application/context"
-import { HouseholdMembershipRequiredError } from "@/lib/application/errors"
+import {
+  HouseholdMembershipRequiredError,
+  isApplicationError,
+} from "@/lib/application/errors"
 import { db } from "@workspace/db"
 import { redirect } from "next/navigation"
 
@@ -82,4 +85,20 @@ export async function requireAdmin() {
   }
 
   return { session, user }
+}
+
+/**
+ * For route handlers: the caller's household context, or null when the
+ * request has no valid session or household. Unlike `requireHousehold` it
+ * never redirects, so an API route can answer 401 instead of an HTML page.
+ */
+export async function getHouseholdContextOrNull(): Promise<ApplicationContext | null> {
+  const session = await auth()
+  if (!session?.user?.id) return null
+  try {
+    return await getApplicationContext(session.user.id)
+  } catch (error) {
+    if (isApplicationError(error)) return null
+    throw error
+  }
 }

@@ -33,7 +33,8 @@ import {
   MapPin,
 } from "lucide-react"
 import Link from "next/link"
-import type { PlantWithPlacements } from "@/lib/application/garden/read"
+import type { PlantForWeb } from "@/lib/application/garden/read"
+import { attachmentUrl } from "@/lib/attachment-urls"
 import { deletePlant, recordPlantCare } from "@/lib/actions/plant"
 import { toast } from "sonner"
 import type { BedOption } from "./placement-editor"
@@ -83,7 +84,7 @@ export function PlantCard({
   plant,
   beds,
 }: {
-  plant: PlantWithPlacements
+  plant: PlantForWeb
   beds: BedOption[]
 }) {
   const router = useRouter()
@@ -119,6 +120,12 @@ export function PlantCard({
     })
   }
 
+  // An uploaded picture wins over a linked one.
+  const cover = plant.attachments[0]
+  const coverUrl = cover
+    ? attachmentUrl(cover.id, { thumbnail: true })
+    : plant.imageUrl
+
   const watering = plant.wateringNeed
     ? wateringNeedConfig[plant.wateringNeed]
     : undefined
@@ -126,20 +133,24 @@ export function PlantCard({
 
   return (
     <Card className="flex h-full flex-col overflow-hidden pt-0">
-      {plant.imageUrl && (
-        // eslint-disable-next-line @next/next/no-img-element -- arbitrary remote URLs (no configured image domains)
-        <img
-          src={plant.imageUrl}
-          alt={plant.name}
-          className="h-40 w-full object-cover"
-          loading="lazy"
-        />
+      {coverUrl && (
+        <Link href={`/hage/${plant.id}`} tabIndex={-1} aria-hidden>
+          {/* eslint-disable-next-line @next/next/no-img-element -- uploaded thumbnails and arbitrary remote URLs */}
+          <img
+            src={coverUrl}
+            alt=""
+            className="h-40 w-full object-cover"
+            loading="lazy"
+          />
+        </Link>
       )}
-      <CardHeader className={plant.imageUrl ? "pb-3" : "pt-6 pb-3"}>
+      <CardHeader className={coverUrl ? "pb-3" : "pt-6 pb-3"}>
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <CardTitle className="text-base leading-tight break-words">
-              {plant.name}
+              <Link href={`/hage/${plant.id}`} className="hover:underline">
+                {plant.name}
+              </Link>
             </CardTitle>
             {plant.species && (
               <p className="text-sm text-muted-foreground italic">
