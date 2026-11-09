@@ -35,7 +35,7 @@ Budget:
 - Use dryRun to show the effect before saving anything the user has not confirmed. Delete only what the user wants gone, and confirm first.
 
 Garden:
-- One plant per plant or group the user tracks ("Lavendel" in the bed by the south wall). name is required; give location when the garden has several of the same.
+- One plant record per kind of plant the user tracks, however many beds it grows in. Beds are separate records (list-garden-beds, create-garden-bed); a plant's placements list the beds it grows in, with an optional quantity. To add a plant to another bed or move it, update its placements with update-plant instead of creating a duplicate.
 - Check list-plants before adding; add-plants takes many at once and skips names that exist, so update those instead.
 - Enums: plantType TREE, SHRUB, PERENNIAL, ANNUAL, FLOWER, HERB, VEGETABLE, CLIMBER, GRASS, OTHER; lifecycle ANNUAL, BIENNIAL, PERENNIAL; wateringNeed LOW, MEDIUM, HIGH; wateringMethod MANUAL or AUTOMATIC (irrigation); sunNeed FULL_SUN, PARTIAL_SHADE, SHADE. Hardiness zones use the Norwegian H1–H8 scale.
 - Plants list missingFields: empty care details such as species, sunNeed or careInstructions. Fill them from what the user tells you or a reliable source, and leave out what you are unsure of; never guess. isToxic means toxic to people or pets; put details in toxicityNotes.

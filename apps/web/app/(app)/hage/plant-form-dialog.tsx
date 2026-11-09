@@ -38,23 +38,35 @@ import { Separator } from "@workspace/ui/components/separator"
 import { cn } from "@workspace/ui/lib/utils"
 import { Loader2, CalendarIcon, Save } from "lucide-react"
 import { createPlant, updatePlant } from "@/lib/actions/plant"
+import type { PlantWithPlacements } from "@/lib/application/garden/read"
 import type {
   Lifecycle,
-  Plant,
   PlantType,
   SunNeed,
   WateringMethod,
   WateringNeed,
 } from "@workspace/db"
 import { useMediaQuery } from "@/hooks/use-media-query"
+import {
+  PlacementEditor,
+  placementDraftFrom,
+  placementsFromDraft,
+  type BedOption,
+  type PlacementDraft,
+} from "./placement-editor"
 
 const NONE = "__none__"
 
 export function PlantFormDialog({
   plant,
+  beds,
+  defaultBedId,
   trigger,
 }: {
-  plant?: Plant
+  plant?: PlantWithPlacements
+  beds: BedOption[]
+  /** Pre-selects a bed for a new plant, e.g. when the page is filtered. */
+  defaultBedId?: string
   trigger: ReactNode
 }) {
   const router = useRouter()
@@ -65,7 +77,14 @@ export function PlantFormDialog({
 
   const [name, setName] = useState(plant?.name ?? "")
   const [species, setSpecies] = useState(plant?.species ?? "")
-  const [location, setLocation] = useState(plant?.location ?? "")
+  const initialPlacements = () =>
+    plant
+      ? placementDraftFrom(plant.placements)
+      : placementDraftFrom(
+          defaultBedId ? [{ bedId: defaultBedId, quantity: null }] : []
+        )
+  const [placements, setPlacements] =
+    useState<PlacementDraft>(initialPlacements)
   const [plantType, setPlantType] = useState<PlantType | "">(
     plant?.plantType ?? ""
   )
@@ -109,7 +128,7 @@ export function PlantFormDialog({
     if (isEdit) return
     setName("")
     setSpecies("")
-    setLocation("")
+    setPlacements(initialPlacements())
     setPlantType("")
     setDescription("")
     setCareInstructions("")
@@ -147,7 +166,7 @@ export function PlantFormDialog({
             id: plant.id,
             name: name.trim(),
             species: species.trim() || null,
-            location: location.trim() || null,
+            placements: placementsFromDraft(placements),
             plantType: plantType || null,
             description: description.trim() || null,
             careInstructions: careInstructions.trim() || null,
@@ -174,7 +193,7 @@ export function PlantFormDialog({
           await createPlant({
             name: name.trim(),
             species: species.trim() || undefined,
-            location: location.trim() || undefined,
+            placements: placementsFromDraft(placements),
             plantType: plantType || undefined,
             description: description.trim() || undefined,
             careInstructions: careInstructions.trim() || undefined,
@@ -238,7 +257,9 @@ export function PlantFormDialog({
 
   const formContent = (
     <div className="flex flex-col gap-4 overflow-y-auto px-1">
-      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {error && (
+        <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+      )}
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="plant-name">Navn *</Label>
@@ -250,26 +271,21 @@ export function PlantFormDialog({
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="plant-species">Art</Label>
-          <Input
-            id="plant-species"
-            placeholder="Lavandula angustifolia"
-            value={species}
-            onChange={(e) => setSpecies(e.target.value)}
-          />
-        </div>
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="plant-location">Plassering</Label>
-          <Input
-            id="plant-location"
-            placeholder="Bed ved inngang"
-            value={location}
-            onChange={(e) => setLocation(e.target.value)}
-          />
-        </div>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="plant-species">Art</Label>
+        <Input
+          id="plant-species"
+          placeholder="Lavandula angustifolia"
+          value={species}
+          onChange={(e) => setSpecies(e.target.value)}
+        />
       </div>
+
+      <PlacementEditor
+        beds={beds}
+        value={placements}
+        onChange={setPlacements}
+      />
 
       <div className="grid grid-cols-2 gap-4">
         <div className="flex flex-col gap-2">
@@ -469,11 +485,15 @@ export function PlantFormDialog({
       <div className="flex items-center justify-between gap-4">
         <div className="flex flex-col gap-1">
           <Label htmlFor="plant-toxic">Giftig</Label>
-          <p className="text-muted-foreground text-xs">
+          <p className="text-xs text-muted-foreground">
             Marker hvis planten er giftig
           </p>
         </div>
-        <Switch id="plant-toxic" checked={isToxic} onCheckedChange={setIsToxic} />
+        <Switch
+          id="plant-toxic"
+          checked={isToxic}
+          onCheckedChange={setIsToxic}
+        />
       </div>
 
       {isToxic && (

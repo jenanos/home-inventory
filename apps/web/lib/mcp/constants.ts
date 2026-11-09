@@ -1,7 +1,7 @@
 import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js"
 
 export const MCP_SERVER_NAME = "home-overview"
-export const MCP_SERVER_VERSION = "0.9.0"
+export const MCP_SERVER_VERSION = "0.10.0"
 export const MCP_PROTOCOL_VERSION = LATEST_PROTOCOL_VERSION
 export const MCP_MAX_REQUEST_BYTES = 64 * 1024
 

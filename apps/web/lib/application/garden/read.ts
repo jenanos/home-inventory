@@ -10,19 +10,86 @@ import {
 
 import type { ApplicationContext } from "../context"
 
-export async function listPlants(context: ApplicationContext) {
+/** Placements in bed-name order, with the bed's name for display. */
+export const plantPlacementsInclude = {
+  placements: {
+    select: {
+      id: true,
+      bedId: true,
+      quantity: true,
+      notes: true,
+      updatedAt: true,
+      bed: { select: { id: true, name: true } },
+    },
+    orderBy: { bed: { name: "asc" } },
+  },
+} satisfies Prisma.PlantInclude
+
+export type PlantWithPlacements = Prisma.PlantGetPayload<{
+  include: typeof plantPlacementsInclude
+}>
+
+export type PlantPlacementWithBed = PlantWithPlacements["placements"][number]
+
+export async function listPlants(
+  context: ApplicationContext
+): Promise<PlantWithPlacements[]> {
   return db.plant.findMany({
     where: { householdId: context.householdId },
+    include: plantPlacementsInclude,
     orderBy: { name: "asc" },
   })
 }
 
-export async function getPlant(context: ApplicationContext, plantId: string) {
+export async function getPlant(
+  context: ApplicationContext,
+  plantId: string
+): Promise<PlantWithPlacements | null> {
   return db.plant.findFirst({
     where: {
       id: plantId,
       householdId: context.householdId,
     },
+    include: plantPlacementsInclude,
+  })
+}
+
+// ─── Beds ───────────────────────────────────────────────────────
+
+const bedPlantsInclude = {
+  placements: {
+    select: {
+      id: true,
+      quantity: true,
+      notes: true,
+      updatedAt: true,
+      plant: { select: { id: true, name: true, species: true } },
+    },
+    orderBy: { plant: { name: "asc" } },
+  },
+} satisfies Prisma.GardenBedInclude
+
+export type GardenBedWithPlants = Prisma.GardenBedGetPayload<{
+  include: typeof bedPlantsInclude
+}>
+
+export async function listGardenBeds(
+  context: ApplicationContext
+): Promise<GardenBedWithPlants[]> {
+  return db.gardenBed.findMany({
+    where: { householdId: context.householdId },
+    include: bedPlantsInclude,
+    orderBy: [{ name: "asc" }, { id: "asc" }],
+  })
+}
+
+export async function getGardenBed(
+  context: ApplicationContext,
+  bedId: string
+): Promise<GardenBedWithPlants | null> {
+  return db.gardenBed.findFirst({
+    where: { id: bedId, householdId: context.householdId },
+    include: bedPlantsInclude,
   })
 }
 
@@ -34,10 +101,12 @@ type PageOptions = {
 }
 
 export type PlantFilter = {
-  /** Substring of the name, species or location. */
+  /** Substring of the name, species or the name of a bed it grows in. */
   query?: string
   name?: string
-  location?: string
+  /** Substring of the name of a bed the plant grows in. */
+  bed?: string
+  bedId?: string
   plantType?: PlantType
   lifecycle?: Lifecycle
   wateringNeed?: WateringNeed
@@ -55,11 +124,26 @@ function plantFilter(
   const and: Prisma.PlantWhereInput[] = []
 
   if (filter.query) {
+    const contains = { contains: filter.query, mode: "insensitive" } as const
     and.push({
-      OR: (["name", "species", "location"] as const).map((field) => ({
-        [field]: { contains: filter.query, mode: "insensitive" },
-      })),
+      OR: [
+        { name: contains },
+        { species: contains },
+        { placements: { some: { bed: { name: contains } } } },
+      ],
     })
+  }
+  if (filter.bed) {
+    and.push({
+      placements: {
+        some: {
+          bed: { name: { contains: filter.bed, mode: "insensitive" } },
+        },
+      },
+    })
+  }
+  if (filter.bedId) {
+    and.push({ placements: { some: { bedId: filter.bedId } } })
   }
   if (filter.notWateredSince) {
     and.push({
@@ -75,9 +159,6 @@ function plantFilter(
     ...(filter.name
       ? { name: { contains: filter.name, mode: "insensitive" } }
       : {}),
-    ...(filter.location
-      ? { location: { contains: filter.location, mode: "insensitive" } }
-      : {}),
     ...(filter.plantType ? { plantType: filter.plantType } : {}),
     ...(filter.lifecycle ? { lifecycle: filter.lifecycle } : {}),
     ...(filter.wateringNeed ? { wateringNeed: filter.wateringNeed } : {}),
@@ -89,8 +170,8 @@ function plantFilter(
 }
 
 /**
- * Whole rows, so the caller can report missing fields and, on request, the
- * full card. The page size bounds the response.
+ * Whole rows with their placements, so the caller can report missing fields
+ * and, on request, the full card. The page size bounds the response.
  */
 export async function listPlantsPage(
   context: ApplicationContext,
@@ -102,6 +183,7 @@ export async function listPlantsPage(
     db.plant.count({ where }),
     db.plant.findMany({
       where,
+      include: plantPlacementsInclude,
       orderBy: [{ name: "asc" }, { id: "asc" }],
       skip: options.offset,
       take: options.limit,

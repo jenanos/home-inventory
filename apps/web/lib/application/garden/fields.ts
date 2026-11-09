@@ -24,7 +24,8 @@ export const PLANT_OPTIONAL_FIELDS: PlantOptionalField[] = [
   { key: "species", label: "Art" },
   { key: "plantType", label: "Plantetype" },
   { key: "lifecycle", label: "Livssyklus" },
-  { key: "location", label: "Plassering" },
+  // A plant without a bed. The value is the list of placements.
+  { key: "placements", label: "Plassering" },
   { key: "sunNeed", label: "Solbehov" },
   { key: "wateringNeed", label: "Vannbehov" },
   { key: "careInstructions", label: "Stellinstruksjoner" },
@@ -44,7 +45,12 @@ export const PLANT_OPTIONAL_FIELDS: PlantOptionalField[] = [
 ]
 
 function isEmpty(value: unknown) {
-  return value === null || value === undefined || value === ""
+  return (
+    value === null ||
+    value === undefined ||
+    value === "" ||
+    (Array.isArray(value) && value.length === 0)
+  )
 }
 
 /** Applicable fields without a value, in definition order. */

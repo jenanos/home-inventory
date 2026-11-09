@@ -1,26 +1,35 @@
 "use server"
 
 import {
+  createGardenBed as createGardenBedService,
   createPlant as createPlantService,
+  deleteGardenBed as deleteGardenBedService,
   deletePlant as deletePlantService,
   recordPlantCare as recordPlantCareService,
+  updateGardenBed as updateGardenBedService,
   updatePlant as updatePlantService,
-  type PlantFields,
+  type CreatePlantInput,
+  type GardenBedFields,
+  type UpdateGardenBedInput,
   type UpdatePlantInput,
 } from "@/lib/application/garden/write"
 import { requireHousehold } from "@/lib/session"
 import { revalidatePath } from "next/cache"
 
-// --- Plant CRUD actions ---
+// --- Plant and bed actions ---
 //
 // Thin adapters: the browser context comes from the session, the rules and the
-// ownership boundary live in the garden write service shared with MCP.
+// ownership boundary live in the garden services shared with MCP.
 
-export async function createPlant(input: PlantFields) {
+function revalidateGarden() {
+  revalidatePath("/hage", "layout")
+}
+
+export async function createPlant(input: CreatePlantInput) {
   const { context } = await requireHousehold()
   const plant = await createPlantService(context, input)
 
-  revalidatePath("/hage")
+  revalidateGarden()
   return plant
 }
 
@@ -29,8 +38,7 @@ export async function updatePlant(input: { id: string } & UpdatePlantInput) {
   const { id, ...fields } = input
   const updated = await updatePlantService(context, id, fields)
 
-  revalidatePath("/hage")
-  revalidatePath(`/hage/${id}`)
+  revalidateGarden()
   return updated
 }
 
@@ -38,7 +46,7 @@ export async function deletePlant(plantId: string) {
   const { context } = await requireHousehold()
   await deletePlantService(context, plantId)
 
-  revalidatePath("/hage")
+  revalidateGarden()
 }
 
 /** "Vannet i dag" / "Beskåret i dag" on the plant card. */
@@ -53,5 +61,31 @@ export async function recordPlantCare(input: {
     pruned: input.pruned,
   })
 
-  revalidatePath("/hage")
+  revalidateGarden()
+}
+
+export async function createGardenBed(input: GardenBedFields) {
+  const { context } = await requireHousehold()
+  const bed = await createGardenBedService(context, input)
+
+  revalidateGarden()
+  return bed
+}
+
+export async function updateGardenBed(
+  input: { id: string } & UpdateGardenBedInput
+) {
+  const { context } = await requireHousehold()
+  const { id, ...fields } = input
+  const bed = await updateGardenBedService(context, id, fields)
+
+  revalidateGarden()
+  return bed
+}
+
+export async function deleteGardenBed(bedId: string) {
+  const { context } = await requireHousehold()
+  await deleteGardenBedService(context, bedId)
+
+  revalidateGarden()
 }

@@ -1,10 +1,14 @@
 import { z } from "zod"
 
 import {
+  MAX_PLACEMENT_QUANTITY,
   addPlants,
+  createGardenBed,
   createPlant,
+  deleteGardenBed,
   deletePlant,
   recordPlantCare,
+  updateGardenBed,
   updatePlant,
 } from "../../application/garden/write"
 import { MAX_BATCH_SIZE } from "../../application/mutations"
@@ -16,8 +20,10 @@ import {
   type McpToolDefinition,
 } from "./define"
 import {
+  gardenBedSchema,
   plantCardSchema,
   plantListRowSchema,
+  serializeGardenBed,
   serializePlantCard,
   serializePlantListRow,
 } from "./garden"
@@ -41,9 +47,6 @@ import {
 /** Every optional plant field. Omit a field to leave it unchanged; null clears it. */
 const plantFieldsInputSchema = {
   species: shortTextInputSchema,
-  location: shortTextInputSchema.describe(
-    "Where the plant grows, e.g. 'Bed by the terrace'."
-  ),
   description: longTextInputSchema,
   careInstructions: longTextInputSchema,
   plantType: z.enum(PLANT_TYPES).nullable().optional(),
@@ -70,15 +73,41 @@ const plantFieldsInputSchema = {
   sourceUrl: urlInputSchema,
 }
 
+const placementsInputSchema = z
+  .array(
+    z.object({
+      bedId: idSchema.describe("Id from list-garden-beds."),
+      quantity: z
+        .number()
+        .int()
+        .min(1)
+        .max(MAX_PLACEMENT_QUANTITY)
+        .nullable()
+        .optional()
+        .describe("How many of the plant grow in this bed, if known."),
+      notes: shortTextInputSchema.describe(
+        "Where in the bed, e.g. 'back row by the fence'."
+      ),
+    })
+  )
+  .max(MAX_BATCH_SIZE)
+
+const newPlacementsInputSchema = placementsInputSchema
+  .optional()
+  .describe(
+    "The beds the plant grows in. Find them with list-garden-beds and create missing ones with create-garden-bed."
+  )
+
 export const createPlantTool = defineWriteTool({
   name: "create-plant",
   scope: "garden:write",
   title: "Create a plant",
   description:
-    "Adds one plant to the household's garden and always creates it, even if the name exists. Check list-plants first so the same plant is not added twice; use add-plants for several. Returns the saved plant card.",
+    "Adds one plant to the household's garden and always creates it, even if the name exists. One plant record covers every bed it grows in, so check list-plants first: if the plant exists, add the bed to it with update-plant instead. Use add-plants for several. Returns the saved plant card.",
   inputSchema: {
     name: nameInputSchema,
     ...plantFieldsInputSchema,
+    placements: newPlacementsInputSchema,
   },
   outputSchema: { plant: plantCardSchema },
   annotations: CREATE_ANNOTATIONS,
@@ -99,11 +128,16 @@ export const updatePlantTool = defineWriteTool({
   scope: "garden:write",
   title: "Update a plant",
   description:
-    "Changes the given fields of one plant and leaves every omitted field as it is; null clears a field. Use it to fill missingFields or correct details; record watering and pruning with record-plant-care. Returns the saved plant card.",
+    "Changes the given fields of one plant and leaves every omitted field as it is; null clears a field. Use it to fill missingFields, correct details, and move a plant or add it to another bed through placements; record watering and pruning with record-plant-care. Returns the saved plant card.",
   inputSchema: {
     plantId: idSchema.describe("Id from list-plants."),
     name: nameInputSchema.optional(),
     ...plantFieldsInputSchema,
+    placements: placementsInputSchema
+      .optional()
+      .describe(
+        "The complete list of beds the plant grows in after the call: beds left out are removed from the plant. Read the current placements with get-plant first. Omit to leave placements unchanged."
+      ),
     expectedUpdatedAt: expectedUpdatedAtSchema,
   },
   outputSchema: { plant: plantCardSchema },
@@ -128,13 +162,14 @@ export const addPlantsTool = defineWriteTool({
   name: "add-plants",
   scope: "garden:write",
   title: "Add plants",
-  description: `Adds 1–${MAX_BATCH_SIZE} plants in a single all-or-nothing call, e.g. to lay out a garden from what the user describes or shows. By default a plant whose name is already in the garden (case-insensitive), or repeated in the batch, is skipped and reported with the existing plant's id, so a retry does not create duplicates; fill in or correct that plant with update-plant instead. Set onDuplicate to "create" when the user has several plants with the same name, e.g. in different beds, and give each a location.`,
+  description: `Adds 1–${MAX_BATCH_SIZE} plants in a single all-or-nothing call, e.g. to lay out a garden from what the user describes or shows. By default a plant whose name is already in the garden (case-insensitive), or repeated in the batch, is skipped and reported with the existing plant's id, so a retry does not create duplicates; fill in or correct that plant with update-plant instead. The same plant in several beds is one plant with several placements, not several plants. Set onDuplicate to "create" only for genuinely different plants that share a name.`,
   inputSchema: {
     plants: z
       .array(
         z.object({
           name: nameInputSchema,
           ...plantFieldsInputSchema,
+          placements: newPlacementsInputSchema,
         })
       )
       .min(1)
@@ -244,10 +279,102 @@ export const deletePlantTool = defineWriteTool({
   },
 })
 
+// ─── Beds ───────────────────────────────────────────────────────
+
+const bedFieldsInputSchema = {
+  description: longTextInputSchema,
+  sunExposure: z
+    .enum(SUN_NEEDS)
+    .nullable()
+    .optional()
+    .describe("How much sun the bed gets."),
+  notes: longTextInputSchema,
+}
+
+export const createGardenBedTool = defineWriteTool({
+  name: "create-garden-bed",
+  scope: "garden:write",
+  title: "Create a garden bed",
+  description:
+    "Adds a named bed or area to the garden, e.g. 'Right perennial bed'. Names are unique per household, ignoring case; check list-garden-beds first. Returns the saved bed.",
+  inputSchema: {
+    name: nameInputSchema,
+    ...bedFieldsInputSchema,
+  },
+  outputSchema: { bed: gardenBedSchema },
+  annotations: CREATE_ANNOTATIONS,
+  resourceType: "garden_bed",
+  handler: async (args, session) => {
+    const bed = await createGardenBed(session.context, args)
+
+    return {
+      structuredContent: { bed: serializeGardenBed(bed) },
+      summary: `Opprettet bedet ${bed.name}.`,
+      resourceId: bed.id,
+    }
+  },
+})
+
+export const updateGardenBedTool = defineWriteTool({
+  name: "update-garden-bed",
+  scope: "garden:write",
+  title: "Update a garden bed",
+  description:
+    "Changes the given fields of one bed and leaves every omitted field as it is; null clears a field. Returns the saved bed.",
+  inputSchema: {
+    bedId: idSchema.describe("Id from list-garden-beds."),
+    name: nameInputSchema.optional(),
+    ...bedFieldsInputSchema,
+    expectedUpdatedAt: expectedUpdatedAtSchema,
+  },
+  outputSchema: { bed: gardenBedSchema },
+  annotations: UPDATE_ANNOTATIONS,
+  resourceType: "garden_bed",
+  handler: async (args, session) => {
+    const { bedId, expectedUpdatedAt, ...fields } = args
+    const bed = await updateGardenBed(session.context, bedId, {
+      ...fields,
+      expectedUpdatedAt: parseExpectedUpdatedAt(expectedUpdatedAt),
+    })
+
+    return {
+      structuredContent: { bed: serializeGardenBed(bed) },
+      summary: `Oppdaterte bedet ${bed.name}.`,
+      resourceId: bed.id,
+    }
+  },
+})
+
+export const deleteGardenBedTool = defineWriteTool({
+  name: "delete-garden-bed",
+  scope: "garden:write",
+  title: "Delete a garden bed",
+  description:
+    "Permanently deletes one bed. The plants in it are kept, but lose their placement in this bed. Confirm with the user first.",
+  inputSchema: {
+    bedId: idSchema.describe("Id from list-garden-beds."),
+  },
+  outputSchema: { deletedBedId: z.string() },
+  annotations: DELETE_ANNOTATIONS,
+  resourceType: "garden_bed",
+  handler: async (args, session) => {
+    const bed = await deleteGardenBed(session.context, args.bedId)
+
+    return {
+      structuredContent: { deletedBedId: bed.id },
+      summary: `Slettet bedet ${bed.name}.`,
+      resourceId: bed.id,
+    }
+  },
+})
+
 export const gardenWriteTools: McpToolDefinition[] = [
   createPlantTool,
   addPlantsTool,
   updatePlantTool,
   recordPlantCareTool,
   deletePlantTool,
+  createGardenBedTool,
+  updateGardenBedTool,
+  deleteGardenBedTool,
 ]
