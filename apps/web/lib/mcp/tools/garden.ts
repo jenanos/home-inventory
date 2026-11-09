@@ -1,6 +1,7 @@
 import type { Plant } from "@workspace/db"
 import { z } from "zod"
 
+import { missingPlantFields } from "../../application/garden/fields"
 import { getPlant, listPlantsPage } from "../../application/garden/read"
 import {
   buildPageInfo,
@@ -23,73 +24,18 @@ import {
   idSchema,
   optionalTimestamp,
   timestamp,
+  timestampInputSchema,
   timestampSchema,
 } from "./shared"
 
-export const listPlantsTool = defineTool({
-  name: "list-plants",
-  scope: "garden:read",
-  title: "List plants",
-  description:
-    "Lists the household's plants in name order, with the care attributes needed to answer watering and placement questions. Use get-plant for the full card.",
-  inputSchema: {
-    name: filterTextSchema
-      .optional()
-      .describe("Case-insensitive substring match on the plant name."),
-    location: filterTextSchema
-      .optional()
-      .describe("Case-insensitive substring match on the location."),
-    plantType: z.enum(PLANT_TYPES).optional(),
-    wateringNeed: z.enum(WATERING_NEEDS).optional(),
-    sunNeed: z.enum(SUN_NEEDS).optional(),
-    ...paginationInputSchema,
-  },
-  outputSchema: {
-    plants: z.array(
-      z.object({
-        id: z.string(),
-        name: z.string(),
-        species: z.string().nullable(),
-        location: z.string().nullable(),
-        plantType: z.enum(PLANT_TYPES).nullable(),
-        lifecycle: z.enum(LIFECYCLES).nullable(),
-        wateringNeed: z.enum(WATERING_NEEDS).nullable(),
-        wateringMethod: z.enum(WATERING_METHODS).nullable(),
-        sunNeed: z.enum(SUN_NEEDS).nullable(),
-        isToxic: z.boolean(),
-        lastWateredAt: timestampSchema.nullable(),
-        updatedAt: timestampSchema,
-      })
-    ),
-    pageInfo: pageInfoSchema,
-  },
-  annotations: READ_ONLY_ANNOTATIONS,
-  handler: async (args, session) => {
-    const page = resolvePageRequest(args)
-    const { totalCount, plants } = await listPlantsPage(session.context, {
-      ...page,
-      name: args.name,
-      location: args.location,
-      plantType: args.plantType,
-      wateringNeed: args.wateringNeed,
-      sunNeed: args.sunNeed,
-    })
+/** Full cards are long; a detailed page holds at most this many plants. */
+const MAX_DETAILED_PAGE_SIZE = 25
 
-    const serialized = plants.map((plant) => ({
-      ...plant,
-      lastWateredAt: optionalTimestamp(plant.lastWateredAt),
-      updatedAt: timestamp(plant.updatedAt),
-    }))
-
-    return toolSuccess(
-      {
-        plants: serialized,
-        pageInfo: buildPageInfo(page, serialized.length, totalCount),
-      },
-      `Fant ${totalCount} plante(r); viser ${serialized.length}.`
-    )
-  },
-})
+const missingFieldsSchema = z
+  .array(z.string())
+  .describe(
+    "Optional care fields that are empty for this plant, e.g. species, sunNeed or careInstructions. Fill them from what the user tells you or a reliable source; never guess."
+  )
 
 /**
  * The full plant card: what get-plant returns and what every plant write tool
@@ -123,6 +69,7 @@ export const plantCardSchema = z.object({
   // fetches them (chapter 11 point 17).
   imageUrl: z.string().nullable(),
   sourceUrl: z.string().nullable(),
+  missingFields: missingFieldsSchema,
   createdAt: timestampSchema,
   updatedAt: timestampSchema,
 })
@@ -156,17 +103,139 @@ export function serializePlantCard(
     lastPrunedAt: optionalTimestamp(plant.lastPrunedAt),
     imageUrl: plant.imageUrl,
     sourceUrl: plant.sourceUrl,
+    missingFields: missingPlantFields(plant),
     createdAt: timestamp(plant.createdAt),
     updatedAt: timestamp(plant.updatedAt),
   }
 }
+
+/**
+ * A list row: the care attributes needed to answer watering and placement
+ * questions, plus missing fields. With `includeDetails` it is the full card.
+ */
+export const plantListRowSchema = plantCardSchema.partial().extend({
+  id: z.string(),
+  name: z.string(),
+  species: z.string().nullable(),
+  location: z.string().nullable(),
+  plantType: z.enum(PLANT_TYPES).nullable(),
+  lifecycle: z.enum(LIFECYCLES).nullable(),
+  wateringNeed: z.enum(WATERING_NEEDS).nullable(),
+  wateringMethod: z.enum(WATERING_METHODS).nullable(),
+  sunNeed: z.enum(SUN_NEEDS).nullable(),
+  isToxic: z.boolean(),
+  lastWateredAt: timestampSchema.nullable(),
+  lastPrunedAt: timestampSchema.nullable(),
+  missingFields: missingFieldsSchema,
+  updatedAt: timestampSchema,
+})
+
+export function serializePlantListRow(
+  plant: Plant
+): z.infer<typeof plantListRowSchema> {
+  return {
+    id: plant.id,
+    name: plant.name,
+    species: plant.species,
+    location: plant.location,
+    plantType: plant.plantType,
+    lifecycle: plant.lifecycle,
+    wateringNeed: plant.wateringNeed,
+    wateringMethod: plant.wateringMethod,
+    sunNeed: plant.sunNeed,
+    isToxic: plant.isToxic,
+    lastWateredAt: optionalTimestamp(plant.lastWateredAt),
+    lastPrunedAt: optionalTimestamp(plant.lastPrunedAt),
+    missingFields: missingPlantFields(plant),
+    updatedAt: timestamp(plant.updatedAt),
+  }
+}
+
+export const listPlantsTool = defineTool({
+  name: "list-plants",
+  scope: "garden:read",
+  title: "List plants",
+  description: `Lists the household's plants in name order, with the care attributes needed to answer watering and placement questions and the empty fields worth filling in (missingFields). Set includeDetails to get full plant cards, e.g. to review the whole garden; a detailed page holds at most ${MAX_DETAILED_PAGE_SIZE} plants. Use notWateredSince to find plants that need water.`,
+  inputSchema: {
+    query: filterTextSchema
+      .optional()
+      .describe(
+        "Case-insensitive substring match on the name, species or location."
+      ),
+    name: filterTextSchema
+      .optional()
+      .describe("Case-insensitive substring match on the plant name."),
+    location: filterTextSchema
+      .optional()
+      .describe("Case-insensitive substring match on the location."),
+    plantType: z.enum(PLANT_TYPES).optional(),
+    lifecycle: z.enum(LIFECYCLES).optional(),
+    wateringNeed: z.enum(WATERING_NEEDS).optional(),
+    wateringMethod: z.enum(WATERING_METHODS).optional(),
+    sunNeed: z.enum(SUN_NEEDS).optional(),
+    isToxic: z.boolean().optional(),
+    notWateredSince: timestampInputSchema
+      .optional()
+      .describe(
+        "Only plants never watered, or last watered before this ISO 8601 timestamp."
+      ),
+    includeDetails: z
+      .boolean()
+      .optional()
+      .describe("Return full plant cards instead of the short rows."),
+    ...paginationInputSchema,
+  },
+  outputSchema: {
+    plants: z.array(plantListRowSchema),
+    pageInfo: pageInfoSchema,
+  },
+  annotations: READ_ONLY_ANNOTATIONS,
+  handler: async (args, session) => {
+    const requested = resolvePageRequest(args)
+    const page = args.includeDetails
+      ? {
+          ...requested,
+          limit: Math.min(requested.limit, MAX_DETAILED_PAGE_SIZE),
+        }
+      : requested
+    const { totalCount, plants } = await listPlantsPage(session.context, {
+      ...page,
+      query: args.query,
+      name: args.name,
+      location: args.location,
+      plantType: args.plantType,
+      lifecycle: args.lifecycle,
+      wateringNeed: args.wateringNeed,
+      wateringMethod: args.wateringMethod,
+      sunNeed: args.sunNeed,
+      isToxic: args.isToxic,
+      notWateredSince: args.notWateredSince
+        ? new Date(args.notWateredSince)
+        : undefined,
+    })
+
+    const serialized = plants.map((plant) =>
+      args.includeDetails
+        ? serializePlantCard(plant)
+        : serializePlantListRow(plant)
+    )
+
+    return toolSuccess(
+      {
+        plants: serialized,
+        pageInfo: buildPageInfo(page, serialized.length, totalCount),
+      },
+      `Fant ${totalCount} plante(r); viser ${serialized.length}.`
+    )
+  },
+})
 
 export const getPlantTool = defineTool({
   name: "get-plant",
   scope: "garden:read",
   title: "Get a plant",
   description:
-    "Returns the full plant card, including care instructions, soil, pests and toxicity notes. Use list-plants to find the id.",
+    "Returns the full plant card, including care instructions, soil, pests, toxicity notes and missingFields. Use list-plants to find the id.",
   inputSchema: {
     plantId: idSchema.describe("Id from list-plants."),
   },

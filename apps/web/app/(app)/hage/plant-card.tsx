@@ -29,9 +29,11 @@ import {
   Sprout,
   Loader2,
   ExternalLink,
+  Scissors,
 } from "lucide-react"
 import type { Plant } from "@workspace/db"
-import { deletePlant } from "@/lib/actions/plant"
+import { deletePlant, recordPlantCare } from "@/lib/actions/plant"
+import { toast } from "sonner"
 import { PlantFormDialog } from "./plant-form-dialog"
 
 const plantTypeLabel: Record<string, string> = {
@@ -67,10 +69,31 @@ const wateringMethodLabel: Record<string, string> = {
   AUTOMATIC: "Automatisk vanning",
 }
 
+function formatCareDate(date: Date) {
+  return new Date(date).toLocaleDateString("nb-NO", {
+    day: "numeric",
+    month: "short",
+  })
+}
+
 export function PlantCard({ plant }: { plant: Plant }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [confirming, setConfirming] = useState(false)
+
+  function handleCare(care: { watered?: boolean; pruned?: boolean }) {
+    startTransition(async () => {
+      try {
+        await recordPlantCare({ plantId: plant.id, ...care })
+        toast.success(
+          care.watered ? "Registrert vanning" : "Registrert beskjæring"
+        )
+        router.refresh()
+      } catch {
+        toast.error("Kunne ikke lagre")
+      }
+    })
+  }
 
   function handleDelete() {
     if (!confirming) {
@@ -126,6 +149,20 @@ export function PlantCard({ plant }: { plant: Plant }) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onSelect={() => handleCare({ watered: true })}
+                disabled={isPending}
+              >
+                <Droplets className="mr-2 h-4 w-4" />
+                Vannet i dag
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => handleCare({ pruned: true })}
+                disabled={isPending}
+              >
+                <Scissors className="mr-2 h-4 w-4" />
+                Beskåret i dag
+              </DropdownMenuItem>
               <PlantFormDialog
                 plant={plant}
                 trigger={
@@ -161,6 +198,18 @@ export function PlantCard({ plant }: { plant: Plant }) {
         {plant.description && (
           <p className="line-clamp-2 text-sm text-muted-foreground">
             {plant.description}
+          </p>
+        )}
+        {(plant.lastWateredAt || plant.lastPrunedAt) && (
+          <p className="text-xs text-muted-foreground">
+            {[
+              plant.lastWateredAt &&
+                `Vannet ${formatCareDate(plant.lastWateredAt)}`,
+              plant.lastPrunedAt &&
+                `Beskåret ${formatCareDate(plant.lastPrunedAt)}`,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
           </p>
         )}
 
@@ -204,7 +253,7 @@ export function PlantCard({ plant }: { plant: Plant }) {
             href={plant.sourceUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-primary inline-flex items-center gap-1 text-sm hover:underline"
+            className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
           >
             <ExternalLink className="h-3.5 w-3.5" />
             Mer info
