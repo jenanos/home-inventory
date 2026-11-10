@@ -11,8 +11,9 @@ A personal app for managing home projects and finances, built with Next.js 16 an
 - **Shared links** — generate shareable links to lists with optional expiration
 - **Projects** — maintenance, repairs, renovations and other home projects, with checklist steps, optional vendor quotes and linked shopping lists
 - **Budget** — salaries, loans, recurring trips and entries with their own frequency (weekly to yearly), savings, and key figures such as savings rate, debt-to-income and loan-to-value. Optional details (provider, payment day, contract end, actual net pay) can be shown or hidden
-- **Garden** — plants with care details (sun, water, soil, hardiness, pruning, toxicity) and when they were last watered and pruned
-- **MCP server** — an OAuth-protected MCP endpoint (`/api/mcp`) lets AI assistants read and update shopping lists, budget, projects and garden
+- **Garden** — plants with care details (sun, water, soil, hardiness, pruning, toxicity) and when they were last watered and pruned; garden beds, with one plant placed in as many beds as it grows in
+- **Photos and documents** — upload images and PDFs to plants, beds and projects (stored in PostgreSQL; images are resized and stripped of location data)
+- **MCP server** — an OAuth-protected MCP endpoint (`/api/mcp`) lets AI assistants read and update shopping lists, budget, projects and garden, look at attached photos, and attach new ones through short-lived upload links, ChatGPT chat files or a URL
 - **Authentication** — magic link email login via Resend
 - **Dark mode** — toggle with the `d` hotkey in dev
 

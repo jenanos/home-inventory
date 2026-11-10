@@ -16,6 +16,7 @@ vi.mock("@workspace/db", async (importOriginal) => ({
 
 import type { McpSession } from "../auth/session"
 import { MCP_SCOPES, type McpScope } from "../oauth/scopes"
+import { toolScopes } from "./define"
 import { createToolRegistry } from "./index"
 
 const registry = createToolRegistry()
@@ -39,7 +40,11 @@ const READ_SCOPES = MCP_SCOPES.filter((scope) => scope.endsWith(":read"))
 
 describe("write tool contracts", () => {
   it("has write tools for every domain", () => {
-    const domains = new Set(writeTools.map((tool) => tool.scope?.split(":")[0]))
+    const domains = new Set(
+      writeTools.flatMap((tool) =>
+        toolScopes(tool.scope).map((scope) => scope.split(":")[0])
+      )
+    )
     expect([...domains].sort()).toEqual([
       "budget",
       "garden",
@@ -100,6 +105,11 @@ describe("write tool contracts", () => {
         "create-garden-bed",
         "update-garden-bed",
         "delete-garden-bed",
+        "create-attachment-upload-link",
+        "attach-uploaded-file",
+        "attach-file-from-url",
+        "update-attachment",
+        "delete-attachment",
       ].sort()
     )
   })
@@ -113,12 +123,16 @@ describe("write tool contracts", () => {
   })
 
   it.each(writeTools.map((tool) => [tool.name, tool] as const))(
-    "%s requires a *:write scope and is annotated as a closed-world mutation",
+    "%s requires a *:write scope and is annotated as a mutation",
     (_name, tool) => {
-      expect(tool.scope).toMatch(/:write$/)
+      expect(toolScopes(tool.scope).length).toBeGreaterThan(0)
+      for (const scope of toolScopes(tool.scope)) {
+        expect(scope).toMatch(/:write$/)
+      }
       expect(tool.annotations).toMatchObject({
         readOnlyHint: false,
-        openWorldHint: false,
+        // Only attach-file-from-url reaches outside the app (ADR 0011).
+        openWorldHint: tool.name === "attach-file-from-url",
       })
       expect(typeof tool.annotations.destructiveHint).toBe("boolean")
       expect(typeof tool.annotations.idempotentHint).toBe("boolean")
@@ -129,7 +143,9 @@ describe("write tool contracts", () => {
   it.each(readTools.map((tool) => [tool.name, tool] as const))(
     "%s never asks for a write scope",
     (_name, tool) => {
-      expect(tool.scope === null || tool.scope.endsWith(":read")).toBe(true)
+      expect(
+        toolScopes(tool.scope).every((scope) => scope.endsWith(":read"))
+      ).toBe(true)
     }
   )
 
@@ -148,9 +164,11 @@ describe("write tool contracts", () => {
   it.each(writeTools.map((tool) => [tool.name, tool] as const))(
     "%s refuses a write token for a different domain",
     async (_name, tool) => {
-      const domain = tool.scope?.split(":")[0]
+      const domains = toolScopes(tool.scope).map((scope) => scope.split(":")[0])
       const otherWriteScopes = MCP_SCOPES.filter(
-        (scope) => scope.endsWith(":write") && !scope.startsWith(`${domain}:`)
+        (scope) =>
+          scope.endsWith(":write") &&
+          !domains.some((domain) => scope.startsWith(`${domain}:`))
       )
 
       const result = await tool.invoke({}, session(otherWriteScopes))
@@ -171,7 +189,8 @@ describe("write tool contracts", () => {
 
   // Deleting is allowed for shopping items and alternatives (ADR 0005), for
   // projects with their steps and vendors (ADR 0006), for budget rows
-  // (ADR 0007), for plants (ADR 0008) and for garden beds (ADR 0009). A new delete tool is a decision, not a side effect of adding a
+  // (ADR 0007), for plants (ADR 0008), for garden beds (ADR 0009) and for
+  // attachments (ADR 0011). A new delete tool is a decision, not a side effect of adding a
   // feature.
   it("allows deletion only where it was decided", () => {
     const deleting = registry
@@ -180,6 +199,7 @@ describe("write tool contracts", () => {
       .sort()
 
     expect(deleting).toEqual([
+      "delete-attachment",
       "delete-budget-category",
       "delete-budget-entry",
       "delete-budget-loan",

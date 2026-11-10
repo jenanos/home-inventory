@@ -10,6 +10,15 @@ describe("isPublicPathname", () => {
     expect(isPublicPathname("/api/auth/session")).toBe(true)
   })
 
+  it("lets upload links through, but not the authenticated attachment API", () => {
+    // The token in the path is the credential (ADR 0011).
+    expect(isPublicPathname("/opplasting/abc")).toBe(true)
+    expect(isPublicPathname("/api/upload-links/abc")).toBe(true)
+    expect(isPublicPathname("/api/attachments")).toBe(false)
+    expect(isPublicPathname("/api/attachments/abc")).toBe(false)
+    expect(isPublicPathname("/opplastingfoo")).toBe(false)
+  })
+
   it("allows PWA assets without a session", () => {
     expect(isPublicPathname("/manifest.webmanifest")).toBe(true)
     expect(isPublicPathname("/sw.js")).toBe(true)

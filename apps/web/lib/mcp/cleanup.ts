@@ -1,3 +1,4 @@
+import { deleteExpiredUploadLinks } from "../application/attachments/upload-links"
 import { deleteExpiredAuditEvents } from "./audit"
 import { mcpConfig, type McpConfig } from "./config"
 import { createOAuthTokenRepository } from "./oauth/repository"
@@ -20,6 +21,7 @@ export type McpCleanupResult = {
     >
   > | null
   auditEvents: number
+  uploadLinks: number
 }
 
 export async function runMcpCleanup(
@@ -42,7 +44,8 @@ export async function runMcpCleanup(
   }
 
   const auditEvents = await deleteExpiredAuditEvents(now)
-  return { oauth, auditEvents }
+  const uploadLinks = await deleteExpiredUploadLinks(now)
+  return { oauth, auditEvents, uploadLinks }
 }
 
 const scheduleKey = Symbol.for("home-overview.mcp-cleanup")

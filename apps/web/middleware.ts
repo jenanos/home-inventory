@@ -15,6 +15,9 @@ const publicPaths = [
   "/api/auth",
   "/api/oauth/",
   "/.well-known/",
+  // Upload links carry their own credential in the path (ADR 0011).
+  "/opplasting/",
+  "/api/upload-links/",
 ]
 const exactPublicPaths = ["/api/mcp"]
 const publicAssetPrefixes = ["/icon", "/apple-icon"]

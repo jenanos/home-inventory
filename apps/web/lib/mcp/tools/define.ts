@@ -19,16 +19,39 @@ import {
   toolSuccess,
 } from "../result"
 
+/**
+ * Scope required to see and call a tool. `null` means any valid token; a list
+ * means any one of them, for a tool that serves several domains and checks the
+ * domain of each call itself (the attachment tools).
+ */
+export type ToolScope = McpScope | readonly McpScope[] | null
+
+export function toolScopes(scope: ToolScope): readonly McpScope[] {
+  if (scope === null) return []
+  return typeof scope === "string" ? [scope] : scope
+}
+
+export function sessionHasToolScope(session: McpSession, scope: ToolScope) {
+  return (
+    scope === null ||
+    toolScopes(scope).some((entry) => sessionHasScope(session, entry))
+  )
+}
+
+export type ToolMeta = Record<string, unknown>
+
 export type McpToolDefinition = {
   name: string
   /** Scope required to see and call the tool. `null` means any valid token. */
-  scope: McpScope | null
+  scope: ToolScope
   /** Exposed so contract tests can inspect the published input contract. */
   inputSchema: z.ZodRawShape
   /** Exposed so contract tests can validate real responses against it. */
   outputSchema: z.ZodRawShape
   /** Exposed so contract tests can check the hints match the tool's effect. */
   annotations: ToolAnnotations
+  /** Client-specific metadata published with the tool, e.g. `openai/fileParams`. */
+  meta?: ToolMeta
   register: (server: McpServer, session: McpSession) => RegisteredTool
   /**
    * Runs the tool the way the transport would, including input parsing. Exists
@@ -45,12 +68,14 @@ export function defineTool<
   TOutput extends z.ZodRawShape,
 >(definition: {
   name: string
-  scope: McpScope | null
+  scope: ToolScope
   title: string
   description: string
   inputSchema: TInput
   outputSchema: TOutput
   annotations: ToolAnnotations
+  /** Client-specific tool metadata, e.g. `openai/fileParams`. */
+  meta?: ToolMeta
   handler: (
     args: ToolInput<TInput>,
     session: McpSession
@@ -62,8 +87,8 @@ export function defineTool<
    * usability feature; this is the enforcement.
    */
   async function guarded(args: ToolInput<TInput>, session: McpSession) {
-    if (definition.scope && !sessionHasScope(session, definition.scope)) {
-      return scopeRequiredError(definition.scope)
+    if (!sessionHasToolScope(session, definition.scope)) {
+      return scopeRequiredError(toolScopes(definition.scope).join(" eller "))
     }
 
     try {
@@ -79,6 +104,7 @@ export function defineTool<
     inputSchema: definition.inputSchema,
     outputSchema: definition.outputSchema,
     annotations: definition.annotations,
+    meta: definition.meta,
     register: (server, session) => {
       // The schemas are widened to the raw-shape type on the way in. Keeping
       // `TInput` out of the SDK call avoids a callback signature that resolves
@@ -90,12 +116,14 @@ export function defineTool<
         inputSchema: z.ZodRawShape
         outputSchema: z.ZodRawShape
         annotations: ToolAnnotations
+        _meta?: ToolMeta
       } = {
         title: definition.title,
         description: definition.description,
         inputSchema: definition.inputSchema,
         outputSchema: definition.outputSchema,
         annotations: definition.annotations,
+        ...(definition.meta ? { _meta: definition.meta } : {}),
       }
 
       return server.registerTool(definition.name, config, (args) =>
@@ -105,8 +133,8 @@ export function defineTool<
     invoke: async (args, session) => {
       // Scope before input: on the real transport an out-of-scope tool is
       // disabled, so the SDK rejects the call before it validates anything.
-      if (definition.scope && !sessionHasScope(session, definition.scope)) {
-        return scopeRequiredError(definition.scope)
+      if (!sessionHasToolScope(session, definition.scope)) {
+        return scopeRequiredError(toolScopes(definition.scope).join(" eller "))
       }
 
       const parsed = z.object(definition.inputSchema).safeParse(args ?? {})
@@ -186,7 +214,9 @@ export function defineWriteTool<
   TOutput extends z.ZodRawShape,
 >(definition: {
   name: string
-  scope: McpScope
+  /** A `*:write` scope, or several for a tool that serves several domains. */
+  scope: McpScope | readonly McpScope[]
+  meta?: ToolMeta
   title: string
   description: string
   inputSchema: TInput
