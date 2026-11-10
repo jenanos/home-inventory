@@ -194,8 +194,13 @@ describe("attachment MCP tools", () => {
       session
     )
     expect(result.isError).toBeUndefined()
-    const { uploadUrl } = result.structuredContent as { uploadUrl: string }
-    const token = uploadUrl.split("/opplasting/")[1]!
+    const { pageUrl, uploadUrl } = result.structuredContent as {
+      pageUrl: string
+      uploadUrl: string
+    }
+    // The user opens the page; the assistant POSTs to the API route.
+    const token = pageUrl.split("/opplasting/")[1]!
+    expect(uploadUrl).toMatch(new RegExp(`/api/upload-links/${token}$`))
     await uploadWithLink(token, { bytes: await jpeg(), fileName: "a.jpg" })
 
     const listed = await tool("list-attachments").invoke(

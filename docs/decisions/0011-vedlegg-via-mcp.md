@@ -45,9 +45,10 @@ ressurs i verktøysvar er for ujevn. Assistenten får metadata og `appUrl`.
 
 ### Opplastingslenker
 
-`create-attachment-upload-link` gir en URL, `https://home.jenanos.xyz/opplasting/<token>`,
-som enten åpnes av brukeren (mobilvennlig side med «Ta bilde») eller brukes
-direkte av assistentens sandkasse:
+`create-attachment-upload-link` gir to URL-er med samme token. `pageUrl`,
+`https://home.jenanos.xyz/opplasting/<token>`, åpnes av brukeren (mobilvennlig
+side med «Ta bilde»). `uploadUrl`, `https://home.jenanos.xyz/api/upload-links/<token>`,
+tar imot en POST direkte fra assistentens sandkasse:
 
 ```sh
 curl -F file=@bilde.jpg https://home.jenanos.xyz/api/upload-links/<token>

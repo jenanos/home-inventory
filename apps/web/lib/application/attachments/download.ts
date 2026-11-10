@@ -17,7 +17,9 @@ import { MAX_UPLOAD_BYTES } from "./processing"
  *   pinned to the address that was checked, so DNS rebinding cannot swap in
  *   an internal one between the check and the connect;
  * - every redirect is checked the same way, at most three;
- * - bounded size and time, and the body is only kept, never interpreted here.
+ * - bounded size and an absolute time limit for the whole download, and the
+ *   body is only kept, never interpreted here; redirect and error bodies are
+ *   not read at all.
  */
 
 export const DOWNLOAD_TIMEOUT_MS = 20_000
@@ -167,12 +169,30 @@ function getOnce(url: URL, deadline: number) {
     if (remaining <= 0)
       return reject(validationError("Nedlastingen tok for lang tid."))
 
+    // Settles once, stops the deadline timer and closes the connection, so
+    // nothing keeps downloading after the call has returned or failed.
+    let settled = false
+    const settle = (done: () => void) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      req.destroy()
+      done()
+    }
+    const fail = (error: unknown) => settle(() => reject(error))
+
+    // An absolute deadline: the socket timeout only measures inactivity, so a
+    // server trickling bytes could otherwise hold the call open indefinitely.
+    const timer = setTimeout(
+      () => fail(validationError("Nedlastingen tok for lang tid.")),
+      remaining
+    )
+
     const req = request(
       url,
       {
         method: "GET",
         lookup: publicOnlyLookup as never,
-        timeout: remaining,
         headers: {
           "User-Agent": "home-overview/1.0 (+attachment download)",
           Accept: "image/*,application/pdf;q=0.9,*/*;q=0.1",
@@ -180,20 +200,23 @@ function getOnce(url: URL, deadline: number) {
       },
       (res) => {
         const status = res.statusCode ?? 0
+        // The bodies of redirects and errors are untrusted and unbounded, so
+        // they are closed rather than drained.
         if (status >= 300 && status < 400 && res.headers.location) {
-          res.resume()
-          return resolve({ kind: "redirect", location: res.headers.location })
+          const location = res.headers.location
+          res.destroy()
+          return settle(() => resolve({ kind: "redirect", location }))
         }
         if (status < 200 || status >= 300) {
-          res.resume()
-          return reject(
+          res.destroy()
+          return fail(
             validationError(`Serveren svarte ${status} på nedlastingen.`)
           )
         }
         const declared = Number(res.headers["content-length"] ?? "0")
         if (declared > MAX_UPLOAD_BYTES) {
           res.destroy()
-          return reject(validationError("Filen er for stor til å lastes ned."))
+          return fail(validationError("Filen er for stor til å lastes ned."))
         }
 
         const chunks: Buffer[] = []
@@ -202,34 +225,38 @@ function getOnce(url: URL, deadline: number) {
           size += chunk.byteLength
           if (size > MAX_UPLOAD_BYTES) {
             res.destroy()
-            reject(validationError("Filen er for stor til å lastes ned."))
+            fail(validationError("Filen er for stor til å lastes ned."))
             return
           }
           chunks.push(chunk)
         })
         res.on("end", () =>
-          resolve({
-            kind: "file",
-            bytes: new Uint8Array(Buffer.concat(chunks)),
-            disposition: res.headers["content-disposition"],
-          })
+          settle(() =>
+            resolve({
+              kind: "file",
+              bytes: new Uint8Array(Buffer.concat(chunks)),
+              disposition: res.headers["content-disposition"],
+            })
+          )
         )
-        res.on("error", reject)
+        res.on("error", () =>
+          fail(validationError("Kunne ikke laste ned filen."))
+        )
+        // A connection that closes before the body ended is a failed download.
+        res.on("close", () =>
+          fail(validationError("Kunne ikke laste ned filen."))
+        )
       }
     )
-    req.on("timeout", () => {
-      req.destroy()
-      reject(validationError("Nedlastingen tok for lang tid."))
-    })
     req.on("error", (error: NodeJS.ErrnoException) => {
       if (error.code === "ENONPUBLIC") {
-        reject(validationError("URL-en peker til en intern adresse."))
+        fail(validationError("URL-en peker til en intern adresse."))
       } else if (error.code === "ENOTFOUND") {
-        reject(validationError("Fant ikke serveren i URL-en."))
+        fail(validationError("Fant ikke serveren i URL-en."))
       } else if ("code" in error && error.code === "VALIDATION_ERROR") {
-        reject(error)
+        fail(error)
       } else {
-        reject(validationError("Kunne ikke laste ned filen."))
+        fail(validationError("Kunne ikke laste ned filen."))
       }
     })
     req.end()

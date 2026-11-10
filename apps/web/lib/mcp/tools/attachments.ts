@@ -271,7 +271,7 @@ export const createAttachmentUploadLinkTool = defineWriteTool({
   name: "create-attachment-upload-link",
   scope: WRITE_SCOPES,
   title: "Create an upload link",
-  description: `Creates a link where photos or PDFs can be uploaded to one plant, garden bed or project, valid for ${UPLOAD_LINK_TTL_MINUTES} minutes and up to ${UPLOAD_LINK_MAX_FILES} files. Use it when the user wants to attach pictures or documents they have, including files they shared in this chat: if you can run code with network access and have the file, upload it yourself with a multipart POST (field "file"), e.g. curl -F file=@photo.jpg <uploadUrl>; otherwise give the user the link to open on their phone or computer. Treat the link like a password and do not show it to anyone else. Check the result with list-attachments.`,
+  description: `Creates a link where photos or PDFs can be uploaded to one plant, garden bed or project, valid for ${UPLOAD_LINK_TTL_MINUTES} minutes and up to ${UPLOAD_LINK_MAX_FILES} files. Use it when the user wants to attach pictures or documents they have, including files they shared in this chat: if you can run code with network access and have the file, upload it yourself with a multipart POST (field "file") to uploadUrl, e.g. curl -F file=@photo.jpg <uploadUrl>; otherwise give the user pageUrl to open on their phone or computer. Treat the link like a password and do not show it to anyone else. Check the result with list-attachments.`,
   inputSchema: {
     ...targetInputSchema,
     caption: captionInputSchema.describe(
@@ -279,7 +279,12 @@ export const createAttachmentUploadLinkTool = defineWriteTool({
     ),
   },
   outputSchema: {
-    uploadUrl: z.string(),
+    pageUrl: z
+      .string()
+      .describe("Upload page for the user to open in a browser."),
+    uploadUrl: z
+      .string()
+      .describe('Endpoint for a multipart POST with the field "file".'),
     expiresAt: timestampSchema,
     maxFiles: z.number().int(),
   },
@@ -292,15 +297,17 @@ export const createAttachmentUploadLinkTool = defineWriteTool({
       caption: args.caption,
       clientId: session.clientId,
     })
-    const uploadUrl = `${publicOrigin()}/opplasting/${link.token}`
+    const pageUrl = `${publicOrigin()}/opplasting/${link.token}`
+    const uploadUrl = `${publicOrigin()}/api/upload-links/${link.token}`
 
     return {
       structuredContent: {
+        pageUrl,
         uploadUrl,
         expiresAt: timestamp(link.expiresAt),
         maxFiles: link.maxFiles,
       },
-      summary: `Opplastingslenke klar, gyldig i ${UPLOAD_LINK_TTL_MINUTES} minutter: ${uploadUrl} (API: POST ${publicOrigin()}/api/upload-links/${link.token} med feltet "file").`,
+      summary: `Opplastingslenke klar, gyldig i ${UPLOAD_LINK_TTL_MINUTES} minutter: ${pageUrl} (API: POST ${uploadUrl} med feltet "file").`,
       resourceId: target.id,
     }
   },
