@@ -3,6 +3,7 @@
 import type {
   Priority,
   ProjectExecution,
+  ProjectScale,
   ProjectStatus,
   ProjectType,
 } from "@workspace/db"
@@ -52,6 +53,7 @@ interface CreateProjectInput {
   title: string
   description?: string
   type?: ProjectType
+  scale?: ProjectScale
   execution?: ProjectExecution | null
   priority?: Priority
   estimatedDuration?: string
@@ -72,6 +74,7 @@ interface UpdateProjectInput {
   title?: string
   description?: string | null
   type?: ProjectType
+  scale?: ProjectScale
   execution?: ProjectExecution | null
   priority?: Priority
   status?: ProjectStatus

@@ -114,6 +114,14 @@ enum ProjectType {
   OTHER
 }
 
+/// How big a project is: routine upkeep (cleaning gutters) or a larger
+/// construction job (draining, paving). Orthogonal to `ProjectType`; the
+/// projects page and its numbers are split on it.
+enum ProjectScale {
+  ROUTINE
+  MAJOR
+}
+
 /// Who does the work. Null means not decided yet.
 enum ProjectExecution {
   SELF
@@ -122,9 +130,12 @@ enum ProjectExecution {
 }
 
 model Household {
-  id        String   @id @default(uuid()) @db.Uuid
-  name      String
-  createdAt DateTime @default(now())
+  id                 String    @id @default(uuid()) @db.Uuid
+  name               String
+  /// Last day of the move-in period. Purchases up to and including this day
+  /// (Europe/Oslo) count as move-in purchases in the shopping numbers.
+  moveInPeriodEndsOn DateTime? @db.Date
+  createdAt          DateTime  @default(now())
 
   members        HouseholdMember[]
   lists          ShoppingList[]
@@ -410,6 +421,7 @@ model Project {
   title             String
   description       String?           @db.Text
   type              ProjectType       @default(OTHER)
+  scale             ProjectScale      @default(ROUTINE)
   execution         ProjectExecution?
   priority          Priority          @default(MEDIUM)
   status            ProjectStatus     @default(NOT_STARTED)

@@ -2,6 +2,7 @@ import {
   db,
   Priority,
   ProjectExecution,
+  ProjectScale,
   ProjectStatus,
   ProjectType,
   type Prisma,
@@ -39,6 +40,7 @@ const STEP = "steg"
 const PRIORITY_VALUES = Object.values(Priority)
 const STATUS_VALUES = Object.values(ProjectStatus)
 const TYPE_VALUES = Object.values(ProjectType)
+const SCALE_VALUES = Object.values(ProjectScale)
 const EXECUTION_VALUES = Object.values(ProjectExecution)
 
 const MAX_SORT_ORDER = 1_000_000
@@ -95,6 +97,8 @@ export type ProjectFields = {
   title: string
   description?: string | null
   type?: ProjectType
+  /** ROUTINE upkeep or a MAJOR construction job. Orthogonal to `type`. */
+  scale?: ProjectScale
   /** Who does the work. `null` means not decided. */
   execution?: ProjectExecution | null
   priority?: Priority
@@ -129,6 +133,7 @@ function normalizeProjectFields(input: Partial<ProjectFields>) {
       MAX_LONG_TEXT_LENGTH
     ),
     type: optionalEnum(input.type, TYPE_VALUES, "Type"),
+    scale: optionalEnum(input.scale, SCALE_VALUES, "Omfang"),
     execution: nullableEnum(input.execution, EXECUTION_VALUES, "Utførelse"),
     priority: optionalEnum(input.priority, PRIORITY_VALUES, "Prioritet"),
     status: optionalEnum(input.status, STATUS_VALUES, "Status"),

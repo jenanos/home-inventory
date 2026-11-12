@@ -1,7 +1,9 @@
 import { requireHousehold } from "@/lib/session"
 import { getShoppingLists } from "@/lib/queries/shopping-list"
 import { PrivateShoppingListsOverview } from "@/components/private-shopping-lists-overview"
-import { ShoppingStatsSummary } from "@/components/shopping-stats-summary"
+import { ShoppingStatsPanel } from "@/components/shopping-stats-panel"
+import { calculateShoppingStats } from "@/lib/dashboard-stats"
+import { getHouseholdSettings } from "@/lib/application/households/read"
 import { ShoppingListCard } from "@/components/shopping-list-card"
 import { getShoppingListItemEffectivePrice } from "@/lib/shopping-list-pricing"
 import { ListChecks, Lock } from "lucide-react"
@@ -11,22 +13,17 @@ import { EditListDialog } from "./edit-list-dialog"
 
 export default async function ListsPage() {
   const { context } = await requireHousehold()
-  const lists = await getShoppingLists(context)
+  const [lists, settings] = await Promise.all([
+    getShoppingLists(context),
+    getHouseholdSettings(context),
+  ])
   const householdLists = lists.filter((list) => !list.isPrivate)
   const privateLists = lists.filter((list) => list.isPrivate)
 
-  const allItems = householdLists.flatMap((l) => l.items)
-  const totalEstimated = allItems.reduce(
-    (sum, item) => sum + getShoppingListItemEffectivePrice(item),
-    0
+  const stats = calculateShoppingStats(
+    householdLists.flatMap((list) => list.items),
+    { moveInPeriodEndsOn: settings.moveInPeriodEndsOn }
   )
-  const purchasedItems = allItems.filter((i) => i.status === "PURCHASED")
-  const purchasedTotal = purchasedItems.reduce(
-    (sum, item) => sum + getShoppingListItemEffectivePrice(item),
-    0
-  )
-  const pendingCount = allItems.filter((i) => i.status === "PENDING").length
-  const purchasedCount = purchasedItems.length
 
   return (
     <div className="flex flex-col gap-6">
@@ -42,15 +39,7 @@ export default async function ListsPage() {
         <CreateListDialog />
       </div>
 
-      {allItems.length > 0 && (
-        <ShoppingStatsSummary
-          totalEstimated={totalEstimated}
-          purchasedTotal={purchasedTotal}
-          totalCount={allItems.length}
-          purchasedCount={purchasedCount}
-          pendingCount={pendingCount}
-        />
-      )}
+      {stats.totalItems > 0 && <ShoppingStatsPanel stats={stats} />}
 
       {householdLists.length === 0 ? (
         <Card className="flex flex-col items-center justify-center py-12">

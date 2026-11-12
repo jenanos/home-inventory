@@ -18,6 +18,10 @@ export async function listShoppingLists(context: ApplicationContext) {
           id: true,
           status: true,
           estimatedPrice: true,
+          priority: true,
+          timeframe: true,
+          purchasedAt: true,
+          category: { select: { name: true } },
           alternatives: {
             select: { price: true },
             orderBy: { rank: "asc" },

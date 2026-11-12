@@ -1,6 +1,7 @@
 import type {
   Priority,
   ProjectExecution,
+  ProjectScale,
   ProjectStatus,
   ProjectType,
 } from "@workspace/db"
@@ -66,6 +67,25 @@ export const PROJECT_TYPE_LABELS: Record<ProjectType, string> = {
   RENOVATION: "Oppussing",
   IMPROVEMENT: "Forbedring",
   OTHER: "Annet",
+}
+
+export const PROJECT_SCALES: ProjectScale[] = ["ROUTINE", "MAJOR"]
+
+/** The projects page is split on this: routine upkeep vs larger jobs. */
+export const PROJECT_SCALE_LABELS: Record<ProjectScale, string> = {
+  ROUTINE: "Løpende vedlikehold",
+  MAJOR: "Større prosjekter",
+}
+
+/** Singular form, for badges and selects on one project. */
+export const PROJECT_SCALE_LABEL_ONE: Record<ProjectScale, string> = {
+  ROUTINE: "Løpende vedlikehold",
+  MAJOR: "Større prosjekt",
+}
+
+export const PROJECT_SCALE_HINTS: Record<ProjectScale, string> = {
+  ROUTINE: "Ting som går igjen, som å rense takrenner",
+  MAJOR: "Byggtekniske jobber, som drenering eller asfaltering",
 }
 
 export const PROJECT_EXECUTIONS: ProjectExecution[] = [

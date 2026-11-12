@@ -2,7 +2,8 @@
 
 import { db } from "@workspace/db"
 import { DEFAULT_CATEGORIES } from "@workspace/db/seed-categories"
-import { requireAuth } from "@/lib/session"
+import { updateMoveInPeriod as updateMoveInPeriodService } from "@/lib/application/households/write"
+import { requireAuth, requireHousehold } from "@/lib/session"
 import { revalidatePath } from "next/cache"
 
 function isUniqueConstraintError(error: unknown) {
@@ -135,4 +136,20 @@ export async function removeMember(householdId: string, userId: string) {
   })
 
   revalidatePath("/settings")
+}
+
+/**
+ * Sets the last day of the move-in period as `YYYY-MM-DD`, or clears it with
+ * `null`. The shopping numbers on the dashboard and lists depend on it.
+ */
+export async function updateMoveInPeriod(value: string | null) {
+  const { context } = await requireHousehold()
+  const settings = await updateMoveInPeriodService(context, {
+    moveInPeriodEndsOn: value,
+  })
+
+  revalidatePath("/")
+  revalidatePath("/lists")
+  revalidatePath("/settings")
+  return settings
 }

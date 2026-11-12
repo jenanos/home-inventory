@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { PrivateShoppingListsOverview } from "@/components/private-shopping-lists-overview"
-import { ShoppingStatsSummary } from "@/components/shopping-stats-summary"
+import { ShoppingStatsPanel } from "@/components/shopping-stats-panel"
 import { ShoppingListCard } from "@/components/shopping-list-card"
 import { ProjectCard } from "@/components/project-card"
 import { ProjectStatsSummary } from "@/components/project-stats-summary"
@@ -21,34 +21,7 @@ import {
   Banknote,
   CalendarClock,
 } from "lucide-react"
-import { cn } from "@workspace/ui/lib/utils"
-import { TIMEFRAME_LABELS } from "@/lib/shopping-timeframe"
-
-const timeframeConfig = {
-  NOW: {
-    label: TIMEFRAME_LABELS.NOW,
-    className: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
-  },
-  SOON: {
-    label: TIMEFRAME_LABELS.SOON,
-    className:
-      "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
-  },
-  LATER: {
-    label: TIMEFRAME_LABELS.LATER,
-    className:
-      "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
-  },
-  SOMEDAY: {
-    label: TIMEFRAME_LABELS.SOMEDAY,
-    className:
-      "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300",
-  },
-  UNSET: {
-    label: "Ikke satt",
-    className: "bg-muted text-muted-foreground",
-  },
-} as const
+import { isActiveProject } from "@/lib/dashboard-stats"
 
 export default async function DashboardPage() {
   const { context } = await requireHousehold()
@@ -150,55 +123,8 @@ export default async function DashboardPage() {
           </Link>
         </div>
 
-        {/* Shopping Stats */}
         {householdStats.totalItems > 0 && (
-          <ShoppingStatsSummary
-            totalEstimated={householdStats.totalEstimated}
-            purchasedTotal={householdStats.purchasedTotal}
-            totalCount={householdStats.totalItems}
-            purchasedCount={householdStats.purchasedCount}
-            pendingCount={householdStats.pendingCount}
-          />
-        )}
-
-        {/* Timeframe Breakdown */}
-        {householdStats.pendingCount > 0 && (
-          <Card className="shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Når det trengs
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap gap-3">
-                {(
-                  Object.entries(timeframeConfig) as [
-                    keyof typeof timeframeConfig,
-                    (typeof timeframeConfig)[keyof typeof timeframeConfig],
-                  ][]
-                ).map(([timeframe, config]) => {
-                  const count = householdStats.itemsByTimeframe[timeframe] ?? 0
-                  if (count === 0) return null
-                  return (
-                    <div
-                      key={timeframe}
-                      className={cn(
-                        "flex items-center gap-2 rounded-lg px-4 py-2.5",
-                        config.className
-                      )}
-                    >
-                      <span className="text-sm font-medium">
-                        {config.label}
-                      </span>
-                      <span className="font-heading text-lg font-semibold">
-                        {count}
-                      </span>
-                    </div>
-                  )
-                })}
-              </div>
-            </CardContent>
-          </Card>
+          <ShoppingStatsPanel stats={householdStats} />
         )}
 
         {/* Shopping Lists Grid */}
@@ -264,11 +190,10 @@ export default async function DashboardPage() {
         {projectStats.totalProjects > 0 ? (
           <>
             <ProjectStatsSummary
-              totalEstimatedCost={projectStats.totalEstimatedCost}
-              totalProjects={projectStats.totalProjects}
-              notStartedCount={projectStats.notStartedCount}
-              inProgressCount={projectStats.inProgressCount}
-              completedCount={projectStats.completedCount}
+              stats={projectStats}
+              scaleHref={(scale) =>
+                `/prosjekter?omfang=${scale === "MAJOR" ? "storre" : "lopende"}`
+              }
             />
 
             {projectStats.overdueProjects.length > 0 && (
@@ -305,7 +230,7 @@ export default async function DashboardPage() {
 
             {(() => {
               const activeProjects = projects
-                .filter((project) => project.status !== "COMPLETED")
+                .filter(isActiveProject)
                 .slice(0, 6)
               if (activeProjects.length === 0) return null
 

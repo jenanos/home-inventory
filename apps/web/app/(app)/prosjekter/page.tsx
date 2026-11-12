@@ -1,24 +1,55 @@
 import Link from "next/link"
-import type { ProjectType } from "@workspace/db"
+import type { ProjectScale, ProjectStatus, ProjectType } from "@workspace/db"
 import { Card } from "@workspace/ui/components/card"
 import { cn } from "@workspace/ui/lib/utils"
 import { Hammer } from "lucide-react"
 
 import { ProjectCard } from "@/components/project-card"
 import { ProjectStatsSummary } from "@/components/project-stats-summary"
-import { calculateProjectStats } from "@/lib/dashboard-stats"
-import { PROJECT_TYPES, PROJECT_TYPE_LABELS } from "@/lib/project-labels"
+import { calculateProjectStats, isActiveProject } from "@/lib/dashboard-stats"
+import {
+  PROJECT_SCALES,
+  PROJECT_SCALE_LABELS,
+  PROJECT_TYPES,
+  PROJECT_TYPE_LABELS,
+} from "@/lib/project-labels"
 import { getProjects } from "@/lib/queries/projects"
 import { requireHousehold } from "@/lib/session"
 import { CreateProjectDialog } from "./create-project-dialog"
 
 const VIEWS = {
   aktive: "Aktive",
+  "pa-vent": "På vent",
   fullforte: "Fullførte",
   alle: "Alle",
 } as const
 
 type View = keyof typeof VIEWS
+
+const VIEW_MATCHES: Record<View, (status: ProjectStatus) => boolean> = {
+  aktive: (status) => isActiveProject({ status }),
+  "pa-vent": (status) => status === "ON_HOLD",
+  fullforte: (status) => status === "COMPLETED",
+  alle: () => true,
+}
+
+const EMPTY_TEXT: Record<View, string> = {
+  aktive: "Ingen aktive prosjekter her. Alt er gjort!",
+  "pa-vent":
+    "Ingenting på vent. Sett et prosjekt på vent når du ikke jobber med det, men vil ta vare på det til senere.",
+  fullforte: "Ingen fullførte prosjekter her ennå.",
+  alle: "Ingen prosjekter her.",
+}
+
+/** URL values for the scale filter. */
+const SCALE_PARAMS: Record<ProjectScale, string> = {
+  ROUTINE: "lopende",
+  MAJOR: "storre",
+}
+
+function scaleFromParam(value: string | undefined): ProjectScale | undefined {
+  return PROJECT_SCALES.find((scale) => SCALE_PARAMS[scale] === value)
+}
 
 function isView(value: string | undefined): value is View {
   return !!value && value in VIEWS
@@ -29,7 +60,7 @@ function isProjectType(value: string | undefined): value is ProjectType {
 }
 
 interface ProjectsPageProps {
-  searchParams: Promise<{ vis?: string; type?: string }>
+  searchParams: Promise<{ vis?: string; type?: string; omfang?: string }>
 }
 
 export default async function ProjectsPage({
@@ -38,26 +69,33 @@ export default async function ProjectsPage({
   const params = await searchParams
   const view: View = isView(params.vis) ? params.vis : "aktive"
   const type = isProjectType(params.type) ? params.type : undefined
+  const scale = scaleFromParam(params.omfang)
 
   const { context } = await requireHousehold()
   const projects = await getProjects(context)
 
-  const ofType = type
-    ? projects.filter((project) => project.type === type)
-    : projects
-  const visible = ofType.filter((project) =>
-    view === "alle"
-      ? true
-      : view === "fullforte"
-        ? project.status === "COMPLETED"
-        : project.status !== "COMPLETED"
+  const filtered = projects.filter(
+    (project) =>
+      (!type || project.type === type) && (!scale || project.scale === scale)
   )
-  const stats = calculateProjectStats(ofType)
+  const visible = filtered.filter((project) =>
+    VIEW_MATCHES[view](project.status)
+  )
+  const stats = calculateProjectStats(filtered)
+  const onHoldCount = filtered.filter(
+    (project) => project.status === "ON_HOLD"
+  ).length
 
-  function href(next: { vis?: View; type?: ProjectType | null }) {
+  function href(next: {
+    vis?: View
+    type?: ProjectType | null
+    omfang?: ProjectScale | null
+  }) {
     const search = new URLSearchParams()
     const nextView = next.vis ?? view
     const nextType = next.type === undefined ? type : next.type
+    const nextScale = next.omfang === undefined ? scale : next.omfang
+    if (nextScale) search.set("omfang", SCALE_PARAMS[nextScale])
     if (nextView !== "aktive") search.set("vis", nextView)
     if (nextType) search.set("type", nextType)
     const query = search.toString()
@@ -68,6 +106,15 @@ export default async function ProjectsPage({
     projects.some((project) => project.type === value)
   )
 
+  // Without a scale filter both kinds share the page, each under its own
+  // heading, so routine upkeep never drowns in (or hides) the big jobs.
+  const groups = scale
+    ? [{ scale, projects: visible }]
+    : PROJECT_SCALES.map((value) => ({
+        scale: value,
+        projects: visible.filter((project) => project.scale === value),
+      })).filter((group) => group.projects.length > 0)
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -76,20 +123,34 @@ export default async function ProjectsPage({
             Prosjekter
           </h1>
           <p className="text-sm text-muted-foreground">
-            Vedlikehold, oppussing og andre prosjekter i hjemmet – enten du gjør
+            Løpende vedlikehold og større prosjekter i hjemmet – enten du gjør
             det selv eller leier inn hjelp
           </p>
         </div>
-        <CreateProjectDialog />
+        <CreateProjectDialog defaultScale={scale ?? "ROUTINE"} />
       </div>
 
-      {ofType.length > 0 && (
+      {projects.length > 0 && (
+        <FilterRow label="Omfang">
+          <FilterChip href={href({ omfang: null })} active={!scale}>
+            Alt
+          </FilterChip>
+          {PROJECT_SCALES.map((value) => (
+            <FilterChip
+              key={value}
+              href={href({ omfang: value })}
+              active={scale === value}
+            >
+              {PROJECT_SCALE_LABELS[value]}
+            </FilterChip>
+          ))}
+        </FilterRow>
+      )}
+
+      {filtered.length > 0 && (
         <ProjectStatsSummary
-          totalEstimatedCost={stats.totalEstimatedCost}
-          totalProjects={stats.totalProjects}
-          notStartedCount={stats.notStartedCount}
-          inProgressCount={stats.inProgressCount}
-          completedCount={stats.completedCount}
+          stats={stats}
+          scaleHref={scale ? undefined : (value) => href({ omfang: value })}
         />
       )}
 
@@ -103,6 +164,11 @@ export default async function ProjectsPage({
                 active={view === value}
               >
                 {VIEWS[value]}
+                {value === "pa-vent" && onHoldCount > 0 && (
+                  <span className="ml-1 tabular-nums opacity-70">
+                    {onHoldCount}
+                  </span>
+                )}
               </FilterChip>
             ))}
           </FilterRow>
@@ -137,20 +203,28 @@ export default async function ProjectsPage({
         </Card>
       ) : visible.length === 0 ? (
         <Card className="flex flex-col items-center justify-center px-4 py-10 text-center">
-          <p className="text-sm text-muted-foreground">
-            {view === "fullforte"
-              ? "Ingen fullførte prosjekter her ennå."
-              : view === "aktive"
-                ? "Ingen aktive prosjekter. Alt er gjort!"
-                : "Ingen prosjekter av denne typen."}
+          <p className="max-w-md text-sm text-muted-foreground">
+            {EMPTY_TEXT[view]}
           </p>
         </Card>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {visible.map((project) => (
-            <ProjectCard key={project.id} project={project} />
-          ))}
-        </div>
+        groups.map((group) => (
+          <section key={group.scale} className="flex flex-col gap-3">
+            {!scale && (
+              <h2 className="flex items-baseline gap-2 font-heading text-lg tracking-tight">
+                {PROJECT_SCALE_LABELS[group.scale]}
+                <span className="text-sm font-normal text-muted-foreground tabular-nums">
+                  {group.projects.length}
+                </span>
+              </h2>
+            )}
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {group.projects.map((project) => (
+                <ProjectCard key={project.id} project={project} />
+              ))}
+            </div>
+          </section>
+        ))
       )}
     </div>
   )
@@ -165,7 +239,7 @@ function FilterRow({
 }) {
   return (
     <div className="flex items-center gap-2 overflow-x-auto">
-      <span className="w-10 shrink-0 text-xs text-muted-foreground">
+      <span className="w-14 shrink-0 text-xs text-muted-foreground">
         {label}
       </span>
       <div className="flex gap-1.5">{children}</div>

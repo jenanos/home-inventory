@@ -64,9 +64,11 @@ import { useMediaQuery } from "@/hooks/use-media-query"
 import type {
   Priority,
   ProjectExecution,
+  ProjectScale,
   ProjectStatus,
   ProjectType,
 } from "@workspace/db"
+import { ProjectScalePicker } from "@/components/project-scale-picker"
 import {
   EXECUTION_UNSET,
   PROJECT_EXECUTIONS,
@@ -85,6 +87,7 @@ interface ProjectActionsProps {
     title: string
     description: string | null
     type: ProjectType
+    scale: ProjectScale
     execution: ProjectExecution | null
     priority: Priority
     status: ProjectStatus
@@ -109,6 +112,7 @@ export function ProjectActions({
   const [title, setTitle] = useState(task.title)
   const [description, setDescription] = useState(task.description ?? "")
   const [type, setType] = useState<ProjectType>(task.type)
+  const [scale, setScale] = useState<ProjectScale>(task.scale)
   const [execution, setExecution] = useState<string>(
     task.execution ?? EXECUTION_UNSET
   )
@@ -132,6 +136,7 @@ export function ProjectActions({
         title: title.trim(),
         description: description.trim() || null,
         type,
+        scale,
         execution: executionFromSelect(execution),
         priority,
         status,
@@ -165,11 +170,11 @@ export function ProjectActions({
   if (currentStatus !== "IN_PROGRESS") {
     statusActions.push({
       status: "IN_PROGRESS",
-      label: "Start",
+      label: currentStatus === "ON_HOLD" ? "Gjenoppta" : "Start",
       icon: <Play className="mr-2 h-4 w-4" />,
     })
   }
-  if (currentStatus !== "ON_HOLD" && currentStatus !== "NOT_STARTED") {
+  if (currentStatus !== "ON_HOLD" && currentStatus !== "COMPLETED") {
     statusActions.push({
       status: "ON_HOLD",
       label: "Sett på vent",
@@ -211,6 +216,8 @@ export function ProjectActions({
           rows={3}
         />
       </div>
+
+      <ProjectScalePicker value={scale} onChange={setScale} />
 
       <div className="grid grid-cols-2 gap-4">
         <div className="flex flex-col gap-2">
@@ -280,7 +287,7 @@ export function ProjectActions({
               <SelectItem value="NOT_STARTED">Ikke startet</SelectItem>
               <SelectItem value="IN_PROGRESS">Pågår</SelectItem>
               <SelectItem value="COMPLETED">Fullført</SelectItem>
-              <SelectItem value="ON_HOLD">På vent</SelectItem>
+              <SelectItem value="ON_HOLD">På vent / inaktiv</SelectItem>
             </SelectContent>
           </Select>
         </div>

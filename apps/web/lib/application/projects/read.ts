@@ -3,6 +3,7 @@ import {
   type Priority,
   type Prisma,
   type ProjectExecution,
+  type ProjectScale,
   type ProjectStatus,
   type ProjectType,
 } from "@workspace/db"
@@ -104,9 +105,13 @@ type PageOptions = {
 
 export type ProjectFilter = {
   status?: ProjectStatus
-  /** Shorthand for every status except COMPLETED. Ignored when `status` is set. */
+  /**
+   * Shorthand for every status except COMPLETED, so ON_HOLD projects are
+   * included. Ignored when `status` is set.
+   */
   activeOnly?: boolean
   type?: ProjectType
+  scale?: ProjectScale
   execution?: ProjectExecution
   priority?: Priority
   dueBefore?: Date
@@ -137,6 +142,7 @@ function projectFilter(
     householdId: context.householdId,
     ...(status ? { status } : {}),
     ...(filter.type ? { type: filter.type } : {}),
+    ...(filter.scale ? { scale: filter.scale } : {}),
     ...(filter.execution ? { execution: filter.execution } : {}),
     ...(filter.priority ? { priority: filter.priority } : {}),
     ...(dueDate ? { dueDate } : {}),
@@ -165,6 +171,7 @@ export async function listProjectsPage(
         id: true,
         title: true,
         type: true,
+        scale: true,
         execution: true,
         status: true,
         priority: true,
@@ -216,6 +223,7 @@ export async function getProjectDetail(
       title: true,
       description: true,
       type: true,
+      scale: true,
       execution: true,
       status: true,
       priority: true,

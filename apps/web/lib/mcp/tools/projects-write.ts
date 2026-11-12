@@ -23,7 +23,9 @@ import {
   type McpToolDefinition,
 } from "./define"
 import {
+  projectScaleDescription,
   projectSchema,
+  projectStatusDescription,
   projectStepSchema,
   projectVendorSchema,
   serializeProject,
@@ -33,6 +35,7 @@ import {
 import {
   PRIORITIES,
   PROJECT_EXECUTIONS,
+  PROJECT_SCALES,
   PROJECT_STATUSES,
   PROJECT_TYPES,
   calendarDateInputSchema,
@@ -56,6 +59,10 @@ const projectFieldsInputSchema = {
     .describe(
       "MAINTENANCE (upkeep), REPAIR (fix something broken), RENOVATION (redo a room or surface), IMPROVEMENT (something new or better) or OTHER."
     ),
+  scale: z
+    .enum(PROJECT_SCALES)
+    .optional()
+    .describe(`${projectScaleDescription} Defaults to ROUTINE on create.`),
   execution: z
     .enum(PROJECT_EXECUTIONS)
     .nullable()
@@ -64,7 +71,10 @@ const projectFieldsInputSchema = {
       "Who does the work: SELF, VENDOR or MIXED; null when not decided. Vendors are only relevant for VENDOR and MIXED."
     ),
   priority: z.enum(PRIORITIES).optional(),
-  status: z.enum(PROJECT_STATUSES).optional(),
+  status: z
+    .enum(PROJECT_STATUSES)
+    .optional()
+    .describe(projectStatusDescription),
   estimatedDuration: shortTextInputSchema.describe(
     "Free text, e.g. '2 timer' or 'en helg'."
   ),
@@ -103,7 +113,7 @@ export const createProjectTool = defineWriteTool({
   scope: "maintenance:write",
   title: "Create a home project",
   description:
-    "Adds a project for the household, optionally with its checklist steps and vendor quotes in the same all-or-nothing call. Check list-projects first so the same project is not added twice. Type defaults to OTHER, priority to MEDIUM and status to NOT_STARTED. To buy things for it, create a shopping list with create-shopping-list and projectId. Returns the saved project with its steps and vendors.",
+    "Adds a project for the household, optionally with its checklist steps and vendor quotes in the same all-or-nothing call. Check list-projects first so the same project is not added twice. Type defaults to OTHER, scale to ROUTINE, priority to MEDIUM and status to NOT_STARTED; set scale MAJOR for larger construction jobs like drainage or paving. To buy things for it, create a shopping list with create-shopping-list and projectId. Returns the saved project with its steps and vendors.",
   inputSchema: {
     title: nameInputSchema,
     ...projectFieldsInputSchema,
@@ -148,7 +158,7 @@ export const updateProjectTool = defineWriteTool({
   scope: "maintenance:write",
   title: "Update a home project",
   description:
-    "Changes the given fields of one project, including its status, type and who does the work, and leaves every omitted field as it is; null clears an optional field. Steps and vendors have their own tools. Returns the saved project.",
+    "Changes the given fields of one project, including its status, type, scale and who does the work, and leaves every omitted field as it is; null clears an optional field. Steps and vendors have their own tools. Returns the saved project.",
   inputSchema: {
     projectId: idSchema.describe("Id from list-projects."),
     title: nameInputSchema.optional(),
@@ -178,7 +188,7 @@ export const deleteProjectTool = defineWriteTool({
   scope: "maintenance:write",
   title: "Delete a home project",
   description:
-    "Permanently deletes one project with its steps and vendors. Linked shopping lists are kept but no longer belong to a project. Prefer status COMPLETED or ON_HOLD for finished or paused work; delete only mistakes and duplicates, and confirm with the user first.",
+    "Permanently deletes one project with its steps and vendors. Linked shopping lists are kept but no longer belong to a project. Prefer status COMPLETED for finished work and ON_HOLD for work that is paused or not being pursued but worth keeping; delete only mistakes and duplicates, and confirm with the user first.",
   inputSchema: {
     projectId: idSchema.describe("Id from list-projects."),
   },
