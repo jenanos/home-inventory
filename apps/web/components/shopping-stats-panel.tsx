@@ -1,7 +1,6 @@
 "use client"
 
 import Link from "next/link"
-import { Card, CardContent } from "@workspace/ui/components/card"
 import { Progress } from "@workspace/ui/components/progress"
 import {
   Tabs,
@@ -9,7 +8,6 @@ import {
   TabsList,
   TabsTrigger,
 } from "@workspace/ui/components/tabs"
-import { cn } from "@workspace/ui/lib/utils"
 
 import type {
   PurchaseMonth,
@@ -18,6 +16,7 @@ import type {
 } from "@/lib/dashboard-stats"
 import { PRIORITY_CONFIG, formatNOK } from "@/lib/project-labels"
 import { TIMEFRAME_LABELS } from "@/lib/shopping-timeframe"
+import { ExpandableStats } from "./expandable-stats"
 import { StatBreakdown, StatFigure, type BreakdownRow } from "./stat-breakdown"
 
 const TIMEFRAME_ROW_LABELS: Record<TimeframeBucket, string> = {
@@ -98,94 +97,96 @@ export function ShoppingStatsPanel({
     categories.map(({ name, ...tally }) => ({ key: name, label: name, tally }))
 
   return (
-    <Card size="sm" className={cn("shadow-sm", className)}>
-      <CardContent className="flex flex-col gap-4">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <StatFigure label="Kjøpt" tally={purchased} noun={ITEM_NOUN} />
-          <StatFigure label="Gjenstår" tally={remaining} noun={ITEM_NOUN} />
-          <StatFigure
-            label="Haster (snarest + snart)"
-            tally={urgent}
-            noun={ITEM_NOUN}
-            className="col-span-2 sm:col-span-1"
+    <ExpandableStats
+      className={className}
+      summary={
+        <>
+          <div className="grid grid-cols-2 gap-3">
+            <StatFigure label="Kjøpt" tally={purchased} noun={ITEM_NOUN} />
+            <StatFigure label="Gjenstår" tally={remaining} noun={ITEM_NOUN} />
+          </div>
+          <div className="flex items-center gap-3">
+            <Progress value={progress} className="flex-1" />
+            <span className="shrink-0 text-xs font-medium text-muted-foreground tabular-nums">
+              {progress} % kjøpt
+            </span>
+          </div>
+        </>
+      }
+    >
+      <StatFigure
+        label="Haster (snarest + snart)"
+        tally={urgent}
+        noun={ITEM_NOUN}
+      />
+
+      <Tabs defaultValue="remaining" className="gap-3">
+        <TabsList variant="line" className="w-full justify-start">
+          <TabsTrigger value="remaining" className="flex-none">
+            Gjenstående
+          </TabsTrigger>
+          <TabsTrigger value="purchased" className="flex-none">
+            Gjennomførte
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="remaining">
+          <Tabs defaultValue="timeframe" className="gap-3">
+            <TabsList className="h-8">
+              <TabsTrigger value="timeframe" className="text-xs">
+                Når
+              </TabsTrigger>
+              <TabsTrigger value="priority" className="text-xs">
+                Prioritet
+              </TabsTrigger>
+              <TabsTrigger value="category" className="text-xs">
+                Kategori
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="timeframe">
+              <StatBreakdown
+                rows={timeframeRows}
+                countLabel={ITEM_NOUN}
+                emptyText="Ingen gjenstående innkjøp."
+              />
+            </TabsContent>
+            <TabsContent value="priority">
+              <StatBreakdown
+                rows={priorityRows}
+                countLabel={ITEM_NOUN}
+                emptyText="Ingen gjenstående innkjøp."
+              />
+            </TabsContent>
+            <TabsContent value="category">
+              <StatBreakdown
+                rows={toCategoryRows(stats.remainingByCategory)}
+                countLabel={ITEM_NOUN}
+                emptyText="Ingen gjenstående innkjøp."
+              />
+            </TabsContent>
+          </Tabs>
+        </TabsContent>
+
+        <TabsContent value="purchased" className="flex flex-col gap-4">
+          <PurchasedPeriods stats={stats} />
+          <PurchaseHistory
+            months={stats.purchasesByMonth}
+            moveInPeriodEndsOn={stats.moveInPeriodEndsOn}
           />
-        </div>
-
-        <div className="flex items-center gap-3">
-          <Progress value={progress} className="flex-1" />
-          <span className="shrink-0 text-xs font-medium text-muted-foreground tabular-nums">
-            {progress} % kjøpt
-          </span>
-        </div>
-
-        <Tabs defaultValue="remaining" className="gap-3">
-          <TabsList variant="line" className="w-full justify-start">
-            <TabsTrigger value="remaining" className="flex-none">
-              Gjenstående
-            </TabsTrigger>
-            <TabsTrigger value="purchased" className="flex-none">
-              Gjennomførte
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="remaining">
-            <Tabs defaultValue="timeframe" className="gap-3">
-              <TabsList className="h-8">
-                <TabsTrigger value="timeframe" className="text-xs">
-                  Når
-                </TabsTrigger>
-                <TabsTrigger value="priority" className="text-xs">
-                  Prioritet
-                </TabsTrigger>
-                <TabsTrigger value="category" className="text-xs">
-                  Kategori
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value="timeframe">
-                <StatBreakdown
-                  rows={timeframeRows}
-                  countLabel={ITEM_NOUN}
-                  emptyText="Ingen gjenstående innkjøp."
-                />
-              </TabsContent>
-              <TabsContent value="priority">
-                <StatBreakdown
-                  rows={priorityRows}
-                  countLabel={ITEM_NOUN}
-                  emptyText="Ingen gjenstående innkjøp."
-                />
-              </TabsContent>
-              <TabsContent value="category">
-                <StatBreakdown
-                  rows={toCategoryRows(stats.remainingByCategory)}
-                  countLabel={ITEM_NOUN}
-                  emptyText="Ingen gjenstående innkjøp."
-                />
-              </TabsContent>
-            </Tabs>
-          </TabsContent>
-
-          <TabsContent value="purchased" className="flex flex-col gap-4">
-            <PurchasedPeriods stats={stats} />
-            <PurchaseHistory
-              months={stats.purchasesByMonth}
-              moveInPeriodEndsOn={stats.moveInPeriodEndsOn}
-            />
-            {stats.purchasedByCategory.length > 0 && (
-              <div className="flex flex-col gap-2">
-                <p className="text-xs font-medium text-muted-foreground">
-                  Per kategori
-                </p>
-                <StatBreakdown
-                  rows={toCategoryRows(stats.purchasedByCategory)}
-                  countLabel={ITEM_NOUN}
-                />
-              </div>
-            )}
-          </TabsContent>
-        </Tabs>
-      </CardContent>
-    </Card>
+          {stats.purchasedByCategory.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <p className="text-xs font-medium text-muted-foreground">
+                Per kategori
+              </p>
+              <StatBreakdown
+                rows={toCategoryRows(stats.purchasedByCategory)}
+                countLabel={ITEM_NOUN}
+              />
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
+    </ExpandableStats>
   )
 }
 
