@@ -17,6 +17,8 @@ import { MembersSection } from "./members-section"
 import { CategoriesSection } from "./categories-section"
 import { ConnectedAppsSection } from "./connected-apps-section"
 import { AppearanceSection } from "./appearance-section"
+import { MoveInPeriodForm } from "./move-in-period-form"
+import { getHouseholdSettings } from "@/lib/application/households/read"
 import { COLOR_PALETTE_COOKIE, parseColorPalette } from "@/lib/color-palettes"
 
 // Explicit time zone: the server runs in UTC, the household does not.
@@ -27,22 +29,24 @@ const dateFormatter = new Intl.DateTimeFormat("nb-NO", {
 })
 
 export default async function SettingsPage() {
-  const { session, membership } = await requireHousehold()
+  const { session, membership, context } = await requireHousehold()
   const isAdmin = await isCurrentUserAdmin()
 
-  const [user, members, categories, grants, cookieStore] = await Promise.all([
-    db.user.findUnique({ where: { id: session.user.id } }),
-    db.householdMember.findMany({
-      where: { householdId: membership.householdId },
-      include: { user: true },
-    }),
-    db.category.findMany({
-      where: { householdId: membership.householdId },
-      orderBy: { name: "asc" },
-    }),
-    listConnectedApps(session.user.id),
-    cookies(),
-  ])
+  const [user, members, categories, grants, cookieStore, householdSettings] =
+    await Promise.all([
+      db.user.findUnique({ where: { id: session.user.id } }),
+      db.householdMember.findMany({
+        where: { householdId: membership.householdId },
+        include: { user: true },
+      }),
+      db.category.findMany({
+        where: { householdId: membership.householdId },
+        orderBy: { name: "asc" },
+      }),
+      listConnectedApps(session.user.id),
+      cookies(),
+      getHouseholdSettings(context),
+    ])
   const palette = parseColorPalette(
     cookieStore.get(COLOR_PALETTE_COOKIE)?.value
   )
@@ -110,6 +114,20 @@ export default async function SettingsPage() {
             householdId={membership.householdId}
             isOwner={isOwner}
             currentUserId={session.user.id}
+          />
+        </CardContent>
+      </Card>
+
+      <Card id="husstand" className="scroll-mt-20">
+        <CardHeader>
+          <CardTitle>Innflytting</CardTitle>
+          <CardDescription>
+            Skill innkjøpene fra innflyttingen fra det som er kjøpt senere.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <MoveInPeriodForm
+            moveInPeriodEndsOn={householdSettings.moveInPeriodEndsOn}
           />
         </CardContent>
       </Card>

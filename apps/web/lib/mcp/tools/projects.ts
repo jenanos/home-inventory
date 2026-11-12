@@ -16,6 +16,7 @@ import { defineTool, READ_ONLY_ANNOTATIONS } from "./define"
 import {
   PRIORITIES,
   PROJECT_EXECUTIONS,
+  PROJECT_SCALES,
   PROJECT_STATUSES,
   PROJECT_TYPES,
   assertId,
@@ -48,13 +49,29 @@ const executionSchema = z
     "Who does the work: SELF (the household), VENDOR (hired), MIXED (both), or null when not decided."
   )
 
+/**
+ * Shared by the read and write tools so assistants get one description of
+ * each status. ON_HOLD is spelled out because it is the right state for a
+ * project nobody is working on but the household wants to keep.
+ */
+export const projectStatusDescription =
+  "NOT_STARTED (planned, not begun), IN_PROGRESS (being worked on), COMPLETED (done) or ON_HOLD (inactive or paused: the household is not working on it now but wants to keep it, e.g. postponed or waiting for money, season or a vendor). Use ON_HOLD rather than deleting a project that is not being pursued right now."
+
+export const projectScaleDescription =
+  "How big the project is: ROUTINE for recurring upkeep like cleaning gutters, MAJOR for larger construction jobs like drainage or paving. Independent of type."
+
+const statusSchema = z.enum(PROJECT_STATUSES).describe(projectStatusDescription)
+
+const scaleSchema = z.enum(PROJECT_SCALES).describe(projectScaleDescription)
+
 export const projectSchema = z.object({
   id: z.string(),
   title: z.string(),
   description: z.string().nullable(),
   type: z.enum(PROJECT_TYPES),
+  scale: scaleSchema,
   execution: executionSchema,
-  status: z.enum(PROJECT_STATUSES),
+  status: statusSchema,
   priority: z.enum(PRIORITIES),
   estimatedDuration: z.string().nullable(),
   estimatedPrice: storedMoneySchema,
@@ -68,6 +85,7 @@ export function serializeProject(project: {
   title: string
   description: string | null
   type: (typeof PROJECT_TYPES)[number]
+  scale: (typeof PROJECT_SCALES)[number]
   execution: (typeof PROJECT_EXECUTIONS)[number] | null
   status: (typeof PROJECT_STATUSES)[number]
   priority: (typeof PRIORITIES)[number]
@@ -82,6 +100,7 @@ export function serializeProject(project: {
     title: project.title,
     description: project.description,
     type: project.type,
+    scale: project.scale,
     execution: project.execution,
     status: project.status,
     priority: project.priority,
@@ -183,12 +202,19 @@ export const listProjectsTool = defineTool({
   description:
     "Lists the household's projects (maintenance, repairs, renovations, improvements and anything else) in due-date order, with undated projects last. Returns a compact row per project; use get-project for the description, steps, vendors and linked shopping lists.",
   inputSchema: {
-    status: z.enum(PROJECT_STATUSES).optional(),
+    status: statusSchema.optional(),
     activeOnly: z
       .boolean()
       .optional()
-      .describe("Only projects that are not COMPLETED. Ignored with status."),
+      .describe(
+        "Only projects that are not COMPLETED (ON_HOLD is included). Ignored with status."
+      ),
     type: z.enum(PROJECT_TYPES).optional(),
+    scale: scaleSchema
+      .optional()
+      .describe(
+        "Only ROUTINE (recurring upkeep like cleaning gutters) or MAJOR (larger construction jobs like drainage or paving) projects."
+      ),
     execution: z.enum(PROJECT_EXECUTIONS).optional(),
     priority: z.enum(PRIORITIES).optional(),
     query: filterTextSchema
@@ -208,8 +234,9 @@ export const listProjectsTool = defineTool({
         id: z.string(),
         title: z.string(),
         type: z.enum(PROJECT_TYPES),
+        scale: scaleSchema,
         execution: executionSchema,
-        status: z.enum(PROJECT_STATUSES),
+        status: statusSchema,
         priority: z.enum(PRIORITIES),
         estimatedDuration: z.string().nullable(),
         estimatedPrice: storedMoneySchema,
@@ -232,6 +259,7 @@ export const listProjectsTool = defineTool({
       status: args.status,
       activeOnly: args.activeOnly,
       type: args.type,
+      scale: args.scale,
       execution: args.execution,
       priority: args.priority,
       query: args.query,
@@ -243,6 +271,7 @@ export const listProjectsTool = defineTool({
       id: project.id,
       title: project.title,
       type: project.type,
+      scale: project.scale,
       execution: project.execution,
       status: project.status,
       priority: project.priority,

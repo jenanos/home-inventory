@@ -44,6 +44,8 @@ export const PROJECT_TYPES = [
   "OTHER",
 ] as const
 
+export const PROJECT_SCALES = ["ROUTINE", "MAJOR"] as const
+
 export const PROJECT_EXECUTIONS = ["SELF", "VENDOR", "MIXED"] as const
 
 export const WATERING_NEEDS = ["LOW", "MEDIUM", "HIGH"] as const

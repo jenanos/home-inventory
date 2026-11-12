@@ -22,10 +22,11 @@ Shopping:
 
 Projects:
 - A project is anything the household wants done to the home: maintenance, repairs, renovations, improvements or other. Set type accordingly; many projects are done by the household itself.
+- scale is ROUTINE for recurring upkeep (cleaning gutters, changing filters) and MAJOR for larger construction jobs (drainage, paving); it is independent of type.
 - execution says who does the work: SELF, VENDOR or MIXED (null if not decided). Add vendor quotes only when someone is hired.
 - Lay out a project in one call with create-project and its steps; mark progress with update-project-step completed true, and set status IN_PROGRESS or COMPLETED on the project.
 - To buy materials or equipment for a project, create a shopping list with create-shopping-list and projectId (or link an existing one with update-shopping-list), then add items to it. get-project shows its lists with totals.
-- Prefer COMPLETED or ON_HOLD over deleting; delete only mistakes and duplicates, and confirm with the user first.
+- Use ON_HOLD for a project the household is not working on now but wants to keep (paused, postponed, inactive); filter with activeOnly to see everything not COMPLETED. Prefer COMPLETED or ON_HOLD over deleting; delete only mistakes and duplicates, and confirm with the user first.
 
 Budget:
 - Amounts are NOK numbers. An entry has amount and frequency (WEEKLY, MONTHLY, QUARTERLY, SEMIANNUAL, YEARLY): enter a yearly bill as it is billed, the app converts it to a monthly figure.

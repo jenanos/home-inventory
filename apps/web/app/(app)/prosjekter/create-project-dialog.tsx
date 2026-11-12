@@ -36,7 +36,8 @@ import { Separator } from "@workspace/ui/components/separator"
 import { cn } from "@workspace/ui/lib/utils"
 import { Plus, Loader2, CalendarIcon } from "lucide-react"
 import { createProject } from "@/lib/actions/project"
-import type { Priority, ProjectType } from "@workspace/db"
+import type { Priority, ProjectScale, ProjectType } from "@workspace/db"
+import { ProjectScalePicker } from "@/components/project-scale-picker"
 import {
   EXECUTION_UNSET,
   PROJECT_EXECUTIONS,
@@ -47,7 +48,12 @@ import {
 } from "@/lib/project-labels"
 import { useMediaQuery } from "@/hooks/use-media-query"
 
-export function CreateProjectDialog() {
+export function CreateProjectDialog({
+  defaultScale = "ROUTINE",
+}: {
+  /** Preselected from the scale the page is filtered on. */
+  defaultScale?: ProjectScale
+}) {
   const [open, setOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
   const isDesktop = useMediaQuery("(min-width: 768px)")
@@ -55,6 +61,7 @@ export function CreateProjectDialog() {
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [type, setType] = useState<ProjectType>("OTHER")
+  const [scale, setScale] = useState<ProjectScale>(defaultScale)
   const [execution, setExecution] = useState<string>(EXECUTION_UNSET)
   const [priority, setPriority] = useState<Priority>("MEDIUM")
   const [estimatedDuration, setEstimatedDuration] = useState("")
@@ -66,12 +73,21 @@ export function CreateProjectDialog() {
     setTitle("")
     setDescription("")
     setType("OTHER")
+    setScale(defaultScale)
     setExecution(EXECUTION_UNSET)
     setPriority("MEDIUM")
     setEstimatedDuration("")
     setEstimatedPrice("")
     setDueDate(undefined)
     setError("")
+  }
+
+  // The dialog stays mounted when the page's scale filter changes, so the
+  // initial state would keep the first filter's scale. Take the current one
+  // every time the dialog opens.
+  function handleOpenChange(next: boolean) {
+    if (next) setScale(defaultScale)
+    setOpen(next)
   }
 
   function handleSubmit() {
@@ -86,6 +102,7 @@ export function CreateProjectDialog() {
           title: title.trim(),
           description: description.trim() || undefined,
           type,
+          scale,
           execution: executionFromSelect(execution),
           priority,
           estimatedDuration: estimatedDuration.trim() || undefined,
@@ -128,6 +145,8 @@ export function CreateProjectDialog() {
           rows={3}
         />
       </div>
+
+      <ProjectScalePicker value={scale} onChange={setScale} />
 
       <div className="grid grid-cols-2 gap-4">
         <div className="flex flex-col gap-2">
@@ -246,7 +265,7 @@ export function CreateProjectDialog() {
 
   if (isDesktop) {
     return (
-      <Sheet open={open} onOpenChange={setOpen}>
+      <Sheet open={open} onOpenChange={handleOpenChange}>
         <SheetTrigger asChild>
           <Button>
             <Plus className="mr-2 h-4 w-4" />
@@ -264,7 +283,7 @@ export function CreateProjectDialog() {
   }
 
   return (
-    <Drawer open={open} onOpenChange={setOpen}>
+    <Drawer open={open} onOpenChange={handleOpenChange}>
       <DrawerTrigger asChild>
         <Button>
           <Plus className="mr-2 h-4 w-4" />

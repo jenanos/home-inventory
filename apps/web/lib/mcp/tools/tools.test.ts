@@ -335,6 +335,7 @@ beforeEach(() => {
       id: PROJECT_ID,
       title: "Male veggen",
       type: "RENOVATION",
+      scale: "ROUTINE",
       execution: "SELF",
       status: "NOT_STARTED",
       priority: "HIGH",
@@ -352,6 +353,7 @@ beforeEach(() => {
     title: "Male veggen",
     description: "Stue og gang",
     type: "RENOVATION",
+    scale: "MAJOR",
     execution: "MIXED",
     status: "NOT_STARTED",
     priority: "HIGH",
@@ -885,7 +887,7 @@ describe("project reads", () => {
     })
 
     expect(structured).toMatchObject({
-      project: { type: "RENOVATION", execution: "MIXED" },
+      project: { type: "RENOVATION", scale: "MAJOR", execution: "MIXED" },
       shoppingLists: [
         {
           id: LIST_ID,
@@ -933,6 +935,7 @@ describe("project reads", () => {
     expect(structured).toMatchObject({
       projects: [
         {
+          scale: "ROUTINE",
           execution: "SELF",
           stepCount: 2,
           completedStepCount: 1,
@@ -941,5 +944,16 @@ describe("project reads", () => {
         },
       ],
     })
+  })
+
+  it("filters on scale and rejects an unknown scale", async () => {
+    await callTool("list-projects", { scale: "MAJOR" })
+
+    expect(mocks.projectCount).toHaveBeenCalledWith({
+      where: { householdId: "household-1", scale: "MAJOR" },
+    })
+
+    const { structured } = await callTool("list-projects", { scale: "HUGE" })
+    expect(structured).toMatchObject({ error: { code: "VALIDATION_ERROR" } })
   })
 })

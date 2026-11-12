@@ -389,6 +389,66 @@ describe("project kinds", () => {
     ).rejects.toMatchObject({ code: "VALIDATION_ERROR" })
   })
 
+  it("defaults to scale ROUTINE, sets MAJOR on create and update, and rejects unknown values", async () => {
+    const { context } = await fixtures.createHousehold()
+
+    const routine = await createProject(context, { title: "Rense takrenner" })
+    expect(routine.scale).toBe("ROUTINE")
+
+    const major = await createProject(context, {
+      title: "Drenere rundt huset",
+      scale: "MAJOR",
+      steps: [{ title: "Grave grøft" }],
+    })
+    expect(major).toMatchObject({ scale: "MAJOR", type: "OTHER" })
+
+    const updated = await updateProject(context, routine.id, {
+      scale: "MAJOR",
+    })
+    expect(updated.scale).toBe("MAJOR")
+
+    // Omitting scale leaves it as it is.
+    const untouched = await updateProject(context, routine.id, {
+      title: "Rense takrenner og nedløp",
+    })
+    expect(untouched.scale).toBe("MAJOR")
+
+    await expect(
+      updateProject(context, routine.id, { scale: "HUGE" as never })
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" })
+    await expect(
+      updateProject(context, routine.id, { scale: null as never })
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" })
+    await expect(
+      createProject(context, { title: "Ugyldig", scale: "HUGE" as never })
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" })
+  })
+
+  it("create-project and update-project accept and return scale", async () => {
+    const { context } = await fixtures.createHousehold()
+    const session = fixtures.session(context, ["maintenance:write"])
+
+    const created = await tool("create-project").invoke(
+      { title: "Legge belegningsstein", scale: "MAJOR" },
+      session
+    )
+    expect(created.isError).toBeUndefined()
+    expect(created.structuredContent).toMatchObject({
+      project: { title: "Legge belegningsstein", scale: "MAJOR" },
+    })
+
+    const projectId = (created.structuredContent as { project: { id: string } })
+      .project.id
+    const updated = await tool("update-project").invoke(
+      { projectId, scale: "ROUTINE" },
+      session
+    )
+    expect(updated.isError).toBeUndefined()
+    expect(updated.structuredContent).toMatchObject({
+      project: { id: projectId, scale: "ROUTINE" },
+    })
+  })
+
   it("creates steps in order and vendors in one call, or nothing at all", async () => {
     const { context, householdId } = await fixtures.createHousehold()
 

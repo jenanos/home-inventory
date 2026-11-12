@@ -24,6 +24,7 @@ import {
   PRIORITY_CONFIG,
   PROJECT_EXECUTION_LABELS,
   PROJECT_STATUS_CONFIG,
+  PROJECT_SCALE_LABEL_ONE,
   PROJECT_TYPE_LABELS,
   formatNOK,
   showsVendors,
@@ -129,6 +130,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
             title: project.title,
             description: project.description,
             type: project.type,
+            scale: project.scale,
             execution: project.execution,
             priority: project.priority,
             status: project.status,
@@ -145,6 +147,9 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
         <InfoCard icon={Tag} label="Type">
           <p className="text-sm font-medium">
             {PROJECT_TYPE_LABELS[project.type]}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {PROJECT_SCALE_LABEL_ONE[project.scale]}
           </p>
         </InfoCard>
 

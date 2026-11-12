@@ -2,6 +2,7 @@ import Link from "next/link"
 import type {
   Priority,
   ProjectExecution,
+  ProjectScale,
   ProjectStatus,
   ProjectType,
 } from "@workspace/db"
@@ -21,6 +22,7 @@ import {
   PRIORITY_CONFIG,
   PROJECT_EXECUTION_LABELS,
   PROJECT_STATUS_CONFIG,
+  PROJECT_SCALE_LABEL_ONE,
   PROJECT_TYPE_LABELS,
   formatNOK,
 } from "@/lib/project-labels"
@@ -32,6 +34,7 @@ export type ProjectCardData = {
   title: string
   description: string | null
   type: ProjectType
+  scale: ProjectScale
   execution: ProjectExecution | null
   status: ProjectStatus
   priority: Priority
@@ -89,6 +92,11 @@ export function ProjectCard({
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           <div className="flex flex-wrap gap-2">
+            {project.scale === "MAJOR" && (
+              <Badge variant="outline" className="border-primary/40">
+                {PROJECT_SCALE_LABEL_ONE.MAJOR}
+              </Badge>
+            )}
             <Badge variant="outline">{PROJECT_TYPE_LABELS[project.type]}</Badge>
             <Badge variant="outline" className={priority.className}>
               {priority.label}
