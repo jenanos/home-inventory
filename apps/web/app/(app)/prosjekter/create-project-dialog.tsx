@@ -82,6 +82,14 @@ export function CreateProjectDialog({
     setError("")
   }
 
+  // The dialog stays mounted when the page's scale filter changes, so the
+  // initial state would keep the first filter's scale. Take the current one
+  // every time the dialog opens.
+  function handleOpenChange(next: boolean) {
+    if (next) setScale(defaultScale)
+    setOpen(next)
+  }
+
   function handleSubmit() {
     if (!title.trim()) {
       setError("Tittel er påkrevd")
@@ -257,7 +265,7 @@ export function CreateProjectDialog({
 
   if (isDesktop) {
     return (
-      <Sheet open={open} onOpenChange={setOpen}>
+      <Sheet open={open} onOpenChange={handleOpenChange}>
         <SheetTrigger asChild>
           <Button>
             <Plus className="mr-2 h-4 w-4" />
@@ -275,7 +283,7 @@ export function CreateProjectDialog({
   }
 
   return (
-    <Drawer open={open} onOpenChange={setOpen}>
+    <Drawer open={open} onOpenChange={handleOpenChange}>
       <DrawerTrigger asChild>
         <Button>
           <Plus className="mr-2 h-4 w-4" />
