@@ -1,8 +1,8 @@
-import { Card, CardContent } from "@workspace/ui/components/card"
 import { cn } from "@workspace/ui/lib/utils"
 
 import type { ProjectStats, ScaleKey } from "@/lib/dashboard-stats"
 import { PRIORITY_CONFIG, PROJECT_SCALE_LABELS } from "@/lib/project-labels"
+import { ExpandableStats } from "./expandable-stats"
 import { StatBreakdown, StatFigure, type BreakdownRow } from "./stat-breakdown"
 
 const PROJECT_NOUN: [string, string] = ["prosjekt", "prosjekter"]
@@ -61,9 +61,10 @@ export function ProjectStatsSummary({
   )
 
   return (
-    <Card size="sm" className={cn("shadow-sm", className)}>
-      <CardContent className="flex flex-col gap-4">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+    <ExpandableStats
+      className={className}
+      summary={
+        <div className="grid grid-cols-2 gap-3">
           <StatFigure
             label="Gjenstår (aktive)"
             tally={stats.remaining}
@@ -74,73 +75,73 @@ export function ProjectStatsSummary({
             tally={stats.completed}
             noun={PROJECT_NOUN}
           />
-          <StatFigure
-            label="På vent"
-            tally={stats.onHold}
-            noun={PROJECT_NOUN}
-            muted
-            note="ikke medregnet"
-            className="col-span-2 sm:col-span-1"
-          />
         </div>
+      }
+    >
+      <StatFigure
+        label="På vent"
+        tally={stats.onHold}
+        noun={PROJECT_NOUN}
+        muted
+        note="ikke medregnet"
+      />
 
-        {total > 0 && (
-          <div className="flex flex-col gap-2">
-            <div
-              className="flex h-2 w-full gap-0.5 overflow-hidden rounded-full bg-muted"
-              role="img"
-              aria-label={STATUS_SEGMENTS.map(
-                (segment) => `${stats[segment.key]} ${segment.label}`
-              ).join(", ")}
-            >
-              {STATUS_SEGMENTS.map((segment) =>
-                stats[segment.key] > 0 ? (
-                  <div
-                    key={segment.key}
-                    className={segment.className}
-                    style={{ width: `${(stats[segment.key] / total) * 100}%` }}
-                  />
-                ) : null
-              )}
-            </div>
-            <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-              {STATUS_SEGMENTS.map((segment) => (
-                <li key={segment.key} className="flex items-center gap-1.5">
-                  <span
-                    className={cn("h-2 w-2 rounded-full", segment.className)}
-                    aria-hidden
-                  />
-                  <span className="font-medium text-foreground tabular-nums">
-                    {stats[segment.key]}
-                  </span>
-                  {segment.label}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {stats.remaining.count > 0 && (
+      {total > 0 && (
+        <div className="flex flex-col gap-2">
           <div
-            className={cn("grid gap-4", scaleHref && "sm:grid-cols-2 sm:gap-6")}
+            className="flex h-2 w-full gap-0.5 overflow-hidden rounded-full bg-muted"
+            role="img"
+            aria-label={STATUS_SEGMENTS.map(
+              (segment) => `${stats[segment.key]} ${segment.label}`
+            ).join(", ")}
           >
-            {scaleHref && (
-              <div className="flex flex-col gap-2">
-                <p className="text-xs font-medium text-muted-foreground">
-                  Gjenstår per omfang
-                </p>
-                <StatBreakdown rows={scaleRows} countLabel={PROJECT_NOUN} />
-              </div>
+            {STATUS_SEGMENTS.map((segment) =>
+              stats[segment.key] > 0 ? (
+                <div
+                  key={segment.key}
+                  className={segment.className}
+                  style={{ width: `${(stats[segment.key] / total) * 100}%` }}
+                />
+              ) : null
             )}
+          </div>
+          <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+            {STATUS_SEGMENTS.map((segment) => (
+              <li key={segment.key} className="flex items-center gap-1.5">
+                <span
+                  className={cn("h-2 w-2 rounded-full", segment.className)}
+                  aria-hidden
+                />
+                <span className="font-medium text-foreground tabular-nums">
+                  {stats[segment.key]}
+                </span>
+                {segment.label}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {stats.remaining.count > 0 && (
+        <div
+          className={cn("grid gap-4", scaleHref && "sm:grid-cols-2 sm:gap-6")}
+        >
+          {scaleHref && (
             <div className="flex flex-col gap-2">
               <p className="text-xs font-medium text-muted-foreground">
-                Gjenstår per prioritet
+                Gjenstår per omfang
               </p>
-              <StatBreakdown rows={priorityRows} countLabel={PROJECT_NOUN} />
+              <StatBreakdown rows={scaleRows} countLabel={PROJECT_NOUN} />
             </div>
+          )}
+          <div className="flex flex-col gap-2">
+            <p className="text-xs font-medium text-muted-foreground">
+              Gjenstår per prioritet
+            </p>
+            <StatBreakdown rows={priorityRows} countLabel={PROJECT_NOUN} />
           </div>
-        )}
-      </CardContent>
-    </Card>
+        </div>
+      )}
+    </ExpandableStats>
   )
 }
