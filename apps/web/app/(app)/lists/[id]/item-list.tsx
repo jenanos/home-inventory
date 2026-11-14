@@ -264,7 +264,14 @@ function ItemCard({
         onClick={onEdit}
         role="button"
         tabIndex={0}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onEdit() }}
+        onKeyDown={(e) => {
+          // Ignore keys bubbling up from nested controls (e.g. the product link)
+          if (e.target !== e.currentTarget) return
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault()
+            onEdit()
+          }
+        }}
       >
         <div className="flex items-start justify-between gap-2 md:gap-6">
           <p
