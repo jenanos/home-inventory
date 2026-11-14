@@ -70,11 +70,11 @@ export default async function HagePage({ searchParams }: HagePageProps) {
       </div>
 
       {beds.length > 0 && plants.length > 0 && (
-        <div className="flex items-center gap-2 overflow-x-auto pb-1">
-          <span className="w-10 shrink-0 text-xs text-muted-foreground">
+        <div className="flex items-start gap-2">
+          <span className="flex h-6.5 w-10 shrink-0 items-center text-xs text-muted-foreground">
             Bed
           </span>
-          <div className="flex gap-1.5">
+          <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">
             <FilterChip href="/hage" active={!selectedBed && !withoutBed}>
               Alle ({plants.length})
             </FilterChip>
