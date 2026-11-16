@@ -238,11 +238,11 @@ function FilterRow({
   children: React.ReactNode
 }) {
   return (
-    <div className="flex items-center gap-2 overflow-x-auto">
-      <span className="w-14 shrink-0 text-xs text-muted-foreground">
+    <div className="flex items-start gap-2">
+      <span className="flex h-6.5 w-14 shrink-0 items-center text-xs text-muted-foreground">
         {label}
       </span>
-      <div className="flex gap-1.5">{children}</div>
+      <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">{children}</div>
     </div>
   )
 }

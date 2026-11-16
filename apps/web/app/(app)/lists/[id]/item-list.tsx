@@ -4,14 +4,6 @@ import { useState, useTransition, useMemo } from "react"
 import { useSearchParams } from "next/navigation"
 import { Checkbox } from "@workspace/ui/components/checkbox"
 import { Badge } from "@workspace/ui/components/badge"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@workspace/ui/components/table"
 import { Button } from "@workspace/ui/components/button"
 import { cn } from "@workspace/ui/lib/utils"
 import {
@@ -189,42 +181,14 @@ export function ItemList({ items, categories, members, listId }: ItemListProps) 
 
   return (
     <>
-      {/* Mobile: Card view */}
-      <div className="flex flex-col gap-2 md:hidden">
+      <div className="flex flex-col gap-2">
         {filteredAndSorted.map((item) => (
-          <MobileItemCard
+          <ItemCard
             key={item.id}
             item={item}
             onEdit={() => setEditingItem(item)}
           />
         ))}
-      </div>
-
-      {/* Desktop: Table view */}
-      <div className="hidden md:block">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-10" />
-              <TableHead>Navn</TableHead>
-              <TableHead>Kategori</TableHead>
-              <TableHead>Prioritet</TableHead>
-              <TableHead>Pris</TableHead>
-              <TableHead>Butikk</TableHead>
-              <TableHead>Tildelt</TableHead>
-              <TableHead className="w-10" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredAndSorted.map((item) => (
-              <DesktopItemRow
-                key={item.id}
-                item={item}
-                onEdit={() => setEditingItem(item)}
-              />
-            ))}
-          </TableBody>
-        </Table>
       </div>
 
       <EditItemDialog
@@ -241,7 +205,7 @@ export function ItemList({ items, categories, members, listId }: ItemListProps) 
   )
 }
 
-function MobileItemCard({
+function ItemCard({
   item,
   onEdit,
 }: {
@@ -265,14 +229,19 @@ function MobileItemCard({
     })
   }
 
+  const metaClass =
+    "flex items-center gap-0.5 text-[10px] text-muted-foreground md:gap-1 md:text-xs"
+  const metaIconClass = "h-2.5 w-2.5 md:h-3 md:w-3"
+  const badgeClass = "h-4 px-1.5 text-[10px] md:h-5 md:px-2 md:text-xs"
+
   return (
     <div
       className={cn(
-        "group flex items-start gap-3 rounded-lg border bg-card p-3 ring-1 ring-foreground/5 transition-colors",
+        "group flex items-start gap-3 rounded-lg border bg-card p-3 ring-1 ring-foreground/5 transition-colors md:gap-4 md:px-4 md:hover:bg-muted/40",
         isMuted && "opacity-60"
       )}
     >
-      <div className="flex w-10 shrink-0 flex-col items-center gap-3 pt-0.5">
+      <div className="flex w-10 shrink-0 flex-col items-center gap-3 pt-0.5 md:w-12">
         <Checkbox
           checked={isPurchased}
           onCheckedChange={handleToggle}
@@ -284,7 +253,7 @@ function MobileItemCard({
           <img
             src={selectedAltImage ?? item.imageUrl!}
             alt={item.name}
-            className="h-10 w-10 rounded-md object-cover"
+            className="h-10 w-10 rounded-md object-cover md:h-12 md:w-12"
             onError={(e) => { e.currentTarget.style.display = "none" }}
           />
         )}
@@ -295,12 +264,19 @@ function MobileItemCard({
         onClick={onEdit}
         role="button"
         tabIndex={0}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onEdit() }}
+        onKeyDown={(e) => {
+          // Ignore keys bubbling up from nested controls (e.g. the product link)
+          if (e.target !== e.currentTarget) return
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault()
+            onEdit()
+          }
+        }}
       >
-        <div className="flex items-start justify-between gap-2">
+        <div className="flex items-start justify-between gap-2 md:gap-6">
           <p
             className={cn(
-              "text-sm font-medium leading-tight",
+              "text-sm font-medium leading-tight md:text-base",
               isPurchased && "line-through text-muted-foreground"
             )}
           >
@@ -309,7 +285,7 @@ function MobileItemCard({
           {item.effectivePrice != null && item.effectivePrice > 0 && (
             <span
               className={cn(
-                "text-sm font-medium tabular-nums shrink-0",
+                "text-sm font-medium tabular-nums shrink-0 md:text-base",
                 isPurchased && "line-through text-muted-foreground",
                 !item.estimatedPrice && item.alternatives.length > 0 && "text-muted-foreground italic"
               )}
@@ -320,51 +296,51 @@ function MobileItemCard({
         </div>
 
         {item.description && (
-          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+          <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground md:mt-1 md:line-clamp-2 md:max-w-3xl md:text-sm">
             {item.description}
           </p>
         )}
 
-        <div className="flex flex-wrap items-center gap-1.5 mt-2">
+        <div className="mt-2 flex flex-wrap items-center gap-1.5 md:mt-2.5 md:gap-x-3 md:gap-y-1.5">
           <Badge
             variant="outline"
-            className={cn("text-[10px] px-1.5 h-4", PRIORITY_CONFIG[item.priority].className)}
+            className={cn(badgeClass, PRIORITY_CONFIG[item.priority].className)}
           >
             {PRIORITY_CONFIG[item.priority].label}
           </Badge>
 
           {item.category && (
-            <Badge variant="secondary" className="text-[10px] px-1.5 h-4">
+            <Badge variant="secondary" className={badgeClass}>
               {item.category.icon && (
-                <CategoryIcon name={item.category.icon} className="mr-0.5 h-2.5 w-2.5" />
+                <CategoryIcon name={item.category.icon} className={cn("mr-0.5", metaIconClass)} />
               )}
               {item.category.name}
             </Badge>
           )}
 
           {item.timeframe && (
-            <Badge variant="outline" className="text-[10px] px-1.5 h-4">
+            <Badge variant="outline" className={badgeClass}>
               {timeframeLabel(item.timeframe)}
             </Badge>
           )}
 
           {item.assignedTo && (
-            <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
-              <User className="h-2.5 w-2.5" />
+            <span className={metaClass}>
+              <User className={metaIconClass} />
               {item.assignedTo.name}
             </span>
           )}
 
           {effectiveStore && (
-            <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
-              <Store className="h-2.5 w-2.5" />
+            <span className={metaClass}>
+              <Store className={metaIconClass} />
               {effectiveStore}
             </span>
           )}
 
           {item.dueDate && (
-            <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
-              <Calendar className="h-2.5 w-2.5" />
+            <span className={metaClass}>
+              <Calendar className={metaIconClass} />
               {formatDate(item.dueDate)}
             </span>
           )}
@@ -375,183 +351,31 @@ function MobileItemCard({
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className="flex items-center gap-0.5 text-[10px] text-primary hover:underline"
+              className={cn(metaClass, "text-primary hover:underline")}
             >
-              <ExternalLink className="h-2.5 w-2.5" />
+              <ExternalLink className={metaIconClass} />
               Lenke
             </a>
           )}
 
           {item.alternatives.length > 0 && (
-            <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
-              <Layers className="h-2.5 w-2.5" />
+            <span className={metaClass}>
+              <Layers className={metaIconClass} />
               Produktvalg ({item.alternatives.length})
             </span>
           )}
         </div>
       </div>
+
+      <Button
+        variant="ghost"
+        size="icon-xs"
+        onClick={onEdit}
+        aria-label={`Rediger ${item.name}`}
+        className="hidden text-muted-foreground md:inline-flex"
+      >
+        <Pencil className="h-3 w-3" />
+      </Button>
     </div>
-  )
-}
-
-function DesktopItemRow({
-  item,
-  onEdit,
-}: {
-  item: ShoppingItemData
-  onEdit: () => void
-}) {
-  const [isPending, startTransition] = useTransition()
-  const isPurchased = item.status === "PURCHASED"
-  const isSkipped = item.status === "SKIPPED"
-  const isMuted = isPurchased || isSkipped
-
-  // Show selected (rank 0) alternative's image if available
-  const selectedAlt = item.alternatives[0] ?? null
-  const selectedAltImage = selectedAlt?.imageUrl ?? null
-  const effectiveUrl = item.url || selectedAlt?.url || null
-  const effectiveStore = item.storeName || selectedAlt?.storeName || null
-
-  function handleToggle() {
-    startTransition(async () => {
-      await toggleItemPurchased(item.id)
-    })
-  }
-
-  return (
-    <TableRow className={cn(isMuted && "opacity-50")}>
-      <TableCell>
-        <Checkbox
-          checked={isPurchased}
-          onCheckedChange={handleToggle}
-          disabled={isPending}
-          aria-label={`Merk ${item.name} som ${isPurchased ? "ikke kjopt" : "kjopt"}`}
-        />
-      </TableCell>
-      <TableCell>
-        <div className="flex items-start gap-2.5">
-          {(selectedAltImage || item.imageUrl) && (
-            <img
-              src={selectedAltImage ?? item.imageUrl!}
-              alt={item.name}
-              className="h-9 w-9 rounded-md object-cover shrink-0 mt-0.5"
-              onError={(e) => { e.currentTarget.style.display = "none" }}
-            />
-          )}
-          <div className="flex flex-col">
-            <span
-              className={cn(
-                "font-medium",
-                isPurchased && "line-through text-muted-foreground"
-              )}
-            >
-              {item.name}
-            </span>
-          {item.description && (
-            <span className="text-xs text-muted-foreground line-clamp-1">
-              {item.description}
-            </span>
-          )}
-          <div className="flex items-center gap-1.5 mt-0.5">
-            {item.timeframe && (
-              <span className="text-[10px] text-muted-foreground">
-                {timeframeLabel(item.timeframe)}
-              </span>
-            )}
-            {item.dueDate && (
-              <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
-                <Calendar className="h-2.5 w-2.5" />
-                {formatDate(item.dueDate)}
-              </span>
-            )}
-            {effectiveUrl && (
-              <a
-                href={effectiveUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-0.5 text-[10px] text-primary hover:underline"
-              >
-                <ExternalLink className="h-2.5 w-2.5" />
-                Lenke
-              </a>
-            )}
-          </div>
-          </div>
-        </div>
-      </TableCell>
-      <TableCell>
-        {item.category ? (
-          <Badge variant="secondary" className="text-xs">
-            {item.category.icon && (
-              <CategoryIcon name={item.category.icon} className="mr-0.5 h-3 w-3" />
-            )}
-            {item.category.name}
-          </Badge>
-        ) : (
-          <span className="text-xs text-muted-foreground">—</span>
-        )}
-      </TableCell>
-      <TableCell>
-        <Badge
-          variant="outline"
-          className={cn("text-xs", PRIORITY_CONFIG[item.priority].className)}
-        >
-          {PRIORITY_CONFIG[item.priority].label}
-        </Badge>
-      </TableCell>
-      <TableCell>
-        <div className="flex flex-col">
-          {item.effectivePrice != null && item.effectivePrice > 0 ? (
-            <span
-              className={cn(
-                "tabular-nums",
-                isPurchased && "line-through text-muted-foreground",
-                !item.estimatedPrice && item.alternatives.length > 0 && "text-muted-foreground italic"
-              )}
-            >
-              {formatCurrency(item.effectivePrice)}
-            </span>
-          ) : (
-            <span className="text-muted-foreground">—</span>
-          )}
-          {item.alternatives.length > 0 && (
-            <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground mt-0.5">
-              <Layers className="h-2.5 w-2.5" />
-              Produktvalg ({item.alternatives.length})
-            </span>
-          )}
-        </div>
-      </TableCell>
-      <TableCell>
-        {effectiveStore ? (
-          <span className="flex items-center gap-1 text-xs">
-            <Store className="h-3 w-3 text-muted-foreground" />
-            {effectiveStore}
-          </span>
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        )}
-      </TableCell>
-      <TableCell>
-        {item.assignedTo ? (
-          <span className="flex items-center gap-1 text-xs">
-            <User className="h-3 w-3 text-muted-foreground" />
-            {item.assignedTo.name}
-          </span>
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        )}
-      </TableCell>
-      <TableCell>
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          onClick={onEdit}
-          aria-label={`Rediger ${item.name}`}
-        >
-          <Pencil className="h-3 w-3" />
-        </Button>
-      </TableCell>
-    </TableRow>
   )
 }
