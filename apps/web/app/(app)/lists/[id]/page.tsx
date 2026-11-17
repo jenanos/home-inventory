@@ -2,7 +2,10 @@ import { notFound } from "next/navigation"
 import { CategoryIcon } from "@/components/category-icon"
 import { canManageShoppingListPrivacy } from "@/lib/shopping-list-access"
 import { requireHousehold } from "@/lib/session"
-import { getShoppingList } from "@/lib/queries/shopping-list"
+import { getCurrentDeals, getShoppingList } from "@/lib/queries/shopping-list"
+import { ShoppingDealsPanel } from "@/components/shopping-deals-panel"
+import { isDealCurrent } from "@/lib/application/shopping/deals"
+import { toDealSummary } from "@/lib/shopping-deals"
 import { ListHeader } from "./list-header"
 import { ListFilters } from "./list-filters"
 import { ItemList } from "./item-list"
@@ -16,7 +19,10 @@ export default async function ListPage({ params }: ListPageProps) {
   const { id } = await params
   const { context } = await requireHousehold()
 
-  const list = await getShoppingList(context, id)
+  const [list, currentDeals] = await Promise.all([
+    getShoppingList(context, id),
+    getCurrentDeals(context, { listId: id }),
+  ])
 
   if (!list) {
     notFound()
@@ -86,6 +92,16 @@ export default async function ListPage({ params }: ListPageProps) {
           }
         : null,
       alternatives,
+      dealWatch: item.dealWatch,
+      dealWatchNote: item.dealWatchNote,
+      dealTargetPrice: item.dealTargetPrice
+        ? Number(item.dealTargetPrice)
+        : null,
+      dealCheckedAt: item.dealCheckedAt
+        ? item.dealCheckedAt.toISOString()
+        : null,
+      deal:
+        item.deal && isDealCurrent(item.deal) ? toDealSummary(item.deal) : null,
       listId: item.listId,
       createdAt: item.createdAt.toISOString(),
       updatedAt: item.updatedAt.toISOString(),
@@ -150,6 +166,12 @@ export default async function ListPage({ params }: ListPageProps) {
           token: sl.token,
           isActive: sl.isActive,
         }))}
+      />
+
+      <ShoppingDealsPanel
+        deals={currentDeals.deals}
+        today={currentDeals.today}
+        showList={false}
       />
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

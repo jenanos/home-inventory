@@ -14,11 +14,18 @@ import {
   Pencil,
   Package,
   Layers,
+  Eye,
+  Tag,
 } from "lucide-react"
 import { CategoryIcon } from "@/components/category-icon"
 import { toggleItemPurchased } from "@/lib/actions/shopping-item"
 import { EditItemDialog } from "./edit-item-dialog"
 import { timeframeLabel } from "@/lib/shopping-timeframe"
+import {
+  dealSavingsPercent,
+  formatDealPrice,
+  type DealSummary,
+} from "@/lib/shopping-deals"
 
 const formatCurrency = (amount: number) =>
   new Intl.NumberFormat("nb-NO", {
@@ -76,6 +83,13 @@ export interface ShoppingItemData {
     email: string
   } | null
   alternatives: AlternativeData[]
+  /** Watched for store offers by the household's deal check. */
+  dealWatch: boolean
+  dealWatchNote: string | null
+  dealTargetPrice: number | null
+  dealCheckedAt: string | null
+  /** The current offer, if a check found one. */
+  deal: DealSummary | null
   listId: string
   createdAt: string
   updatedAt: string
@@ -323,6 +337,28 @@ function ItemCard({
               {timeframeLabel(item.timeframe)}
             </Badge>
           )}
+
+          {item.deal && !isMuted ? (
+            <Badge
+              className={cn(
+                badgeClass,
+                "bg-amber-100 text-amber-900 dark:bg-amber-500/20 dark:text-amber-200"
+              )}
+              title={`Tilbud hos ${item.deal.store}`}
+            >
+              <Tag className={cn("mr-0.5", metaIconClass)} />
+              {formatDealPrice(item.deal.price)} · {item.deal.store}
+              {(() => {
+                const savings = dealSavingsPercent(item.deal)
+                return savings ? ` (−${savings} %)` : null
+              })()}
+            </Badge>
+          ) : item.dealWatch && !isMuted ? (
+            <span className={metaClass} title="Følges med på for tilbud">
+              <Eye className={metaIconClass} />
+              Følges
+            </span>
+          ) : null}
 
           {item.assignedTo && (
             <span className={metaClass}>

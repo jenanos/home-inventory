@@ -8,6 +8,7 @@ import {
 
 import type { ApplicationContext } from "../context"
 import { getVisibleShoppingListsWhere } from "../../shopping-list-access"
+import { SHOPPING_DEAL_SELECT } from "./deals"
 
 export async function listShoppingLists(context: ApplicationContext) {
   return db.shoppingList.findMany({
@@ -99,6 +100,7 @@ export async function getShoppingList(
             },
             orderBy: { rank: "asc" },
           },
+          deal: { select: SHOPPING_DEAL_SELECT },
         },
         orderBy: [
           { status: "asc" },
@@ -279,6 +281,7 @@ function shoppingItemPageSelect(includeAlternatives: boolean) {
     imageUrl: true,
     storeName: true,
     purchasedAt: true,
+    dealWatch: true,
     createdAt: true,
     updatedAt: true,
     category: { select: { id: true, name: true } },

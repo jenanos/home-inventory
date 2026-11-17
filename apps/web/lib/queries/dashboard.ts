@@ -11,15 +11,18 @@ import {
   listShoppingCategories,
   listShoppingListsForDashboard,
 } from "@/lib/application/shopping/read"
+import { getCurrentDeals } from "./shopping-list"
 
 export async function getDashboardData(context: ApplicationContext) {
-  const [lists, categories, budget, projects, settings] = await Promise.all([
-    listShoppingListsForDashboard(context),
-    listShoppingCategories(context),
-    getBudget(context),
-    listProjects(context),
-    getHouseholdSettings(context),
-  ])
+  const [lists, categories, budget, projects, settings, currentDeals] =
+    await Promise.all([
+      listShoppingListsForDashboard(context),
+      listShoppingCategories(context),
+      getBudget(context),
+      listProjects(context),
+      getHouseholdSettings(context),
+      getCurrentDeals(context),
+    ])
 
   const householdLists = lists.filter((list) => !list.isPrivate)
   const privateLists = lists.filter((list) => list.isPrivate)
@@ -38,5 +41,6 @@ export async function getDashboardData(context: ApplicationContext) {
     budgetStats,
     projectStats,
     projects,
+    currentDeals,
   }
 }

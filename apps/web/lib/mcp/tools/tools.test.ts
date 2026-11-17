@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   shoppingItemCount: vi.fn(),
   shoppingItemFindMany: vi.fn(),
   shoppingItemGroupBy: vi.fn(),
+  shoppingItemDealCount: vi.fn(),
+  shoppingItemDealFindMany: vi.fn(),
   categoryCount: vi.fn(),
   categoryFindMany: vi.fn(),
   budgetFindUnique: vi.fn(),
@@ -44,6 +46,10 @@ vi.mock("@workspace/db", async (importOriginal) => ({
       count: mocks.shoppingItemCount,
       findMany: mocks.shoppingItemFindMany,
       groupBy: mocks.shoppingItemGroupBy,
+    },
+    shoppingItemDeal: {
+      count: mocks.shoppingItemDealCount,
+      findMany: mocks.shoppingItemDealFindMany,
     },
     category: {
       count: mocks.categoryCount,
@@ -208,6 +214,11 @@ beforeEach(() => {
       imageUrl: null,
       storeName: "Butikk",
       purchasedAt: null,
+      dealWatch: true,
+      dealWatchNote: "Støpejern, 28 cm",
+      dealTargetPrice: decimal("350.00"),
+      dealCheckedAt: null,
+      deal: null,
       createdAt: new Date("2026-01-02T00:00:00Z"),
       updatedAt: new Date("2026-01-03T00:00:00Z"),
       category: { id: "cat-1", name: "Kjøkken" },
@@ -228,6 +239,32 @@ beforeEach(() => {
       list: { id: LIST_ID, name: "Kjøkken" },
       // Present on the row, absent from every whitelist.
       assignedTo: { id: "user-2", name: POISON.assignee, email: POISON.email },
+    },
+  ])
+  mocks.shoppingItemDealCount.mockResolvedValue(1)
+  mocks.shoppingItemDealFindMany.mockResolvedValue([
+    {
+      store: "Kjøkkenbutikken",
+      productName: "Skeppshult 28 cm",
+      price: decimal("349.00"),
+      regularPrice: decimal("599.00"),
+      priceNote: null,
+      url: "https://example.com/panne",
+      validFrom: null,
+      validTo: new Date("2026-08-09T00:00:00Z"),
+      reportedAt: new Date("2026-08-03T06:00:00Z"),
+      item: {
+        id: "item-1",
+        name: "Stekepanne",
+        imageUrl: null,
+        estimatedPrice: decimal("499.00"),
+        dealWatch: true,
+        dealTargetPrice: decimal("350.00"),
+        list: { id: LIST_ID, name: "Kjøkken", isPrivate: false },
+        alternatives: [{ price: decimal("299.00"), imageUrl: null }],
+        // Present on the row, absent from every whitelist.
+        assignedTo: { name: POISON.assignee, email: POISON.email },
+      },
     },
   ])
   mocks.categoryCount.mockResolvedValue(1)
@@ -515,6 +552,8 @@ const HAPPY_PATH_ARGS: Array<[string, Record<string, unknown>]> = [
   ["get-shopping-list", { listId: LIST_ID, includeAlternatives: true }],
   ["search-shopping-items", { query: "panne", includeAlternatives: true }],
   ["list-shopping-categories", {}],
+  ["list-shopping-deals", {}],
+  ["list-deal-watch-items", {}],
   ["get-budget-summary", {}],
   ["get-budget-details", {}],
   ["list-projects", {}],
@@ -955,5 +994,69 @@ describe("project reads", () => {
 
     const { structured } = await callTool("list-projects", { scale: "HUGE" })
     expect(structured).toMatchObject({ error: { code: "VALIDATION_ERROR" } })
+  })
+})
+
+describe("deal tools", () => {
+  it("lists only current offers on pending items the user can see", async () => {
+    const { structured } = await callTool("list-shopping-deals", {})
+
+    expect(mocks.shoppingItemDealFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          OR: [
+            // Today in Norway, from the registry clock (2026-08-03 09:00Z).
+            { validTo: { gte: new Date("2026-08-03T00:00:00.000Z") } },
+            {
+              validTo: null,
+              reportedAt: { gte: new Date("2026-07-27T09:00:00.000Z") },
+            },
+          ],
+          item: expect.objectContaining({
+            status: "PENDING",
+            list: expect.objectContaining({ householdId: "household-1" }),
+          }),
+        }),
+      })
+    )
+    expect(structured).toMatchObject({
+      today: "2026-08-03",
+      deals: [
+        {
+          item: {
+            name: "Stekepanne",
+            watched: true,
+            targetPrice: "350.00",
+            plannedPrice: "299.00",
+          },
+          deal: { price: "349.00", savingsPercent: 41, validTo: "2026-08-09" },
+        },
+      ],
+    })
+  })
+
+  it("lists watched pending items, least recently checked first", async () => {
+    const { structured } = await callTool("list-deal-watch-items", {})
+
+    expect(mocks.shoppingItemFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ dealWatch: true, status: "PENDING" }),
+        orderBy: [
+          { dealCheckedAt: { sort: "asc", nulls: "first" } },
+          { name: "asc" },
+          { id: "asc" },
+        ],
+      })
+    )
+    expect(structured).toMatchObject({
+      items: [
+        {
+          name: "Stekepanne",
+          note: "Støpejern, 28 cm",
+          lastCheckedAt: null,
+          currentDeal: null,
+        },
+      ],
+    })
   })
 })

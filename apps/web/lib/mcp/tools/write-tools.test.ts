@@ -69,6 +69,8 @@ describe("write tool contracts", () => {
         "move-shopping-items",
         "delete-shopping-items",
         "create-shopping-category",
+        "set-deal-watch",
+        "report-shopping-deals",
         "create-budget-entry",
         "add-budget-entries",
         "update-budget-entry",

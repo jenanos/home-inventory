@@ -161,6 +161,11 @@ export const shoppingItemSchema = z.object({
   imageUrl: z.string().nullable(),
   storeName: z.string().nullable(),
   purchasedAt: timestampSchema.nullable(),
+  dealWatch: z
+    .boolean()
+    .describe(
+      "Whether the household watches the item for offers (set-deal-watch, list-deal-watch-items)."
+    ),
   category: z.object({ id: z.string(), name: z.string() }).nullable(),
   alternativeCount: z.number().int(),
   alternatives: z
@@ -184,6 +189,7 @@ export type ShoppingItemRow = {
   imageUrl: string | null
   storeName: string | null
   purchasedAt: Date | null
+  dealWatch: boolean
   createdAt: Date
   updatedAt: Date
   category: { id: string; name: string } | null
@@ -212,6 +218,7 @@ export function serializeShoppingItem(
     imageUrl: item.imageUrl,
     storeName: item.storeName,
     purchasedAt: optionalTimestamp(item.purchasedAt),
+    dealWatch: item.dealWatch,
     category: item.category,
     alternativeCount: item._count.alternatives,
     alternatives: includeAlternatives

@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 
 import type { McpSession } from "./auth/session"
 import { MCP_SERVER_NAME, MCP_SERVER_VERSION } from "./constants"
+import { registerPrompts } from "./prompts"
 import { createToolRegistry, type McpToolDefinition } from "./tools"
 import { sessionHasToolScope } from "./tools/define"
 
@@ -19,6 +20,10 @@ Shopping:
 - Prices are NOK numbers without currency signs. url and imageUrl are plain absolute https URLs, not markdown links.
 - Mark bought items with set-shopping-item-status. Use SKIPPED for things no longer wanted; delete only mistakes and duplicates, and confirm with the user first.
 - Use list-shopping-categories for category ids; create a category only when none fits.
+
+Offers on shopping items:
+- The household marks items it wants to buy on offer with set-deal-watch, optionally with a note on what counts as a good offer and a target price. list-shopping-deals answers "is anything on offer now?" from the offers already reported.
+- To check for new offers: list-deal-watch-items, search the stores' current campaigns and price services on the web yourself (the server does not), then report-shopping-deals with the best current offer per item, or deal null when there is none, for every item you checked. Report only prices and dates you read on the page; an offer needs to be clearly below the usual price or at or below targetPrice. The tilbudsjakt prompt describes the whole check, e.g. for a scheduled task.
 
 Projects:
 - A project is anything the household wants done to the home: maintenance, repairs, renovations, improvements or other. Set type accordingly; many projects are done by the household itself.
@@ -85,6 +90,8 @@ export function createMcpServer({
       registered.disable()
     }
   }
+
+  registerPrompts(server, session)
 
   return server
 }
