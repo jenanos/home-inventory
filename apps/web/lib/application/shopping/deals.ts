@@ -51,6 +51,19 @@ function assertItemIds(ids: string[]) {
   }
 }
 
+const uuidList = (ids: string[]) =>
+  Prisma.join(ids.map((id) => Prisma.sql`${id}::uuid`))
+
+/**
+ * Locks the item rows until the transaction ends, so the visibility read that
+ * follows still holds when the writes commit: an item cannot be moved to
+ * another list in between. Every write that moves an item updates its row
+ * and waits for this lock.
+ */
+async function lockItems(tx: Prisma.TransactionClient, ids: string[]) {
+  await tx.$queryRaw`SELECT 1 FROM "ShoppingItem" WHERE "id" IN (${uuidList(ids)}) FOR UPDATE`
+}
+
 function visibleLists(context: ApplicationContext) {
   return getVisibleShoppingListsWhere(context.householdId, context.userId)
 }
@@ -392,6 +405,9 @@ export async function reportShoppingDeals(
   }))
 
   return db.$transaction(async (tx) => {
+    // The deal and `dealCheckedAt` writes below are by id; the lock keeps the
+    // visibility checked here true until they commit.
+    await lockItems(tx, ids)
     const items = await tx.shoppingItem.findMany({
       where: { id: { in: ids }, list: visibleLists(context) },
       select: {
@@ -443,11 +459,11 @@ export async function reportShoppingDeals(
     if (checked.length > 0) {
       // Raw SQL so the item's `updatedAt` stays the household's last edit: a
       // background check must not turn someone's `expectedUpdatedAt` stale.
-      // Ownership was settled by the visible read above, in this transaction.
+      // Ownership was settled by the visible read above, under the row lock.
       await tx.$executeRaw`
         UPDATE "ShoppingItem"
         SET "dealCheckedAt" = ${now}
-        WHERE "id" IN (${Prisma.join(checked.map((id) => Prisma.sql`${id}::uuid`))})
+        WHERE "id" IN (${uuidList(checked)})
       `
     }
 
@@ -463,13 +479,16 @@ export async function clearShoppingItemDeal(
   assertItemIds([itemId])
 
   return db.$transaction(async (tx) => {
+    // The boundary is part of the delete itself, not a check before it.
+    await tx.shoppingItemDeal.deleteMany({
+      where: { itemId, item: { list: visibleLists(context) } },
+    })
+
     const item = await tx.shoppingItem.findFirst({
       where: { id: itemId, list: visibleLists(context) },
       select: { id: true, listId: true },
     })
     if (!item) throw notFound(ITEM)
-
-    await tx.shoppingItemDeal.deleteMany({ where: { itemId } })
     return item
   })
 }
