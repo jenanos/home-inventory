@@ -359,10 +359,52 @@ model ShoppingItem {
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
 
+  /// The household wants to hear when this item is on offer. An assistant
+  /// checks the stores (MCP `list-deal-watch-items`) and reports what it finds.
+  dealWatch       Boolean   @default(false)
+  /// What counts as a good offer: brand, model, size. Read by the assistant.
+  dealWatchNote   String?
+  /// An offer at or below this price (NOK) is worth reporting.
+  dealTargetPrice Decimal?  @db.Decimal(10, 2)
+  /// Last time an assistant checked the stores for this item.
+  dealCheckedAt   DateTime?
+
   category     Category?            @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   assignedTo   User?                @relation("AssignedItems", fields: [assignedToId], references: [id], onDelete: SetNull)
   list         ShoppingList         @relation(fields: [listId], references: [id], onDelete: Cascade)
   alternatives ProductAlternative[]
+  deal         ShoppingItemDeal?
+
+  @@index([dealWatch])
+}
+
+/// The best store offer found for a shopping item: one per item, and a new
+/// report replaces it. Writing is separate from the item's own fields so a
+/// scheduled job never races the household's edits. An offer counts as current
+/// until `validTo` (Europe/Oslo), or for a week after it was reported when the
+/// store gave no end date; older rows are ignored on read and replaced or
+/// cleared by the next report.
+model ShoppingItemDeal {
+  id           String    @id @default(uuid()) @db.Uuid
+  itemId       String    @unique @db.Uuid
+  store        String
+  /// The concrete product on offer, e.g. "Bosch Serie 6 WAU28PH9SN".
+  productName  String?
+  price        Decimal   @db.Decimal(10, 2)
+  regularPrice Decimal?  @db.Decimal(10, 2)
+  /// Conditions that are not a price: "med medlemskort", "3 for 2".
+  priceNote    String?
+  url          String?
+  validFrom    DateTime? @db.Date
+  /// Last day the offer applies.
+  validTo      DateTime? @db.Date
+  /// When the offer was last reported. Starts the one-week window when the
+  /// store gave no end date.
+  reportedAt   DateTime  @default(now())
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  item ShoppingItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
 }
 
 model ProductAlternative {

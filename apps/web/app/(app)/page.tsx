@@ -2,6 +2,7 @@ import Link from "next/link"
 import { PrivateShoppingListsOverview } from "@/components/private-shopping-lists-overview"
 import { ShoppingStatsPanel } from "@/components/shopping-stats-panel"
 import { ShoppingListCard } from "@/components/shopping-list-card"
+import { ShoppingDealsPanel } from "@/components/shopping-deals-panel"
 import { ProjectCard } from "@/components/project-card"
 import { ProjectStatsSummary } from "@/components/project-stats-summary"
 import { BudgetStatsSummary } from "@/components/budget-stats-summary"
@@ -32,6 +33,7 @@ export default async function DashboardPage() {
     budgetStats,
     projectStats,
     projects,
+    currentDeals,
   } = await getDashboardData(context)
 
   const cashFlow = budgetStats.hasBudget ? budgetStats.disposable : 0
@@ -44,6 +46,11 @@ export default async function DashboardPage() {
           Oversikt
         </h1>
       </div>
+
+      <ShoppingDealsPanel
+        deals={currentDeals.deals}
+        today={currentDeals.today}
+      />
 
       {/* ── BUDGET SECTION ── */}
       <section className="flex flex-col gap-4">

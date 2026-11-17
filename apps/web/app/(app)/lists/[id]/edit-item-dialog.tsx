@@ -68,6 +68,7 @@ import type { ShoppingItemData, AlternativeData } from "./item-list"
 import type { Priority, Timeframe, ItemStatus } from "@workspace/db"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { TIMEFRAME_OPTIONS } from "@/lib/shopping-timeframe"
+import { DealWatchSection } from "./deal-watch-section"
 
 interface EditItemDialogProps {
   item: ShoppingItemData | null
@@ -380,6 +381,10 @@ export function EditItemDialog({
               </Select>
             </div>
           )}
+
+          <Separator />
+
+          <DealWatchSection item={item} />
 
           {error && (
             <p className="text-sm text-destructive" role="alert">

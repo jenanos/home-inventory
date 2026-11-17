@@ -9,6 +9,7 @@ import { projectTools } from "./projects"
 import { projectWriteTools } from "./projects-write"
 import { createServerInfoTool } from "./server-info"
 import { shoppingTools } from "./shopping"
+import { createShoppingDealTools } from "./shopping-deals"
 import { shoppingWriteTools } from "./shopping-write"
 
 export type { McpToolDefinition } from "./define"
@@ -29,6 +30,7 @@ export function createToolRegistry(
     createServerInfoTool(now),
     ...shoppingTools,
     ...shoppingWriteTools,
+    ...createShoppingDealTools(now),
     ...budgetTools,
     ...budgetWriteTools,
     ...projectTools,

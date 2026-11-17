@@ -1,5 +1,6 @@
 import { requireHousehold } from "@/lib/session"
-import { getShoppingLists } from "@/lib/queries/shopping-list"
+import { getCurrentDeals, getShoppingLists } from "@/lib/queries/shopping-list"
+import { ShoppingDealsPanel } from "@/components/shopping-deals-panel"
 import { PrivateShoppingListsOverview } from "@/components/private-shopping-lists-overview"
 import { ShoppingStatsPanel } from "@/components/shopping-stats-panel"
 import { calculateShoppingStats } from "@/lib/dashboard-stats"
@@ -13,9 +14,10 @@ import { EditListDialog } from "./edit-list-dialog"
 
 export default async function ListsPage() {
   const { context } = await requireHousehold()
-  const [lists, settings] = await Promise.all([
+  const [lists, settings, currentDeals] = await Promise.all([
     getShoppingLists(context),
     getHouseholdSettings(context),
+    getCurrentDeals(context),
   ])
   const householdLists = lists.filter((list) => !list.isPrivate)
   const privateLists = lists.filter((list) => list.isPrivate)
@@ -38,6 +40,11 @@ export default async function ListsPage() {
         </div>
         <CreateListDialog />
       </div>
+
+      <ShoppingDealsPanel
+        deals={currentDeals.deals}
+        today={currentDeals.today}
+      />
 
       {stats.totalItems > 0 && <ShoppingStatsPanel stats={stats} />}
 

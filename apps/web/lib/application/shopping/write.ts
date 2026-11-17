@@ -119,6 +119,7 @@ export const SHOPPING_ITEM_RESULT_SELECT = {
   storeName: true,
   assignedToId: true,
   purchasedAt: true,
+  dealWatch: true,
   listId: true,
   categoryId: true,
   createdAt: true,
