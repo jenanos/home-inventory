@@ -21,11 +21,12 @@ import { CategoryIcon } from "@/components/category-icon"
 import { toggleItemPurchased } from "@/lib/actions/shopping-item"
 import { EditItemDialog } from "./edit-item-dialog"
 import { timeframeLabel } from "@/lib/shopping-timeframe"
-import {
-  dealSavingsPercent,
-  formatDealPrice,
-  type DealSummary,
-} from "@/lib/shopping-deals"
+import { filterShoppingItems } from "@/lib/shopping-item-filters"
+import { dealSavingsPercent, formatDealPrice } from "@/lib/shopping-deals"
+import type {
+  AlternativeData,
+  ShoppingItemData,
+} from "@/lib/shopping-item-view"
 
 const formatCurrency = (amount: number) =>
   new Intl.NumberFormat("nb-NO", {
@@ -46,54 +47,7 @@ const PRIORITY_CONFIG = {
   LOW: { label: "Lav", className: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
 } as const
 
-export interface AlternativeData {
-  id: string
-  name: string
-  price: number | null
-  url: string | null
-  imageUrl: string | null
-  storeName: string | null
-  notes: string | null
-  rank: number
-}
-
-export interface ShoppingItemData {
-  id: string
-  name: string
-  description: string | null
-  priority: "HIGH" | "MEDIUM" | "LOW"
-  timeframe: "NOW" | "SOON" | "LATER" | "SOMEDAY" | null
-  dueDate: string | null
-  estimatedPrice: number | null
-  effectivePrice: number | null
-  url: string | null
-  imageUrl: string | null
-  storeName: string | null
-  status: "PENDING" | "PURCHASED" | "SKIPPED"
-  purchasedAt: string | null
-  category: {
-    id: string
-    name: string
-    icon: string | null
-    color: string | null
-  } | null
-  assignedTo: {
-    id: string
-    name: string
-    email: string
-  } | null
-  alternatives: AlternativeData[]
-  /** Watched for store offers by the household's deal check. */
-  dealWatch: boolean
-  dealWatchNote: string | null
-  dealTargetPrice: number | null
-  dealCheckedAt: string | null
-  /** The current offer, if a check found one. */
-  deal: DealSummary | null
-  listId: string
-  createdAt: string
-  updatedAt: string
-}
+export type { AlternativeData, ShoppingItemData }
 
 interface ItemListProps {
   items: ShoppingItemData[]
@@ -109,30 +63,8 @@ export function ItemList({ items, categories, members, listId }: ItemListProps) 
   const [editingItem, setEditingItem] = useState<ShoppingItemData | null>(null)
 
   const filteredAndSorted = useMemo(() => {
-    let result = [...items]
-
-    const categoryFilter = searchParams.get("category")
-    const priorityFilter = searchParams.get("priority")
-    const timeframeFilter = searchParams.get("timeframe")
-    const assignedFilter = searchParams.get("assigned")
-    const statusFilter = searchParams.get("status")
+    const result = filterShoppingItems(items, searchParams)
     const sort = searchParams.get("sort") ?? "priority"
-
-    if (categoryFilter) {
-      result = result.filter((item) => item.category?.id === categoryFilter)
-    }
-    if (priorityFilter) {
-      result = result.filter((item) => item.priority === priorityFilter)
-    }
-    if (timeframeFilter) {
-      result = result.filter((item) => item.timeframe === timeframeFilter)
-    }
-    if (assignedFilter) {
-      result = result.filter((item) => item.assignedTo?.id === assignedFilter)
-    }
-    if (statusFilter) {
-      result = result.filter((item) => item.status === statusFilter)
-    }
 
     result.sort((a, b) => {
       // Always push purchased/skipped to the bottom

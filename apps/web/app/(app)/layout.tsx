@@ -44,7 +44,10 @@ export default async function AppLayout({
           isAdmin={isAdmin}
         />
         <main className="min-w-0 flex-1 pb-20 md:pb-0">
-          <div className="mx-auto max-w-5xl p-4 md:p-8">{children}</div>
+          {/* A page with a board (`data-board`) gets the full width on desktop. */}
+          <div className="mx-auto max-w-5xl p-4 md:p-8 lg:has-[[data-board]]:max-w-none">
+            {children}
+          </div>
         </main>
         <MobileNav />
       </div>

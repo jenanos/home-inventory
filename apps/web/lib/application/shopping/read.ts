@@ -60,6 +60,73 @@ export async function listShoppingListsForDashboard(
   })
 }
 
+/** What the list page and the board show of an item. */
+export const SHOPPING_ITEM_VIEW_INCLUDE = {
+  category: {
+    select: {
+      id: true,
+      name: true,
+      icon: true,
+      color: true,
+    },
+  },
+  assignedTo: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+    },
+  },
+  alternatives: {
+    select: {
+      id: true,
+      name: true,
+      price: true,
+      url: true,
+      imageUrl: true,
+      storeName: true,
+      notes: true,
+      rank: true,
+    },
+    orderBy: { rank: "asc" },
+  },
+  deal: { select: SHOPPING_DEAL_SELECT },
+} satisfies Prisma.ShoppingItemInclude
+
+export type ShoppingItemView = Prisma.ShoppingItemGetPayload<{
+  include: typeof SHOPPING_ITEM_VIEW_INCLUDE
+}>
+
+const SHOPPING_ITEM_VIEW_ORDER = [
+  { status: "asc" },
+  { priority: "asc" },
+  { createdAt: "desc" },
+] satisfies Prisma.ShoppingItemOrderByWithRelationInput[]
+
+/** The people items can be assigned to and the categories they can be in. */
+const HOUSEHOLD_PEOPLE_AND_CATEGORIES_SELECT = {
+  members: {
+    select: {
+      user: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+    },
+  },
+  categories: {
+    orderBy: { name: "asc" },
+    select: {
+      id: true,
+      name: true,
+      icon: true,
+      color: true,
+    },
+  },
+} satisfies Prisma.HouseholdSelect
+
 export async function getShoppingList(
   context: ApplicationContext,
   listId: string
@@ -71,42 +138,8 @@ export async function getShoppingList(
     },
     include: {
       items: {
-        include: {
-          category: {
-            select: {
-              id: true,
-              name: true,
-              icon: true,
-              color: true,
-            },
-          },
-          assignedTo: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-            },
-          },
-          alternatives: {
-            select: {
-              id: true,
-              name: true,
-              price: true,
-              url: true,
-              imageUrl: true,
-              storeName: true,
-              notes: true,
-              rank: true,
-            },
-            orderBy: { rank: "asc" },
-          },
-          deal: { select: SHOPPING_DEAL_SELECT },
-        },
-        orderBy: [
-          { status: "asc" },
-          { priority: "asc" },
-          { createdAt: "desc" },
-        ],
+        include: SHOPPING_ITEM_VIEW_INCLUDE,
+        orderBy: SHOPPING_ITEM_VIEW_ORDER,
       },
       project: { select: { id: true, title: true } },
       shareLinks: {
@@ -117,32 +150,42 @@ export async function getShoppingList(
           isActive: true,
         },
       },
-      household: {
-        select: {
-          members: {
-            select: {
-              user: {
-                select: {
-                  id: true,
-                  name: true,
-                  email: true,
-                },
-              },
-            },
-          },
-          categories: {
-            orderBy: { name: "asc" },
-            select: {
-              id: true,
-              name: true,
-              icon: true,
-              color: true,
-            },
-          },
-        },
-      },
+      household: { select: HOUSEHOLD_PEOPLE_AND_CATEGORIES_SELECT },
     },
   })
+}
+
+/**
+ * Every item on every list the caller can see, for the board that lays them
+ * out across lists. Private lists are the caller's own, as everywhere else.
+ */
+export async function listShoppingBoard(context: ApplicationContext) {
+  const [lists, household] = await Promise.all([
+    db.shoppingList.findMany({
+      where: getVisibleShoppingListsWhere(context.householdId, context.userId),
+      select: {
+        id: true,
+        name: true,
+        color: true,
+        isPrivate: true,
+        items: {
+          include: SHOPPING_ITEM_VIEW_INCLUDE,
+          orderBy: SHOPPING_ITEM_VIEW_ORDER,
+        },
+      },
+      orderBy: [{ isPrivate: "asc" }, { createdAt: "asc" }, { id: "asc" }],
+    }),
+    db.household.findFirst({
+      where: { id: context.householdId },
+      select: HOUSEHOLD_PEOPLE_AND_CATEGORIES_SELECT,
+    }),
+  ])
+
+  return {
+    lists,
+    members: household?.members ?? [],
+    categories: household?.categories ?? [],
+  }
 }
 
 export async function listShoppingCategories(context: ApplicationContext) {

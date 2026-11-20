@@ -15,7 +15,13 @@ import {
 } from "@/lib/project-labels"
 import { getProjects } from "@/lib/queries/projects"
 import { requireHousehold } from "@/lib/session"
+import { BoardToolbar } from "@/components/board/board-toolbar"
+import { resolveBoardPreferences } from "@/lib/board/preferences"
+import { PROJECT_GROUPINGS } from "@/lib/board/project-board"
+import { GROUP_PARAM, VIEW_PARAM } from "@/lib/board/view"
+import { summarizeShoppingList } from "@/lib/project-purchases"
 import { CreateProjectDialog } from "./create-project-dialog"
+import { ProjectBoard, type ProjectBoardItem } from "./project-board"
 
 const VIEWS = {
   aktive: "Aktive",
@@ -60,7 +66,13 @@ function isProjectType(value: string | undefined): value is ProjectType {
 }
 
 interface ProjectsPageProps {
-  searchParams: Promise<{ vis?: string; type?: string; omfang?: string }>
+  searchParams: Promise<{
+    vis?: string
+    type?: string
+    omfang?: string
+    visning?: string
+    grupper?: string
+  }>
 }
 
 export default async function ProjectsPage({
@@ -72,7 +84,16 @@ export default async function ProjectsPage({
   const scale = scaleFromParam(params.omfang)
 
   const { context } = await requireHousehold()
-  const projects = await getProjects(context)
+  const [projects, board] = await Promise.all([
+    getProjects(context),
+    resolveBoardPreferences({
+      scope: "prosjekter",
+      params,
+      groupings: PROJECT_GROUPINGS,
+      fallbackGrouping: "status",
+    }),
+  ])
+  const isBoard = board.view === "tavle"
 
   const filtered = projects.filter(
     (project) =>
@@ -98,6 +119,8 @@ export default async function ProjectsPage({
     if (nextScale) search.set("omfang", SCALE_PARAMS[nextScale])
     if (nextView !== "aktive") search.set("vis", nextView)
     if (nextType) search.set("type", nextType)
+    if (params.visning) search.set(VIEW_PARAM, params.visning)
+    if (params.grupper) search.set(GROUP_PARAM, params.grupper)
     const query = search.toString()
     return query ? `/prosjekter?${query}` : "/prosjekter"
   }
@@ -127,7 +150,17 @@ export default async function ProjectsPage({
             det selv eller leier inn hjelp
           </p>
         </div>
-        <CreateProjectDialog defaultScale={scale ?? "ROUTINE"} />
+        <div className="flex items-center gap-2">
+          {projects.length > 0 && (
+            <BoardToolbar
+              scope="prosjekter"
+              view={board.view}
+              grouping={board.grouping}
+              groupings={PROJECT_GROUPINGS}
+            />
+          )}
+          <CreateProjectDialog defaultScale={scale ?? "ROUTINE"} />
+        </div>
       </div>
 
       {projects.length > 0 && (
@@ -156,7 +189,8 @@ export default async function ProjectsPage({
 
       {projects.length > 0 && (
         <div className="flex flex-col gap-3">
-          <FilterRow label="Vis">
+          {/* The board shows every status, with finished work tucked away. */}
+          <FilterRow label="Vis" className={isBoard ? "lg:hidden" : undefined}>
             {(Object.keys(VIEWS) as View[]).map((value) => (
               <FilterChip
                 key={value}
@@ -191,54 +225,97 @@ export default async function ProjectsPage({
         </div>
       )}
 
-      {projects.length === 0 ? (
-        <Card className="flex flex-col items-center justify-center px-4 py-12 text-center">
-          <Hammer className="mb-4 h-12 w-12 text-muted-foreground" />
-          <h3 className="font-heading text-lg font-medium">
-            Ingen prosjekter ennå
-          </h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Legg til noe du vil få gjort – store eller små ting
-          </p>
-        </Card>
-      ) : visible.length === 0 ? (
-        <Card className="flex flex-col items-center justify-center px-4 py-10 text-center">
-          <p className="max-w-md text-sm text-muted-foreground">
-            {EMPTY_TEXT[view]}
-          </p>
-        </Card>
-      ) : (
-        groups.map((group) => (
-          <section key={group.scale} className="flex flex-col gap-3">
-            {!scale && (
-              <h2 className="flex items-baseline gap-2 font-heading text-lg tracking-tight">
-                {PROJECT_SCALE_LABELS[group.scale]}
-                <span className="text-sm font-normal text-muted-foreground tabular-nums">
-                  {group.projects.length}
-                </span>
-              </h2>
-            )}
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {group.projects.map((project) => (
-                <ProjectCard key={project.id} project={project} />
-              ))}
-            </div>
-          </section>
-        ))
+      {isBoard && filtered.length > 0 && (
+        <div data-board className="hidden lg:block">
+          <ProjectBoard
+            projects={filtered.map(toBoardItem)}
+            grouping={board.grouping}
+          />
+        </div>
       )}
+
+      {/* The board is desktop only; smaller screens keep the cards. */}
+      <div
+        className={cn(
+          "flex flex-col gap-6",
+          isBoard && filtered.length > 0 && "lg:hidden"
+        )}
+      >
+        {projects.length === 0 ? (
+          <Card className="flex flex-col items-center justify-center px-4 py-12 text-center">
+            <Hammer className="mb-4 h-12 w-12 text-muted-foreground" />
+            <h3 className="font-heading text-lg font-medium">
+              Ingen prosjekter ennå
+            </h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Legg til noe du vil få gjort – store eller små ting
+            </p>
+          </Card>
+        ) : visible.length === 0 ? (
+          <Card className="flex flex-col items-center justify-center px-4 py-10 text-center">
+            <p className="max-w-md text-sm text-muted-foreground">
+              {EMPTY_TEXT[view]}
+            </p>
+          </Card>
+        ) : (
+          groups.map((group) => (
+            <section key={group.scale} className="flex flex-col gap-3">
+              {!scale && (
+                <h2 className="flex items-baseline gap-2 font-heading text-lg tracking-tight">
+                  {PROJECT_SCALE_LABELS[group.scale]}
+                  <span className="text-sm font-normal text-muted-foreground tabular-nums">
+                    {group.projects.length}
+                  </span>
+                </h2>
+              )}
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {group.projects.map((project) => (
+                  <ProjectCard key={project.id} project={project} />
+                ))}
+              </div>
+            </section>
+          ))
+        )}
+      </div>
     </div>
   )
 }
 
+function toBoardItem(
+  project: Awaited<ReturnType<typeof getProjects>>[number]
+): ProjectBoardItem {
+  const purchases = summarizeShoppingList(
+    project.shoppingLists.flatMap((list) => list.items)
+  )
+  return {
+    id: project.id,
+    title: project.title,
+    status: project.status,
+    priority: project.priority,
+    type: project.type,
+    scale: project.scale,
+    execution: project.execution,
+    dueDate: project.dueDate ? project.dueDate.toISOString() : null,
+    estimatedPrice:
+      project.estimatedPrice != null ? Number(project.estimatedPrice) : null,
+    completedSteps: project.steps.filter((step) => step.completed).length,
+    totalSteps: project.steps.length,
+    purchasedCount: purchases.purchasedCount,
+    purchaseCount: purchases.itemCount,
+  }
+}
+
 function FilterRow({
   label,
+  className,
   children,
 }: {
   label: string
+  className?: string
   children: React.ReactNode
 }) {
   return (
-    <div className="flex items-start gap-2">
+    <div className={cn("flex items-start gap-2", className)}>
       <span className="flex h-6.5 w-14 shrink-0 items-center text-xs text-muted-foreground">
         {label}
       </span>

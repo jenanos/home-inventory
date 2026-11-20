@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   shoppingListFindMany: vi.fn(),
   shoppingListFindFirst: vi.fn(),
   categoryFindMany: vi.fn(),
+  householdFindFirst: vi.fn(),
   budgetFindUnique: vi.fn(),
   projectFindMany: vi.fn(),
   projectFindFirst: vi.fn(),
@@ -19,6 +20,9 @@ vi.mock("@workspace/db", () => ({
     },
     category: {
       findMany: mocks.categoryFindMany,
+    },
+    household: {
+      findFirst: mocks.householdFindFirst,
     },
     budget: {
       findUnique: mocks.budgetFindUnique,
@@ -39,6 +43,7 @@ import { getProject, listProjects } from "./projects/read"
 import { getPlant, listPlants } from "./garden/read"
 import {
   getShoppingList,
+  listShoppingBoard,
   listShoppingCategories,
   listShoppingLists,
 } from "./shopping/read"
@@ -57,6 +62,7 @@ describe("application read-service authorization boundaries", () => {
     }
     mocks.shoppingListFindFirst.mockResolvedValue(null)
     mocks.budgetFindUnique.mockResolvedValue(null)
+    mocks.householdFindFirst.mockResolvedValue(null)
     mocks.projectFindFirst.mockResolvedValue(null)
     mocks.plantFindFirst.mockResolvedValue(null)
   })
@@ -85,6 +91,22 @@ describe("application read-service authorization boundaries", () => {
           OR: [{ isPrivate: false }, { createdById: "user-1" }],
         },
       })
+    )
+  })
+
+  it("builds the shopping board from visible lists and the caller's household", async () => {
+    await listShoppingBoard(context)
+
+    expect(mocks.shoppingListFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          householdId: "household-1",
+          OR: [{ isPrivate: false }, { createdById: "user-1" }],
+        },
+      })
+    )
+    expect(mocks.householdFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "household-1" } })
     )
   })
 
