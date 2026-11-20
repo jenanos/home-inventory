@@ -2,6 +2,7 @@ import { db } from "@workspace/db"
 import type { ApplicationContext } from "@/lib/application/context"
 import {
   getShoppingList as readShoppingList,
+  listShoppingBoard,
   listShoppingLists,
 } from "@/lib/application/shopping/read"
 import {
@@ -13,6 +14,10 @@ import { toDealSummary, type DealView } from "@/lib/shopping-deals"
 
 export async function getShoppingLists(context: ApplicationContext) {
   return listShoppingLists(context)
+}
+
+export async function getShoppingBoard(context: ApplicationContext) {
+  return listShoppingBoard(context)
 }
 
 export async function getShoppingList(

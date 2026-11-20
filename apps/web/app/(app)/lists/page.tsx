@@ -1,5 +1,9 @@
 import { requireHousehold } from "@/lib/session"
-import { getCurrentDeals, getShoppingLists } from "@/lib/queries/shopping-list"
+import {
+  getCurrentDeals,
+  getShoppingBoard,
+  getShoppingLists,
+} from "@/lib/queries/shopping-list"
 import { ShoppingDealsPanel } from "@/components/shopping-deals-panel"
 import { PrivateShoppingListsOverview } from "@/components/private-shopping-lists-overview"
 import { ShoppingStatsPanel } from "@/components/shopping-stats-panel"
@@ -9,15 +13,31 @@ import { ShoppingListCard } from "@/components/shopping-list-card"
 import { getShoppingListItemEffectivePrice } from "@/lib/shopping-list-pricing"
 import { ListChecks, Lock } from "lucide-react"
 import { Card, CardContent } from "@workspace/ui/components/card"
+import { BoardToolbar } from "@/components/board/board-toolbar"
+import { resolveBoardPreferences } from "@/lib/board/preferences"
+import { SHOPPING_GROUPINGS } from "@/lib/board/shopping-board"
+import { toShoppingItemData, toShoppingMembers } from "@/lib/shopping-item-view"
 import { CreateListDialog } from "./create-list-dialog"
 import { EditListDialog } from "./edit-list-dialog"
+import { ShoppingBoard } from "./shopping-board"
 
-export default async function ListsPage() {
+interface ListsPageProps {
+  searchParams: Promise<{ visning?: string; grupper?: string }>
+}
+
+export default async function ListsPage({ searchParams }: ListsPageProps) {
   const { context } = await requireHousehold()
-  const [lists, settings, currentDeals] = await Promise.all([
+  const { view, grouping } = await resolveBoardPreferences({
+    scope: "innkjop",
+    params: await searchParams,
+    groupings: SHOPPING_GROUPINGS,
+    fallbackGrouping: "liste",
+  })
+  const [lists, settings, currentDeals, board] = await Promise.all([
     getShoppingLists(context),
     getHouseholdSettings(context),
     getCurrentDeals(context),
+    view === "tavle" ? getShoppingBoard(context) : null,
   ])
   const householdLists = lists.filter((list) => !list.isPrivate)
   const privateLists = lists.filter((list) => list.isPrivate)
@@ -38,7 +58,17 @@ export default async function ListsPage() {
             Felles lister for husholdningen og dine egne private innkjøp
           </p>
         </div>
-        <CreateListDialog />
+        <div className="flex items-center gap-2">
+          {lists.length > 0 && (
+            <BoardToolbar
+              scope="innkjop"
+              view={view}
+              grouping={grouping}
+              groupings={SHOPPING_GROUPINGS}
+            />
+          )}
+          <CreateListDialog />
+        </div>
       </div>
 
       <ShoppingDealsPanel
@@ -48,57 +78,85 @@ export default async function ListsPage() {
 
       {stats.totalItems > 0 && <ShoppingStatsPanel stats={stats} />}
 
-      {householdLists.length === 0 ? (
-        <Card className="flex flex-col items-center justify-center py-12">
-          <ListChecks className="mb-4 h-12 w-12 text-muted-foreground" />
-          <h3 className="font-heading text-lg font-medium">
-            Ingen felles handlelister ennå
-          </h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Opprett en delt liste for å komme i gang med husholdningsinnkjøp
-          </p>
-        </Card>
-      ) : (
-        <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-          {householdLists.map((list) => {
-            const itemCount = list.items.length
-            const listPurchasedCount = list.items.filter(
-              (i) => i.status === "PURCHASED"
-            ).length
-            const listTotal = list.items.reduce(
-              (sum, item) => sum + getShoppingListItemEffectivePrice(item),
-              0
-            )
-
-            return (
-              <ShoppingListCard
-                key={list.id}
-                href={`/lists/${list.id}`}
-                name={list.name}
-                color={list.color}
-                itemCount={itemCount}
-                purchasedCount={listPurchasedCount}
-                totalCost={listTotal}
-                editAction={
-                  <EditListDialog
-                    listId={list.id}
-                    currentName={list.name}
-                    currentColor={list.color}
-                  />
-                }
-              />
-            )
-          })}
+      {board && board.lists.length > 0 && (
+        <div data-board className="hidden lg:block">
+          <ShoppingBoard
+            items={board.lists.flatMap((list) =>
+              list.items.map(toShoppingItemData)
+            )}
+            lists={board.lists.map(({ id, name, color, isPrivate }) => ({
+              id,
+              name,
+              color,
+              isPrivate,
+            }))}
+            categories={board.categories}
+            members={toShoppingMembers(board.members)}
+            grouping={grouping}
+          />
         </div>
       )}
 
-      {privateLists.length > 0 && (
-        <PrivateShoppingListsOverview
-          lists={privateLists}
-          title="Dine private lister"
-          description="Disse listene vises bare for deg og påvirker ikke husholdningens summer."
-        />
-      )}
+      {/* The board is desktop only; smaller screens keep the lists. */}
+      <div
+        className={
+          board && board.lists.length > 0
+            ? "flex flex-col gap-6 lg:hidden"
+            : "flex flex-col gap-6"
+        }
+      >
+        {householdLists.length === 0 ? (
+          <Card className="flex flex-col items-center justify-center py-12">
+            <ListChecks className="mb-4 h-12 w-12 text-muted-foreground" />
+            <h3 className="font-heading text-lg font-medium">
+              Ingen felles handlelister ennå
+            </h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Opprett en delt liste for å komme i gang med husholdningsinnkjøp
+            </p>
+          </Card>
+        ) : (
+          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+            {householdLists.map((list) => {
+              const itemCount = list.items.length
+              const listPurchasedCount = list.items.filter(
+                (i) => i.status === "PURCHASED"
+              ).length
+              const listTotal = list.items.reduce(
+                (sum, item) => sum + getShoppingListItemEffectivePrice(item),
+                0
+              )
+
+              return (
+                <ShoppingListCard
+                  key={list.id}
+                  href={`/lists/${list.id}`}
+                  name={list.name}
+                  color={list.color}
+                  itemCount={itemCount}
+                  purchasedCount={listPurchasedCount}
+                  totalCost={listTotal}
+                  editAction={
+                    <EditListDialog
+                      listId={list.id}
+                      currentName={list.name}
+                      currentColor={list.color}
+                    />
+                  }
+                />
+              )
+            })}
+          </div>
+        )}
+
+        {privateLists.length > 0 && (
+          <PrivateShoppingListsOverview
+            lists={privateLists}
+            title="Dine private lister"
+            description="Disse listene vises bare for deg og påvirker ikke husholdningens summer."
+          />
+        )}
+      </div>
 
       {lists.length === 0 && (
         <Card className="border-dashed">

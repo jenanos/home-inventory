@@ -4,8 +4,15 @@ import { canManageShoppingListPrivacy } from "@/lib/shopping-list-access"
 import { requireHousehold } from "@/lib/session"
 import { getCurrentDeals, getShoppingList } from "@/lib/queries/shopping-list"
 import { ShoppingDealsPanel } from "@/components/shopping-deals-panel"
-import { isDealCurrent } from "@/lib/application/shopping/deals"
-import { toDealSummary } from "@/lib/shopping-deals"
+import {
+  toShoppingItemData,
+  toShoppingMembers,
+  type ShoppingCategoryOption,
+} from "@/lib/shopping-item-view"
+import { BoardToolbar } from "@/components/board/board-toolbar"
+import { resolveBoardPreferences } from "@/lib/board/preferences"
+import { SHOPPING_GROUPINGS } from "@/lib/board/shopping-board"
+import { ShoppingBoard } from "../shopping-board"
 import { ListHeader } from "./list-header"
 import { ListFilters } from "./list-filters"
 import { ItemList } from "./item-list"
@@ -13,11 +20,26 @@ import { AddItemSheet } from "./add-item-sheet"
 
 interface ListPageProps {
   params: Promise<{ id: string }>
+  searchParams: Promise<{ visning?: string; grupper?: string }>
 }
 
-export default async function ListPage({ params }: ListPageProps) {
+/** A single list's board has no "Liste" column to move between. */
+const LIST_PAGE_GROUPINGS = SHOPPING_GROUPINGS.filter(
+  (option) => option.id !== "liste"
+)
+
+export default async function ListPage({
+  params,
+  searchParams,
+}: ListPageProps) {
   const { id } = await params
   const { context } = await requireHousehold()
+  const { view, grouping } = await resolveBoardPreferences({
+    scope: "handleliste",
+    params: await searchParams,
+    groupings: LIST_PAGE_GROUPINGS,
+    fallbackGrouping: "prioritet",
+  })
 
   const [list, currentDeals] = await Promise.all([
     getShoppingList(context, id),
@@ -28,85 +50,9 @@ export default async function ListPage({ params }: ListPageProps) {
     notFound()
   }
 
-  const members = list.household.members.map((m) => ({
-    id: m.user.id,
-    name: m.user.name ?? m.user.email,
-    email: m.user.email,
-  }))
-
-  const categories = list.household.categories.map((c) => ({
-    id: c.id,
-    name: c.name,
-    icon: c.icon,
-    color: c.color,
-  }))
-
-  const items = list.items.map((item) => {
-    const alternatives = item.alternatives.map((alt) => ({
-      id: alt.id,
-      name: alt.name,
-      price: alt.price ? Number(alt.price) : null,
-      url: alt.url,
-      imageUrl: alt.imageUrl,
-      storeName: alt.storeName,
-      notes: alt.notes,
-      rank: alt.rank,
-    }))
-
-    // Preferred alternative (rank 0) takes precedence for price, url, store, image
-    const topAlternative = alternatives[0] ?? null
-    const effectivePrice =
-      topAlternative?.price != null
-        ? topAlternative.price
-        : item.estimatedPrice
-          ? Number(item.estimatedPrice)
-          : null
-
-    return {
-      id: item.id,
-      name: item.name,
-      description: item.description,
-      priority: item.priority,
-      timeframe: item.timeframe,
-      dueDate: item.dueDate ? item.dueDate.toISOString() : null,
-      estimatedPrice: item.estimatedPrice ? Number(item.estimatedPrice) : null,
-      effectivePrice,
-      url: item.url,
-      imageUrl: item.imageUrl,
-      storeName: item.storeName,
-      status: item.status,
-      purchasedAt: item.purchasedAt ? item.purchasedAt.toISOString() : null,
-      category: item.category
-        ? {
-            id: item.category.id,
-            name: item.category.name,
-            icon: item.category.icon,
-            color: item.category.color,
-          }
-        : null,
-      assignedTo: item.assignedTo
-        ? {
-            id: item.assignedTo.id,
-            name: item.assignedTo.name ?? item.assignedTo.email,
-            email: item.assignedTo.email,
-          }
-        : null,
-      alternatives,
-      dealWatch: item.dealWatch,
-      dealWatchNote: item.dealWatchNote,
-      dealTargetPrice: item.dealTargetPrice
-        ? Number(item.dealTargetPrice)
-        : null,
-      dealCheckedAt: item.dealCheckedAt
-        ? item.dealCheckedAt.toISOString()
-        : null,
-      deal:
-        item.deal && isDealCurrent(item.deal) ? toDealSummary(item.deal) : null,
-      listId: item.listId,
-      createdAt: item.createdAt.toISOString(),
-      updatedAt: item.updatedAt.toISOString(),
-    }
-  })
+  const members = toShoppingMembers(list.household.members)
+  const categories: ShoppingCategoryOption[] = list.household.categories
+  const items = list.items.map(toShoppingItemData)
 
   const totalSum = items.reduce(
     (sum, item) =>
@@ -177,6 +123,12 @@ export default async function ListPage({ params }: ListPageProps) {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <ListFilters categories={categories} members={members} />
         <div className="flex items-center gap-2">
+          <BoardToolbar
+            scope="handleliste"
+            view={view}
+            grouping={grouping}
+            groupings={LIST_PAGE_GROUPINGS}
+          />
           <AddItemSheet
             listId={list.id}
             categories={categories}
@@ -185,12 +137,43 @@ export default async function ListPage({ params }: ListPageProps) {
         </div>
       </div>
 
-      <ItemList
-        items={items}
-        categories={categories}
-        members={members}
-        listId={list.id}
-      />
+      {view === "tavle" && items.length > 0 ? (
+        <>
+          <div data-board className="hidden lg:block">
+            <ShoppingBoard
+              items={items}
+              lists={[
+                {
+                  id: list.id,
+                  name: list.name,
+                  color: list.color,
+                  isPrivate: list.isPrivate,
+                },
+              ]}
+              categories={categories}
+              members={members}
+              grouping={grouping}
+              applyListFilters
+            />
+          </div>
+          {/* The board is desktop only. */}
+          <div className="lg:hidden">
+            <ItemList
+              items={items}
+              categories={categories}
+              members={members}
+              listId={list.id}
+            />
+          </div>
+        </>
+      ) : (
+        <ItemList
+          items={items}
+          categories={categories}
+          members={members}
+          listId={list.id}
+        />
+      )}
 
       {Object.keys(categoryTotals).length > 0 && (
         <div className="rounded-xl border bg-card p-4 shadow-xs ring-1 ring-foreground/10">

@@ -4,6 +4,7 @@ import type { ItemStatus, Priority, Timeframe } from "@workspace/db"
 import {
   createShoppingItem as createShoppingItemService,
   deleteShoppingItem as deleteShoppingItemService,
+  moveShoppingItems,
   toggleShoppingItemPurchased,
   updateShoppingItem as updateShoppingItemService,
   type ProductAlternativeFields,
@@ -71,6 +72,8 @@ export async function updateShoppingItem(input: UpdateItemInput) {
   const updated = await updateShoppingItemService(context, id, fields)
 
   revalidatePath(`/lists/${updated.listId}`)
+  // The board on the overview shows every list's items.
+  revalidatePath("/lists")
   return toClientItem(updated)
 }
 
@@ -86,4 +89,25 @@ export async function toggleItemPurchased(itemId: string) {
   const item = await toggleShoppingItemPurchased(context, itemId)
 
   revalidatePath(`/lists/${item.listId}`)
+  revalidatePath("/lists")
+}
+
+/** Moves one item to another list the caller can see (the board's drop). */
+export async function moveShoppingItem(input: {
+  itemId: string
+  targetListId: string
+  /** The list it came from, so its page is refreshed too. */
+  fromListId: string
+}) {
+  const { context } = await requireHousehold()
+  const [moved] = await moveShoppingItems(
+    context,
+    [input.itemId],
+    input.targetListId
+  )
+
+  revalidatePath(`/lists/${input.fromListId}`)
+  revalidatePath(`/lists/${input.targetListId}`)
+  revalidatePath("/lists")
+  return moved ? toClientItem(moved) : null
 }
