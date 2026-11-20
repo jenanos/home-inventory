@@ -171,7 +171,7 @@ export function shoppingColumns(
 export function shoppingColumnKey(
   item: ShoppingItemData,
   grouping: ShoppingGrouping,
-  context: Pick<ShoppingBoardContext, "today">
+  context: Pick<ShoppingBoardContext, "today" | "members">
 ): string {
   switch (grouping) {
     case "liste":
@@ -185,7 +185,12 @@ export function shoppingColumnKey(
     case "kategori":
       return item.category?.id ?? NONE_KEY
     case "ansvarlig":
-      return item.assignedTo?.id ?? NONE_KEY
+      // Removing a member keeps their assignments; without a column of their
+      // own those items would vanish, so they show as unassigned.
+      return item.assignedTo &&
+        context.members.some((member) => member.id === item.assignedTo?.id)
+        ? item.assignedTo.id
+        : NONE_KEY
     case "status":
       return item.status
   }

@@ -15,7 +15,8 @@ import { Calendar, ListChecks, ShoppingCart } from "lucide-react"
 
 import { KanbanBoard } from "@/components/board/kanban-board"
 import { updateProject } from "@/lib/actions/project"
-import { dueBucket, osloToday } from "@/lib/board/due-date"
+import { useOsloToday } from "@/hooks/use-oslo-today"
+import { dueBucket } from "@/lib/board/due-date"
 import {
   applyProjectPatch,
   compareProjectCards,
@@ -65,7 +66,7 @@ export function ProjectBoard({
   grouping: ProjectGrouping
 }) {
   const router = useRouter()
-  const today = useMemo(() => osloToday(), [])
+  const today = useOsloToday()
   const columns = useMemo(
     () => projectColumns(grouping, today),
     [grouping, today]

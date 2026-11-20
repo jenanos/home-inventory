@@ -96,6 +96,14 @@ describe("shopping board", () => {
     })
   })
 
+  it("shows items assigned to a former member as unassigned", () => {
+    const former = {
+      ...item,
+      assignedTo: { id: "gone", name: "Tidligere", email: "x@example.com" },
+    }
+    expect(shoppingColumnKey(former, "ansvarlig", context)).toBe(NONE_KEY)
+  })
+
   it("ignores columns it does not know", () => {
     expect(shoppingMovePatch("liste", "unknown", context)).toBeNull()
     expect(shoppingMovePatch("prioritet", "URGENT", context)).toBeNull()

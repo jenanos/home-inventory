@@ -14,7 +14,8 @@ import {
   toggleItemPurchased,
   updateShoppingItem,
 } from "@/lib/actions/shopping-item"
-import { dueBucket, osloToday } from "@/lib/board/due-date"
+import { useOsloToday } from "@/hooks/use-oslo-today"
+import { dueBucket } from "@/lib/board/due-date"
 import {
   PRIORITY_LABELS,
   applyShoppingPatch,
@@ -76,9 +77,10 @@ export function ShoppingBoard({
   const searchParams = useSearchParams()
   const [editing, setEditing] = useState<ShoppingItemData | null>(null)
 
+  const today = useOsloToday()
   const context = useMemo<ShoppingBoardContext>(
-    () => ({ lists, categories, members, today: osloToday() }),
-    [lists, categories, members]
+    () => ({ lists, categories, members, today }),
+    [lists, categories, members, today]
   )
   const listById = useMemo(
     () => new Map(lists.map((list) => [list.id, list])),
