@@ -38,3 +38,22 @@ export function parseGroup<Id extends string>(
   }
   return fallback
 }
+
+/**
+ * On phones the shopping overview shows the lists as cards, or every item on
+ * them as one long list (`?mobil=alle`). Remembered like the view above.
+ */
+export type MobileShoppingView = "lister" | "alle"
+
+export const MOBILE_VIEW_PARAM = "mobil"
+
+export const MOBILE_VIEW_COOKIE = "innkjop-mobilvisning"
+
+export function parseMobileView(
+  ...values: Array<string | undefined>
+): MobileShoppingView {
+  for (const value of values) {
+    if (value === "lister" || value === "alle") return value
+  }
+  return "lister"
+}
