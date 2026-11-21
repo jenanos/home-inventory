@@ -2,8 +2,10 @@ import { cookies } from "next/headers"
 
 import type { BoardGroupingOption } from "@/lib/board/types"
 import {
+  MOBILE_VIEW_COOKIE,
   groupCookieName,
   parseGroup,
+  parseMobileView,
   parseView,
   viewCookieName,
   type BoardScope,
@@ -32,4 +34,10 @@ export async function resolveBoardPreferences<Id extends string>(options: {
     store.get(groupCookieName(options.scope))?.value
   )
   return { view, grouping }
+}
+
+/** Whether the shopping overview opens on the lists or all items on phones. */
+export async function resolveMobileShoppingView(param: string | undefined) {
+  const store = await cookies()
+  return parseMobileView(param, store.get(MOBILE_VIEW_COOKIE)?.value)
 }
