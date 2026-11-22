@@ -13,7 +13,6 @@ describe("calculateShoppingStats", () => {
       status: "PENDING",
       estimatedPrice: "100",
       alternatives: [],
-      timeframe: "NOW",
       priority: "HIGH",
       category: { name: "Kjøkken" },
     },
@@ -23,13 +22,11 @@ describe("calculateShoppingStats", () => {
       status: "PENDING",
       estimatedPrice: "999",
       alternatives: [{ price: "25" }],
-      timeframe: null,
       priority: "LOW",
     },
     {
       status: "PENDING",
       alternatives: [],
-      timeframe: "SOMEDAY",
       priority: "LOW",
     },
     {
@@ -55,20 +52,13 @@ describe("calculateShoppingStats", () => {
     { status: "SKIPPED", estimatedPrice: "999", alternatives: [] },
   ]
 
-  it("splits remaining items by timeframe, priority and category", () => {
+  it("splits remaining items by priority and category", () => {
     const stats = calculateShoppingStats(items, { now })
 
     expect(stats.totalItems).toBe(8)
     expect(stats.skippedCount).toBe(1)
     expect(stats.remaining).toEqual({ count: 3, total: 125, unpriced: 1 })
     expect(stats.purchased).toEqual({ count: 4, total: 2547, unpriced: 0 })
-    expect(stats.remainingByTimeframe).toEqual({
-      NOW: { count: 1, total: 100, unpriced: 0 },
-      SOON: { count: 0, total: 0, unpriced: 0 },
-      LATER: { count: 0, total: 0, unpriced: 0 },
-      SOMEDAY: { count: 1, total: 0, unpriced: 1 },
-      UNSET: { count: 1, total: 25, unpriced: 0 },
-    })
     expect(stats.remainingByPriority).toEqual({
       HIGH: { count: 1, total: 100, unpriced: 0 },
       MEDIUM: { count: 0, total: 0, unpriced: 0 },

@@ -48,9 +48,8 @@ import {
 } from "lucide-react"
 import { CategoryIcon } from "@/components/category-icon"
 import { createShoppingItem } from "@/lib/actions/shopping-item"
-import type { Priority, Timeframe } from "@workspace/db"
+import type { Priority } from "@workspace/db"
 import { useMediaQuery } from "@/hooks/use-media-query"
-import { TIMEFRAME_OPTIONS } from "@/lib/shopping-timeframe"
 
 interface LocalAlternative {
   tempId: string
@@ -98,7 +97,6 @@ export function AddItemSheet({ listId, categories, members }: AddItemSheetProps)
   const [description, setDescription] = useState("")
   const [categoryId, setCategoryId] = useState("")
   const [priority, setPriority] = useState<Priority>("MEDIUM")
-  const [timeframe, setTimeframe] = useState("")
   const [dueDate, setDueDate] = useState<Date | undefined>(undefined)
   const [assignedToId, setAssignedToId] = useState("")
 
@@ -113,7 +111,6 @@ export function AddItemSheet({ listId, categories, members }: AddItemSheetProps)
     setDescription("")
     setCategoryId("")
     setPriority("MEDIUM")
-    setTimeframe("")
     setDueDate(undefined)
     setAssignedToId("")
     setAlternatives([])
@@ -145,7 +142,6 @@ export function AddItemSheet({ listId, categories, members }: AddItemSheetProps)
 
     const normalizedCategoryId =
       categoryId && categoryId !== "none" ? categoryId : undefined
-    const normalizedTimeframe = timeframe && timeframe !== "none" ? (timeframe as Timeframe) : undefined
     const normalizedAssignedToId =
       assignedToId && assignedToId !== "none" ? assignedToId : undefined
 
@@ -167,7 +163,6 @@ export function AddItemSheet({ listId, categories, members }: AddItemSheetProps)
           description: description.trim() || undefined,
           categoryId: normalizedCategoryId,
           priority,
-          timeframe: normalizedTimeframe,
           dueDate: dueDate || undefined,
           assignedToId: normalizedAssignedToId,
           listId,
@@ -264,23 +259,6 @@ export function AddItemSheet({ listId, categories, members }: AddItemSheetProps)
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="grid gap-1.5">
-          <Label>Når</Label>
-          <Select value={timeframe} onValueChange={setTimeframe}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Velg..." />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">Ingen</SelectItem>
-              {TIMEFRAME_OPTIONS.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="grid gap-1.5">
           <Label>Frist</Label>
           <Popover>
             <PopoverTrigger asChild>
@@ -305,26 +283,26 @@ export function AddItemSheet({ listId, categories, members }: AddItemSheetProps)
             </PopoverContent>
           </Popover>
         </div>
-      </div>
 
-      {members.length > 1 && (
-        <div className="grid gap-1.5">
-          <Label>Tildelt til</Label>
-          <Select value={assignedToId} onValueChange={setAssignedToId}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Velg person..." />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">Ingen</SelectItem>
-              {members.map((member) => (
-                <SelectItem key={member.id} value={member.id}>
-                  {member.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
+        {members.length > 1 && (
+          <div className="grid gap-1.5">
+            <Label>Tildelt til</Label>
+            <Select value={assignedToId} onValueChange={setAssignedToId}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Velg person..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Ingen</SelectItem>
+                {members.map((member) => (
+                  <SelectItem key={member.id} value={member.id}>
+                    {member.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+      </div>
 
       <Separator />
 

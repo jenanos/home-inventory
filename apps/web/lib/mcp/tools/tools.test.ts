@@ -207,7 +207,6 @@ beforeEach(() => {
       description: null,
       status: "PENDING",
       priority: "MEDIUM",
-      timeframe: null,
       dueDate: new Date("2026-03-15T00:00:00Z"),
       estimatedPrice: decimal("499.00"),
       url: null,
@@ -716,7 +715,7 @@ describe("resource boundaries", () => {
   })
 
   it("bounds cross-list search by list visibility", async () => {
-    await callTool("search-shopping-items", { timeframe: "SOON" })
+    await callTool("search-shopping-items", { priority: "HIGH" })
 
     expect(mocks.shoppingItemFindMany).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -725,7 +724,7 @@ describe("resource boundaries", () => {
             householdId: "household-1",
             OR: [{ isPrivate: false }, { createdById: "user-1" }],
           },
-          timeframe: "SOON",
+          priority: "HIGH",
         },
       })
     )

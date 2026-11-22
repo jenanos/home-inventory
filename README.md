@@ -6,7 +6,7 @@ A personal app for managing home projects and finances, built with Next.js 16 an
 
 - **Shopping lists** — create and organize multiple lists per household
 - **Deal watching** — mark items to buy on offer; an assistant connected through MCP checks the stores (on request or as a scheduled task) and the current offers show at the top of the shopping page and the overview (ADR 0013)
-- **Item tracking** — priority, timeframe (now, soon, later, someday), due dates, estimated prices, store names, product URLs and product alternatives
+- **Item tracking** — priority, due dates, estimated prices, store names, product URLs and product alternatives
 - **Categories** — 13 default categories with icons and colors, fully customizable
 - **Multi-user households** — invite members and assign items
 - **Shared links** — generate shareable links to lists with optional expiration

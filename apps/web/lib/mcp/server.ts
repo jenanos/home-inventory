@@ -16,7 +16,7 @@ export const MCP_SERVER_INSTRUCTIONS = `Home Overview manages one household's ho
 Shopping:
 - A shopping item is a purchase need ("Vaskemaskin", "Hageslange"), not a product. Put concrete products, models and offers for the same need under the item's alternatives, best first; the first alternative's price is the item's effective price.
 - Before adding, check what exists with search-shopping-items or get-shopping-list. add-shopping-items skips names already on the list.
-- priority is how important it is (HIGH must have, MEDIUM should have, LOW nice to have); timeframe is when it is needed (NOW, SOON, LATER, SOMEDAY); dueDate is only for a real deadline.
+- priority is how important and urgent it is (HIGH must have soon, MEDIUM should have, LOW nice to have, no rush); dueDate is only for a real deadline.
 - Prices are NOK numbers without currency signs. url and imageUrl are plain absolute https URLs, not markdown links.
 - Mark bought items with set-shopping-item-status. Use SKIPPED for things no longer wanted; delete only mistakes and duplicates, and confirm with the user first.
 - Use list-shopping-categories for category ids; create a category only when none fits.

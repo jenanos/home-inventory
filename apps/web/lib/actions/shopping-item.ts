@@ -1,6 +1,6 @@
 "use server"
 
-import type { ItemStatus, Priority, Timeframe } from "@workspace/db"
+import type { ItemStatus, Priority } from "@workspace/db"
 import {
   createShoppingItem as createShoppingItemService,
   deleteShoppingItem as deleteShoppingItemService,
@@ -33,7 +33,6 @@ interface CreateItemInput {
   description?: string
   categoryId?: string
   priority?: Priority
-  timeframe?: Timeframe
   dueDate?: Date
   estimatedPrice?: number
   url?: string
@@ -57,7 +56,6 @@ interface UpdateItemInput {
   description?: string | null
   categoryId?: string | null
   priority?: Priority
-  timeframe?: Timeframe | null
   dueDate?: Date | null
   estimatedPrice?: number | null
   url?: string | null

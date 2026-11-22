@@ -1,4 +1,4 @@
-import type { ItemStatus, Priority, Timeframe } from "@workspace/db"
+import type { ItemStatus, Priority } from "@workspace/db"
 
 import {
   DUE_BUCKETS,
@@ -14,7 +14,6 @@ import type {
   ShoppingItemData,
   ShoppingMember,
 } from "@/lib/shopping-item-view"
-import { TIMEFRAMES, TIMEFRAME_LABELS } from "@/lib/shopping-timeframe"
 
 /**
  * How the shopping board can be grouped, and what dropping a card in a column
@@ -25,7 +24,6 @@ import { TIMEFRAMES, TIMEFRAME_LABELS } from "@/lib/shopping-timeframe"
 export const SHOPPING_GROUPINGS = [
   { id: "liste", label: "Liste" },
   { id: "prioritet", label: "Prioritet" },
-  { id: "tidspunkt", label: "Når" },
   { id: "frist", label: "Frist" },
   { id: "kategori", label: "Kategori" },
   { id: "ansvarlig", label: "Ansvarlig" },
@@ -53,7 +51,6 @@ export interface ShoppingBoardContext {
 export type ShoppingItemPatch = {
   listId?: string
   priority?: Priority
-  timeframe?: Timeframe | null
   dueDate?: Date | null
   categoryId?: string | null
   assignedToId?: string | null
@@ -128,15 +125,6 @@ export function shoppingColumns(
         droppable: true,
         accentClassName: PRIORITY_ACCENTS[priority],
       }))
-    case "tidspunkt":
-      return [
-        ...TIMEFRAMES.map((timeframe) => ({
-          key: timeframe,
-          label: TIMEFRAME_LABELS[timeframe],
-          droppable: true,
-        })),
-        { key: NONE_KEY, label: "Ikke satt", droppable: true },
-      ]
     case "frist":
       return dueColumns(context.today)
     case "kategori":
@@ -178,8 +166,6 @@ export function shoppingColumnKey(
       return item.listId
     case "prioritet":
       return item.priority
-    case "tidspunkt":
-      return item.timeframe ?? NONE_KEY
     case "frist":
       return dueBucket(item.dueDate, context.today)
     case "kategori":
@@ -213,11 +199,6 @@ export function shoppingMovePatch(
       return (PRIORITIES as string[]).includes(columnKey)
         ? { priority: columnKey as Priority }
         : null
-    case "tidspunkt":
-      return columnKey === NONE_KEY ||
-        (TIMEFRAMES as readonly string[]).includes(columnKey)
-        ? { timeframe: orNull(columnKey) as Timeframe | null }
-        : null
     case "frist": {
       if (!(DUE_BUCKETS as readonly string[]).includes(columnKey)) return null
       const dueDate = dueDateForBucket(columnKey as DueBucket, context.today)
@@ -249,7 +230,6 @@ export function applyShoppingPatch(
   const next = { ...item }
   if (patch.listId !== undefined) next.listId = patch.listId
   if (patch.priority !== undefined) next.priority = patch.priority
-  if (patch.timeframe !== undefined) next.timeframe = patch.timeframe
   if (patch.dueDate !== undefined) {
     next.dueDate = patch.dueDate ? patch.dueDate.toISOString() : null
   }

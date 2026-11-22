@@ -20,7 +20,6 @@ import { defineTool, READ_ONLY_ANNOTATIONS } from "./define"
 import {
   ITEM_STATUSES,
   PRIORITIES,
-  TIMEFRAMES,
   assertId,
   calculated,
   calendarDate,
@@ -149,12 +148,6 @@ export const shoppingItemSchema = z.object({
   description: z.string().nullable(),
   status: z.enum(ITEM_STATUSES),
   priority: z.enum(PRIORITIES),
-  timeframe: z
-    .enum(TIMEFRAMES)
-    .nullable()
-    .describe(
-      "When the item is needed: NOW (as soon as possible), SOON, LATER, SOMEDAY (no rush)."
-    ),
   dueDate: calendarDateOutputSchema,
   estimatedPrice: storedMoneySchema,
   url: z.string().nullable(),
@@ -182,7 +175,6 @@ export type ShoppingItemRow = {
   description: string | null
   status: (typeof ITEM_STATUSES)[number]
   priority: (typeof PRIORITIES)[number]
-  timeframe: (typeof TIMEFRAMES)[number] | null
   dueDate: Date | null
   estimatedPrice: DecimalValue | null
   url: string | null
@@ -211,7 +203,6 @@ export function serializeShoppingItem(
     description: item.description,
     status: item.status,
     priority: item.priority,
-    timeframe: item.timeframe,
     dueDate: calendarDate(item.dueDate),
     estimatedPrice: money(item.estimatedPrice),
     url: item.url,
@@ -437,7 +428,7 @@ export const searchShoppingItemsTool = defineTool({
   scope: "shopping:read",
   title: "Search shopping items across lists",
   description:
-    "Finds items across every shopping list the user can see, filtered by text, list, status, priority, timeframe or category. Use it to check whether something is already planned before adding it, or to answer questions like 'what do we need soon?'. Each item carries the list it belongs to.",
+    "Finds items across every shopping list the user can see, filtered by text, list, status, priority or category. Use it to check whether something is already planned before adding it, or to answer questions like 'what is most important to buy?'. Each item carries the list it belongs to.",
   inputSchema: {
     query: filterTextSchema
       .optional()
@@ -447,7 +438,6 @@ export const searchShoppingItemsTool = defineTool({
     listId: idSchema.optional().describe("Limit to one list."),
     status: z.enum(ITEM_STATUSES).optional(),
     priority: z.enum(PRIORITIES).optional(),
-    timeframe: z.enum(TIMEFRAMES).optional(),
     categoryId: idSchema
       .nullable()
       .optional()
@@ -478,7 +468,6 @@ export const searchShoppingItemsTool = defineTool({
         listId: args.listId,
         status: args.status,
         priority: args.priority,
-        timeframe: args.timeframe,
         categoryId: args.categoryId,
         includeAlternatives,
       }

@@ -7,7 +7,6 @@ import {
   Lifecycle,
   PlantType,
   Priority,
-  Timeframe,
   SunNeed,
   ProjectExecution,
   ProjectScale,
@@ -28,7 +27,6 @@ import {
   LIFECYCLES,
   PLANT_TYPES,
   PRIORITIES,
-  TIMEFRAMES,
   SUN_NEEDS,
   PROJECT_EXECUTIONS,
   PROJECT_SCALES,
@@ -50,7 +48,6 @@ describe("tool enum contracts cover the Prisma schema", () => {
   it.each([
     ["ItemStatus", ITEM_STATUSES, ItemStatus],
     ["Priority", PRIORITIES, Priority],
-    ["Timeframe", TIMEFRAMES, Timeframe],
     ["ProjectStatus", PROJECT_STATUSES, ProjectStatus],
     ["ProjectType", PROJECT_TYPES, ProjectType],
     ["ProjectScale", PROJECT_SCALES, ProjectScale],

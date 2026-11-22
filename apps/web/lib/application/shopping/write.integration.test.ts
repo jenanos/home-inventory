@@ -588,7 +588,7 @@ describe("categories", () => {
   })
 })
 
-describe("MCP tools for alternatives and timeframe", () => {
+describe("MCP tools for alternatives and priority", () => {
   it("reorders and deletes alternatives through the tools", async () => {
     const { context } = await fixtures.createHousehold()
     const { item } = await listWithItem(context)
@@ -618,7 +618,7 @@ describe("MCP tools for alternatives and timeframe", () => {
     })
   })
 
-  it("stores timeframe and imageUrl from add-shopping-items", async () => {
+  it("stores priority and imageUrl from add-shopping-items", async () => {
     const { context } = await fixtures.createHousehold()
     const list = await createShoppingList(context, { name: "Hus" })
 
@@ -628,7 +628,7 @@ describe("MCP tools for alternatives and timeframe", () => {
         items: [
           {
             name: "Hageslange",
-            timeframe: "SOON",
+            priority: "HIGH",
             imageUrl: "https://example.com/slange.jpg",
             alternatives: [
               {
@@ -646,7 +646,7 @@ describe("MCP tools for alternatives and timeframe", () => {
     expect(result.structuredContent).toMatchObject({
       created: [
         {
-          timeframe: "SOON",
+          priority: "HIGH",
           imageUrl: "https://example.com/slange.jpg",
           alternatives: [{ imageUrl: "https://example.com/gardena.jpg" }],
         },

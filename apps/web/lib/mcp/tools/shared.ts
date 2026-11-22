@@ -27,8 +27,6 @@ export const ITEM_STATUSES = ["PENDING", "PURCHASED", "SKIPPED"] as const
 
 export const PRIORITIES = ["HIGH", "MEDIUM", "LOW"] as const
 
-export const TIMEFRAMES = ["NOW", "SOON", "LATER", "SOMEDAY"] as const
-
 export const PROJECT_STATUSES = [
   "NOT_STARTED",
   "IN_PROGRESS",

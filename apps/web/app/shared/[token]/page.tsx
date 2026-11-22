@@ -9,7 +9,6 @@ import {
 import { Badge } from "@workspace/ui/components/badge"
 import { Separator } from "@workspace/ui/components/separator"
 import { Eye, ShoppingCart } from "lucide-react"
-import { timeframeLabel } from "@/lib/shopping-timeframe"
 
 const formatNOK = (amount: number) =>
   new Intl.NumberFormat("nb-NO", {
@@ -94,9 +93,6 @@ export default async function SharedListPage({
                       <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                         {item.category && (
                           <Badge variant="secondary">{item.category.name}</Badge>
-                        )}
-                        {item.timeframe && (
-                          <span>{timeframeLabel(item.timeframe)}</span>
                         )}
                         {item.storeName && <span>{item.storeName}</span>}
                         {item.assignedTo && (

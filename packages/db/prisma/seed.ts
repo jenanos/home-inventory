@@ -3,7 +3,6 @@ import {
   Prisma,
   type BudgetEntryType,
   type ItemStatus,
-  type Timeframe,
   type Priority,
   type Role,
 } from "@prisma/client"
@@ -66,7 +65,6 @@ type SeedItem = {
   description?: string
   categoryName?: string
   priority?: Priority
-  timeframe?: Timeframe
   dueInDays?: number
   estimatedPrice?: number
   url?: string
@@ -104,7 +102,6 @@ const DEMO_LISTS: SeedList[] = [
         description: "Mork gratt stoff, oppbevaring i sokkel og fast madrass.",
         categoryName: "Soverom",
         priority: "HIGH",
-        timeframe: "NOW",
         dueInDays: 5,
         estimatedPrice: 12999,
         url: "https://www.ikea.com/no/no/search/?q=kontinentalseng",
@@ -139,7 +136,6 @@ const DEMO_LISTS: SeedList[] = [
         description: "Tre moduler med skuffer, stang og speildor mot gangen.",
         categoryName: "Møbler",
         priority: "HIGH",
-        timeframe: "NOW",
         dueInDays: 7,
         url: "https://www.ikea.com/no/no/search/?q=pax",
         imageUrl:
@@ -180,7 +176,6 @@ const DEMO_LISTS: SeedList[] = [
         description: "Bor ha utsatt start, ullprogram og lavt stoyniva.",
         categoryName: "Hvitevarer",
         priority: "HIGH",
-        timeframe: "NOW",
         dueInDays: 3,
         estimatedPrice: 7499,
         url: "https://www.elkjop.no/search/vaskemaskin",
@@ -215,7 +210,6 @@ const DEMO_LISTS: SeedList[] = [
         description: "Skal dekke hele vindusbredden og passe med veggfargen.",
         categoryName: "Tekstiler",
         priority: "MEDIUM",
-        timeframe: "SOON",
         dueInDays: 10,
         estimatedPrice: 1599,
         url: "https://www.kid.no/search?q=morkleggingsgardin",
@@ -231,7 +225,6 @@ const DEMO_LISTS: SeedList[] = [
         description: "Ble vurdert, men vi prioriterer brukte mobler senere.",
         categoryName: "Soverom",
         priority: "LOW",
-        timeframe: "LATER",
         dueInDays: 25,
         estimatedPrice: 2999,
         url: "https://www.ikea.com/no/no/search/?q=kommode",
@@ -247,7 +240,6 @@ const DEMO_LISTS: SeedList[] = [
           "Liten losning som tar lite gulvplass og samler nodvendige ting.",
         categoryName: "Oppbevaring",
         priority: "MEDIUM",
-        timeframe: "SOON",
         dueInDays: 6,
         estimatedPrice: 899,
         url: "https://www.ikea.com/no/no/search/?q=skohylle",
@@ -262,7 +254,6 @@ const DEMO_LISTS: SeedList[] = [
         description: "Dekning i begge etasjer og ute pa balkongen.",
         categoryName: "Elektronikk",
         priority: "HIGH",
-        timeframe: "NOW",
         dueInDays: 2,
         url: "https://www.komplett.no/search?q=mesh%20wifi",
         imageUrl:
@@ -302,7 +293,6 @@ const DEMO_LISTS: SeedList[] = [
         name: "Nokkelboks ved inngang",
         description: "For reservenokkel og enkel overlevering til handverkere.",
         priority: "LOW",
-        timeframe: "SOMEDAY",
         dueInDays: 20,
         estimatedPrice: 349,
         url: "https://www.clasohlson.com/no/search?text=nokkelboks",
@@ -328,7 +318,6 @@ const DEMO_LISTS: SeedList[] = [
           "Induksjon, lokk til alle grytene og plassbesparende handtak.",
         categoryName: "Kjøkken",
         priority: "HIGH",
-        timeframe: "SOON",
         dueInDays: 4,
         estimatedPrice: 1999,
         url: "https://www.kitchn.no/sok/?q=kasserollesett",
@@ -359,7 +348,6 @@ const DEMO_LISTS: SeedList[] = [
         description: "Rustfritt, matt finish og ekstra serveringsskjeer.",
         categoryName: "Kjøkken",
         priority: "MEDIUM",
-        timeframe: "SOON",
         dueInDays: 3,
         estimatedPrice: 699,
         url: "https://www.ikea.com/no/no/search/?q=bestikksett",
@@ -375,7 +363,6 @@ const DEMO_LISTS: SeedList[] = [
         description: "Nok til bade hverdagsbruk og noen gjester.",
         categoryName: "Kjøkken",
         priority: "MEDIUM",
-        timeframe: "SOON",
         dueInDays: 5,
         estimatedPrice: 899,
         url: "https://www.ikea.com/no/no/search/?q=tallerkensett",
@@ -390,7 +377,6 @@ const DEMO_LISTS: SeedList[] = [
         description: "Borde kunne lage full kanne og ha avtakbar vanntank.",
         categoryName: "Kjøkken",
         priority: "HIGH",
-        timeframe: "SOON",
         dueInDays: 2,
         url: "https://www.elkjop.no/search/kaffetrakter",
         imageUrl:
@@ -429,7 +415,6 @@ const DEMO_LISTS: SeedList[] = [
         description: "Skal ha kartlegging og være grei med terskler.",
         categoryName: "Rengjøring",
         priority: "LOW",
-        timeframe: "LATER",
         dueInDays: 35,
         imageUrl:
           "https://images.unsplash.com/photo-1585771724684-38269d6639fd?auto=format&fit=crop&w=800&q=80",
@@ -467,7 +452,6 @@ const DEMO_LISTS: SeedList[] = [
         description: "Allrengjoring, baderom, glass, mikrofiber og hansker.",
         categoryName: "Rengjøring",
         priority: "HIGH",
-        timeframe: "SOON",
         dueInDays: 1,
         estimatedPrice: 489,
         url: "https://www.normal.no/search?query=rengjoring",
@@ -483,7 +467,6 @@ const DEMO_LISTS: SeedList[] = [
         description: "Stablebare bokser til kjøleskap og fryser.",
         categoryName: "Oppbevaring",
         priority: "LOW",
-        timeframe: "SOMEDAY",
         dueInDays: 18,
         estimatedPrice: 349,
         url: "https://www.ikea.com/no/no/search/?q=matboks%20glass",
@@ -497,7 +480,6 @@ const DEMO_LISTS: SeedList[] = [
         description: "Trengs bare hvis nevobesok blir faste hos oss.",
         categoryName: "Barn",
         priority: "MEDIUM",
-        timeframe: "LATER",
         dueInDays: 40,
         estimatedPrice: 1599,
         url: "https://www.jollyroom.no/search?query=barnestol",
@@ -517,7 +499,6 @@ const DEMO_LISTS: SeedList[] = [
         description: "Lysebeige trekk, god dybde og plass til overnatting.",
         categoryName: "Stue",
         priority: "HIGH",
-        timeframe: "NOW",
         dueInDays: 12,
         imageUrl:
           "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=800&q=80",
@@ -555,7 +536,6 @@ const DEMO_LISTS: SeedList[] = [
         description: "Mykt lys til lesekroken og dimmer pa ledningen.",
         categoryName: "Belysning",
         priority: "MEDIUM",
-        timeframe: "SOON",
         dueInDays: 7,
         estimatedPrice: 1299,
         url: "https://www.ikea.com/no/no/search/?q=gulvlampe",
@@ -571,7 +551,6 @@ const DEMO_LISTS: SeedList[] = [
         description: "Maste passe 65 tommer TV og spillkonsoll.",
         categoryName: "Stue",
         priority: "MEDIUM",
-        timeframe: "LATER",
         dueInDays: 22,
         estimatedPrice: 2499,
         url: "https://www.ikea.com/no/no/search/?q=tv-benk",
@@ -586,7 +565,6 @@ const DEMO_LISTS: SeedList[] = [
         description: "USB-C er et pluss, men ikke et krav.",
         categoryName: "Kontor",
         priority: "HIGH",
-        timeframe: "SOON",
         dueInDays: 6,
         estimatedPrice: 2995,
         url: "https://www.komplett.no/search?q=27%20tommer%20skjerm",
@@ -617,7 +595,6 @@ const DEMO_LISTS: SeedList[] = [
         description: "Bor testes i butikk for sittekomfort over lange dager.",
         categoryName: "Kontor",
         priority: "HIGH",
-        timeframe: "SOON",
         dueInDays: 8,
         estimatedPrice: 3790,
         url: "https://www.ajprodukter.no/kontor-konferanse/kontorstoler",
@@ -633,7 +610,6 @@ const DEMO_LISTS: SeedList[] = [
           "Ble vurdert, men vi prover a klare oss uten fast skriver.",
         categoryName: "Kontor",
         priority: "LOW",
-        timeframe: "SOMEDAY",
         dueInDays: 30,
         estimatedPrice: 1490,
         url: "https://www.elkjop.no/search/skriver",
@@ -659,7 +635,6 @@ const DEMO_LISTS: SeedList[] = [
         description: "Skal kunne styres i samme app som lyslenkene ute.",
         categoryName: "Smarthjem",
         priority: "MEDIUM",
-        timeframe: "LATER",
         dueInDays: 16,
         imageUrl:
           "https://images.unsplash.com/photo-1518444065439-e933c06ce9cd?auto=format&fit=crop&w=800&q=80",
@@ -693,7 +668,6 @@ const DEMO_LISTS: SeedList[] = [
         description: "Til smale kanter og rundt leveggen pa baksiden.",
         categoryName: "Hage",
         priority: "MEDIUM",
-        timeframe: "LATER",
         dueInDays: 28,
         estimatedPrice: 1699,
         url: "https://www.jula.no/search/?query=gresstrimmer",
@@ -708,7 +682,6 @@ const DEMO_LISTS: SeedList[] = [
         description: "Praktisk for vasking av terrasse og vanning av krukker.",
         categoryName: "Hage",
         priority: "LOW",
-        timeframe: "SOMEDAY",
         dueInDays: 21,
         estimatedPrice: 899,
         url: "https://www.biltema.no/sok/?query=hageslange",
@@ -722,7 +695,6 @@ const DEMO_LISTS: SeedList[] = [
         description: "Hammer, bitssett, målebånd, tang og skrujern.",
         categoryName: "Verktøy",
         priority: "MEDIUM",
-        timeframe: "SOON",
         dueInDays: 4,
         estimatedPrice: 799,
         url: "https://www.jula.no/search/?query=verkt%C3%B8ykasse",
@@ -738,7 +710,6 @@ const DEMO_LISTS: SeedList[] = [
         description: "Trengs for lamper, maling og henge opp gardinskinner.",
         categoryName: "Verktøy",
         priority: "HIGH",
-        timeframe: "NOW",
         dueInDays: 2,
         estimatedPrice: 1899,
         url: "https://www.obsbygg.no/search?query=stige",
@@ -753,7 +724,6 @@ const DEMO_LISTS: SeedList[] = [
         description: "Til sesongutstyr, skruer og kabelrot i boden.",
         categoryName: "Oppbevaring",
         priority: "MEDIUM",
-        timeframe: "SOON",
         dueInDays: 9,
         estimatedPrice: 549,
         url: "https://www.ikea.com/no/no/search/?q=oppbevaringsboks",
@@ -768,7 +738,6 @@ const DEMO_LISTS: SeedList[] = [
         description: "Nytt speil til gjestebadet nede ved entreen.",
         categoryName: "Bad",
         priority: "MEDIUM",
-        timeframe: "LATER",
         dueInDays: 24,
         imageUrl:
           "https://images.unsplash.com/photo-1620626011761-996317b8d101?auto=format&fit=crop&w=800&q=80",
@@ -812,7 +781,6 @@ const DEMO_LISTS: SeedList[] = [
           "Har lav prioritet siden vi kan vente til våren er ordentlig i gang.",
         categoryName: "Møbler",
         priority: "LOW",
-        timeframe: "SOMEDAY",
         dueInDays: 45,
         estimatedPrice: 3299,
         url: "https://www.ikea.com/no/no/search/?q=utebord",
@@ -928,7 +896,6 @@ async function createDemoHousehold(userIdByEmail: Map<string, string>) {
             ? assertMapValue(categoryIdByName, item.categoryName, "kategori")
             : undefined,
           priority: item.priority ?? "MEDIUM",
-          timeframe: item.timeframe,
           dueDate:
             typeof item.dueInDays === "number"
               ? addDays(now, item.dueInDays)
