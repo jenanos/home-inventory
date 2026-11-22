@@ -20,7 +20,6 @@ import {
 import { CategoryIcon } from "@/components/category-icon"
 import { toggleItemPurchased } from "@/lib/actions/shopping-item"
 import { EditItemDialog } from "./edit-item-dialog"
-import { timeframeLabel } from "@/lib/shopping-timeframe"
 import { filterShoppingItems } from "@/lib/shopping-item-filters"
 import { dealSavingsPercent, formatDealPrice } from "@/lib/shopping-deals"
 import type {
@@ -261,12 +260,6 @@ function ItemCard({
                 <CategoryIcon name={item.category.icon} className={cn("mr-0.5", metaIconClass)} />
               )}
               {item.category.name}
-            </Badge>
-          )}
-
-          {item.timeframe && (
-            <Badge variant="outline" className={badgeClass}>
-              {timeframeLabel(item.timeframe)}
             </Badge>
           )}
 

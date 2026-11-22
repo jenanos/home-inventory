@@ -19,6 +19,8 @@ overflødig.
 
 ### Fase blir tidshorisont
 
+> Tidshorisonten er fjernet igjen i [ADR 0014](0014-prioritet-erstatter-tidshorisont.md).
+
 `Phase` er erstattet av `Timeframe` og kolonnen `phase` heter nå `timeframe`.
 Migreringen `20261108120000_generalize_shopping_timeframe` gir enumtypen og
 verdiene nytt navn på stedet, så eksisterende data beholdes:

@@ -24,7 +24,6 @@ export interface ShoppingItemData {
   name: string
   description: string | null
   priority: "HIGH" | "MEDIUM" | "LOW"
-  timeframe: "NOW" | "SOON" | "LATER" | "SOMEDAY" | null
   dueDate: string | null
   estimatedPrice: number | null
   effectivePrice: number | null
@@ -83,7 +82,6 @@ export function toShoppingItemData(item: ShoppingItemView): ShoppingItemData {
     name: item.name,
     description: item.description,
     priority: item.priority,
-    timeframe: item.timeframe,
     dueDate: item.dueDate ? item.dueDate.toISOString() : null,
     estimatedPrice: item.estimatedPrice ? Number(item.estimatedPrice) : null,
     effectivePrice,

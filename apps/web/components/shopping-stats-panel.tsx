@@ -9,20 +9,10 @@ import {
   TabsTrigger,
 } from "@workspace/ui/components/tabs"
 
-import type {
-  PurchaseMonth,
-  ShoppingStats,
-  TimeframeBucket,
-} from "@/lib/dashboard-stats"
+import type { PurchaseMonth, ShoppingStats } from "@/lib/dashboard-stats"
 import { PRIORITY_CONFIG, formatNOK } from "@/lib/project-labels"
-import { TIMEFRAME_LABELS } from "@/lib/shopping-timeframe"
 import { ExpandableStats } from "./expandable-stats"
 import { StatBreakdown, StatFigure, type BreakdownRow } from "./stat-breakdown"
-
-const TIMEFRAME_ROW_LABELS: Record<TimeframeBucket, string> = {
-  ...TIMEFRAME_LABELS,
-  UNSET: "Ikke satt",
-}
 
 const ITEM_NOUN: [string, string] = ["vare", "varer"]
 
@@ -65,25 +55,6 @@ export function ShoppingStatsPanel({
         ? Math.round((purchased.count / counted) * 100)
         : 0
 
-  const urgent = {
-    count:
-      stats.remainingByTimeframe.NOW.count +
-      stats.remainingByTimeframe.SOON.count,
-    total:
-      stats.remainingByTimeframe.NOW.total +
-      stats.remainingByTimeframe.SOON.total,
-    unpriced:
-      stats.remainingByTimeframe.NOW.unpriced +
-      stats.remainingByTimeframe.SOON.unpriced,
-  }
-
-  const timeframeRows: BreakdownRow[] = (
-    Object.keys(TIMEFRAME_ROW_LABELS) as TimeframeBucket[]
-  ).map((key) => ({
-    key,
-    label: TIMEFRAME_ROW_LABELS[key],
-    tally: stats.remainingByTimeframe[key],
-  }))
   const priorityRows: BreakdownRow[] = (["HIGH", "MEDIUM", "LOW"] as const).map(
     (key) => ({
       key,
@@ -115,8 +86,8 @@ export function ShoppingStatsPanel({
       }
     >
       <StatFigure
-        label="Haster (snarest + snart)"
-        tally={urgent}
+        label="Høy prioritet"
+        tally={stats.remainingByPriority.HIGH}
         noun={ITEM_NOUN}
       />
 
@@ -131,11 +102,8 @@ export function ShoppingStatsPanel({
         </TabsList>
 
         <TabsContent value="remaining">
-          <Tabs defaultValue="timeframe" className="gap-3">
+          <Tabs defaultValue="priority" className="gap-3">
             <TabsList className="h-8">
-              <TabsTrigger value="timeframe" className="text-xs">
-                Når
-              </TabsTrigger>
               <TabsTrigger value="priority" className="text-xs">
                 Prioritet
               </TabsTrigger>
@@ -143,13 +111,6 @@ export function ShoppingStatsPanel({
                 Kategori
               </TabsTrigger>
             </TabsList>
-            <TabsContent value="timeframe">
-              <StatBreakdown
-                rows={timeframeRows}
-                countLabel={ITEM_NOUN}
-                emptyText="Ingen gjenstående innkjøp."
-              />
-            </TabsContent>
             <TabsContent value="priority">
               <StatBreakdown
                 rows={priorityRows}

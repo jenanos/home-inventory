@@ -1,4 +1,4 @@
-import { db, ItemStatus, Priority, Timeframe, type Prisma } from "@workspace/db"
+import { db, ItemStatus, Priority, type Prisma } from "@workspace/db"
 
 import { isListColorId } from "../../list-colors"
 import {
@@ -39,7 +39,6 @@ const ALTERNATIVE = "produktalternativ"
 const CATEGORY = "kategori"
 
 const PRIORITY_VALUES = Object.values(Priority)
-const TIMEFRAME_VALUES = Object.values(Timeframe)
 const ITEM_STATUS_VALUES = Object.values(ItemStatus)
 
 /** Alternatives are a short list per item, not a catalogue. */
@@ -111,7 +110,6 @@ export const SHOPPING_ITEM_RESULT_SELECT = {
   description: true,
   status: true,
   priority: true,
-  timeframe: true,
   dueDate: true,
   estimatedPrice: true,
   url: true,
@@ -148,7 +146,6 @@ export type ShoppingItemFields = {
   description?: string | null
   categoryId?: string | null
   priority?: Priority
-  timeframe?: Timeframe | null
   dueDate?: Date | string | null
   estimatedPrice?: number | null
   url?: string | null
@@ -185,10 +182,6 @@ function normalizeItemFields(input: Partial<ShoppingItemFields>) {
       input.priority === undefined
         ? undefined
         : enumValue(input.priority, PRIORITY_VALUES, "Prioritet"),
-    timeframe:
-      input.timeframe == null
-        ? input.timeframe
-        : enumValue(input.timeframe, TIMEFRAME_VALUES, "Når"),
     dueDate: optionalCalendarDate(input.dueDate, "Frist"),
     estimatedPrice: optionalMoneyAmount(input.estimatedPrice, "Estimert pris"),
     url: optionalUrl(input.url, "URL"),

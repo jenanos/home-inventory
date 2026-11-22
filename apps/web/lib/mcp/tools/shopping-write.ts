@@ -28,7 +28,6 @@ import {
 import {
   ITEM_STATUSES,
   PRIORITIES,
-  TIMEFRAMES,
   calendarDateInputSchema,
   expectedUpdatedAtSchema,
   idSchema,
@@ -80,13 +79,6 @@ const itemFieldsInputSchema = {
     .enum(PRIORITIES)
     .optional()
     .describe("HIGH = must have, MEDIUM = should have, LOW = nice to have."),
-  timeframe: z
-    .enum(TIMEFRAMES)
-    .nullable()
-    .optional()
-    .describe(
-      "When the item is needed: NOW (as soon as possible), SOON (within weeks), LATER (can wait), SOMEDAY (no rush)."
-    ),
   dueDate: calendarDateInputSchema
     .nullable()
     .optional()

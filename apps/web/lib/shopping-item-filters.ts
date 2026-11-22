@@ -7,7 +7,6 @@ export function filterShoppingItems(
 ): ShoppingItemData[] {
   const category = params.get("category")
   const priority = params.get("priority")
-  const timeframe = params.get("timeframe")
   const assigned = params.get("assigned")
   const status = params.get("status")
 
@@ -15,7 +14,6 @@ export function filterShoppingItems(
     (item) =>
       (!category || item.category?.id === category) &&
       (!priority || item.priority === priority) &&
-      (!timeframe || item.timeframe === timeframe) &&
       (!assigned || item.assignedTo?.id === assigned) &&
       (!status || item.status === status)
   )

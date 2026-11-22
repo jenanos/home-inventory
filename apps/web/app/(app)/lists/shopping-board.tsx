@@ -35,7 +35,6 @@ import type {
   ShoppingItemData,
   ShoppingMember,
 } from "@/lib/shopping-item-view"
-import { timeframeLabel } from "@/lib/shopping-timeframe"
 import { EditItemDialog } from "./[id]/edit-item-dialog"
 
 const PRIORITY_BADGE = {
@@ -205,7 +204,6 @@ function ShoppingBoardCard({
   const image = item.alternatives[0]?.imageUrl ?? item.imageUrl
   const overdue =
     !isMuted && item.dueDate && dueBucket(item.dueDate, today) === "OVERDUE"
-  const timeframe = timeframeLabel(item.timeframe)
   const badge = "h-5 px-1.5 text-[11px]"
 
   return (
@@ -269,11 +267,6 @@ function ShoppingBoardCard({
               <CategoryIcon name={item.category.icon} className="size-3" />
             )}
             {item.category.name}
-          </Badge>
-        )}
-        {grouping !== "tidspunkt" && timeframe && (
-          <Badge variant="outline" className={badge}>
-            {timeframe}
           </Badge>
         )}
         {item.deal && !isMuted && (

@@ -18,7 +18,6 @@ import {
   DrawerTrigger,
 } from "@workspace/ui/components/drawer"
 import { X, SlidersHorizontal } from "lucide-react"
-import { TIMEFRAME_OPTIONS } from "@/lib/shopping-timeframe"
 import { CategoryIcon } from "@/components/category-icon"
 
 interface ListFiltersProps {
@@ -53,15 +52,14 @@ export function ListFilters({ categories, members }: ListFiltersProps) {
 
   const currentCategory = searchParams.get("category") ?? ""
   const currentPriority = searchParams.get("priority") ?? ""
-  const currentTimeframe = searchParams.get("timeframe") ?? ""
   const currentAssigned = searchParams.get("assigned") ?? ""
   const currentStatus = searchParams.get("status") ?? ""
   const currentSort = searchParams.get("sort") ?? "priority"
 
   const hasFilters =
-    !!(currentCategory || currentPriority || currentTimeframe || currentAssigned || currentStatus)
+    !!(currentCategory || currentPriority || currentAssigned || currentStatus)
 
-  const activeFilterCount = [currentCategory, currentPriority, currentTimeframe, currentAssigned, currentStatus].filter(Boolean).length
+  const activeFilterCount = [currentCategory, currentPriority, currentAssigned, currentStatus].filter(Boolean).length
 
   const updateParam = useCallback(
     (key: string, value: string) => {
@@ -111,20 +109,6 @@ export function ListFilters({ categories, members }: ListFiltersProps) {
         <SelectContent>
           <SelectItem value="all">Alle prioriteter</SelectItem>
           {PRIORITY_OPTIONS.map((opt) => (
-            <SelectItem key={opt.value} value={opt.value}>
-              {opt.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-
-      <Select value={currentTimeframe || "all"} onValueChange={(v) => updateParam("timeframe", v)}>
-        <SelectTrigger size="sm" className="h-8 w-auto text-xs">
-          <SelectValue placeholder="Når" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">Alle tidspunkt</SelectItem>
-          {TIMEFRAME_OPTIONS.map((opt) => (
             <SelectItem key={opt.value} value={opt.value}>
               {opt.label}
             </SelectItem>
@@ -213,7 +197,6 @@ export function ListFilters({ categories, members }: ListFiltersProps) {
           updateParam={updateParam}
           currentCategory={currentCategory}
           currentPriority={currentPriority}
-          currentTimeframe={currentTimeframe}
           currentAssigned={currentAssigned}
           currentStatus={currentStatus}
         />
@@ -233,7 +216,6 @@ function MobileFilterDrawer({
   updateParam,
   currentCategory,
   currentPriority,
-  currentTimeframe,
   currentAssigned,
   currentStatus,
 }: {
@@ -245,7 +227,6 @@ function MobileFilterDrawer({
   updateParam: (key: string, value: string) => void
   currentCategory: string
   currentPriority: string
-  currentTimeframe: string
   currentAssigned: string
   currentStatus: string
 }) {
@@ -319,25 +300,6 @@ function MobileFilterDrawer({
             </div>
 
             <div className="grid gap-1.5">
-              <span className="text-xs font-medium text-muted-foreground">Når</span>
-              <Select value={currentTimeframe || "all"} onValueChange={(v) => updateParam("timeframe", v)}>
-                <SelectTrigger size="sm" className="h-9 w-full text-xs">
-                  <SelectValue placeholder="Alle" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Alle</SelectItem>
-                  {TIMEFRAME_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className={members.length > 1 ? "grid grid-cols-2 gap-3" : ""}>
-            <div className="grid gap-1.5">
               <span className="text-xs font-medium text-muted-foreground">Status</span>
               <Select value={currentStatus || "all"} onValueChange={(v) => updateParam("status", v)}>
                 <SelectTrigger size="sm" className="h-9 w-full text-xs">
@@ -353,26 +315,26 @@ function MobileFilterDrawer({
                 </SelectContent>
               </Select>
             </div>
-
-            {members.length > 1 && (
-              <div className="grid gap-1.5">
-                <span className="text-xs font-medium text-muted-foreground">Tildelt</span>
-                <Select value={currentAssigned || "all"} onValueChange={(v) => updateParam("assigned", v)}>
-                  <SelectTrigger size="sm" className="h-9 w-full text-xs">
-                    <SelectValue placeholder="Alle" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Alle</SelectItem>
-                    {members.map((member) => (
-                      <SelectItem key={member.id} value={member.id}>
-                        {member.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
           </div>
+
+          {members.length > 1 && (
+            <div className="grid gap-1.5">
+              <span className="text-xs font-medium text-muted-foreground">Tildelt</span>
+              <Select value={currentAssigned || "all"} onValueChange={(v) => updateParam("assigned", v)}>
+                <SelectTrigger size="sm" className="h-9 w-full text-xs">
+                  <SelectValue placeholder="Alle" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alle</SelectItem>
+                  {members.map((member) => (
+                    <SelectItem key={member.id} value={member.id}>
+                      {member.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
       </DrawerContent>
     </Drawer>

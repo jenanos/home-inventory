@@ -65,9 +65,8 @@ import {
   setPreferredAlternative,
 } from "@/lib/actions/product-alternative"
 import type { ShoppingItemData, AlternativeData } from "./item-list"
-import type { Priority, Timeframe, ItemStatus } from "@workspace/db"
+import type { Priority, ItemStatus } from "@workspace/db"
 import { useMediaQuery } from "@/hooks/use-media-query"
-import { TIMEFRAME_OPTIONS } from "@/lib/shopping-timeframe"
 import { DealWatchSection } from "./deal-watch-section"
 
 interface EditItemDialogProps {
@@ -85,7 +84,6 @@ type ItemSavePayload = {
   description: string | null
   categoryId: string | null
   priority: Priority
-  timeframe: Timeframe | null
   dueDate: Date | null
   assignedToId: string | null
   status: ItemStatus
@@ -118,7 +116,6 @@ export function EditItemDialog({
   const [description, setDescription] = useState("")
   const [categoryId, setCategoryId] = useState("")
   const [priority, setPriority] = useState<Priority>("MEDIUM")
-  const [timeframe, setTimeframe] = useState("")
   const [dueDate, setDueDate] = useState<Date | undefined>(undefined)
   const [assignedToId, setAssignedToId] = useState("")
   const [status, setStatus] = useState<ItemStatus>("PENDING")
@@ -133,7 +130,6 @@ export function EditItemDialog({
       setDescription(item.description ?? "")
       setCategoryId(item.category?.id ?? "none")
       setPriority(item.priority)
-      setTimeframe(item.timeframe ?? "none")
       setDueDate(item.dueDate ? new Date(item.dueDate) : undefined)
       setAssignedToId(item.assignedTo?.id ?? "none")
       setStatus(item.status)
@@ -155,12 +151,11 @@ export function EditItemDialog({
       description: description.trim() || null,
       categoryId: categoryId && categoryId !== "none" ? categoryId : null,
       priority,
-      timeframe: (timeframe && timeframe !== "none" ? timeframe : null) as Timeframe | null,
       dueDate: dueDate ?? null,
       assignedToId: assignedToId && assignedToId !== "none" ? assignedToId : null,
       status,
     }
-  }, [item, name, description, categoryId, priority, timeframe, dueDate, assignedToId, status])
+  }, [item, name, description, categoryId, priority, dueDate, assignedToId, status])
 
   const flushItemSave = useCallback(() => {
     const payload = itemSavePayloadRef.current
@@ -189,8 +184,7 @@ export function EditItemDialog({
         description: description.trim() || null,
         categoryId: categoryId && categoryId !== "none" ? categoryId : null,
         priority,
-        timeframe: (timeframe && timeframe !== "none" ? timeframe : null) as Timeframe | null,
-        dueDate: dueDate ?? null,
+          dueDate: dueDate ?? null,
         assignedToId:
           assignedToId && assignedToId !== "none" ? assignedToId : null,
         status,
@@ -198,7 +192,7 @@ export function EditItemDialog({
     }, 600)
 
     return () => clearTimeout(timeout)
-  }, [name, description, categoryId, priority, timeframe, dueDate, assignedToId, status])
+  }, [name, description, categoryId, priority, dueDate, assignedToId, status])
 
   function markItemDirty() {
     itemDirty.current = true
@@ -301,23 +295,6 @@ export function EditItemDialog({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="grid gap-1.5">
-              <Label>Når</Label>
-              <Select value={timeframe} onValueChange={(v) => { setTimeframe(v); markItemDirty() }}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Velg..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Ingen</SelectItem>
-                  {TIMEFRAME_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid gap-1.5">
               <Label>Status</Label>
               <Select value={status} onValueChange={(v) => { setStatus(v as ItemStatus); markItemDirty() }}>
                 <SelectTrigger className="w-full">
@@ -330,37 +307,37 @@ export function EditItemDialog({
                 </SelectContent>
               </Select>
             </div>
-          </div>
 
-          <div className="grid gap-1.5">
-            <Label>Frist</Label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={cn(
-                    "w-full justify-start text-left font-normal",
-                    !dueDate && "text-muted-foreground"
-                  )}
-                >
-                  <CalendarIcon className="h-4 w-4 mr-2" />
-                  {dueDate
-                    ? new Intl.DateTimeFormat("nb-NO", {
-                        day: "numeric",
-                        month: "short",
-                      }).format(dueDate)
-                    : "Velg..."}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={dueDate}
-                  onSelect={(d) => { setDueDate(d); markItemDirty() }}
-                  weekStartsOn={1}
-                />
-              </PopoverContent>
-            </Popover>
+            <div className="grid gap-1.5">
+              <Label>Frist</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !dueDate && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="h-4 w-4 mr-2" />
+                    {dueDate
+                      ? new Intl.DateTimeFormat("nb-NO", {
+                          day: "numeric",
+                          month: "short",
+                        }).format(dueDate)
+                      : "Velg..."}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={dueDate}
+                    onSelect={(d) => { setDueDate(d); markItemDirty() }}
+                    weekStartsOn={1}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
           </div>
 
           {members.length > 1 && (

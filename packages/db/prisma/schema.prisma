@@ -82,15 +82,6 @@ enum Priority {
   LOW
 }
 
-/// When an item is needed. Replaced the move-in phases (BEFORE_MOVE,
-/// FIRST_WEEK, …) in migration 20261108120000.
-enum Timeframe {
-  NOW
-  SOON
-  LATER
-  SOMEDAY
-}
-
 enum ItemStatus {
   PENDING
   PURCHASED
@@ -346,7 +337,6 @@ model ShoppingItem {
   description    String?
   categoryId     String?    @db.Uuid
   priority       Priority   @default(MEDIUM)
-  timeframe      Timeframe?
   dueDate        DateTime?
   estimatedPrice Decimal?   @db.Decimal(10, 2)
   url            String?

@@ -7,11 +7,9 @@ export { calculateBudgetStats } from "./application/budget/calculations"
  */
 
 const PRIORITIES = ["HIGH", "MEDIUM", "LOW"] as const
-const TIMEFRAME_BUCKETS = ["NOW", "SOON", "LATER", "SOMEDAY", "UNSET"] as const
 const SCALES = ["ROUTINE", "MAJOR"] as const
 
 export type PriorityKey = (typeof PRIORITIES)[number]
-export type TimeframeBucket = (typeof TIMEFRAME_BUCKETS)[number]
 export type ScaleKey = (typeof SCALES)[number]
 
 /** How many things and what they add up to. `unpriced` have no price at all. */
@@ -59,7 +57,6 @@ export type ShoppingStatsItemBase = {
   status: string
   estimatedPrice?: unknown
   alternatives: Array<{ price?: unknown }>
-  timeframe?: string | null
   priority?: string | null
   purchasedAt?: string | Date | null
   category?: { name: string } | null
@@ -109,7 +106,6 @@ export function calculateShoppingStats<T extends ShoppingStatsItemBase>(
 ) {
   const purchased = emptyTally()
   const remaining = emptyTally()
-  const remainingByTimeframe = tallyBy(TIMEFRAME_BUCKETS)
   const remainingByPriority = tallyBy(PRIORITIES)
   const remainingByCategory = new Map<string, Tally>()
   const purchasedByCategory = new Map<string, Tally>()
@@ -129,12 +125,6 @@ export function calculateShoppingStats<T extends ShoppingStatsItemBase>(
 
     if (item.status === "PENDING") {
       addTo(remaining, price)
-      const timeframe = (TIMEFRAME_BUCKETS as readonly string[]).includes(
-        item.timeframe ?? ""
-      )
-        ? (item.timeframe as TimeframeBucket)
-        : "UNSET"
-      addTo(remainingByTimeframe[timeframe], price)
       const priority = (PRIORITIES as readonly string[]).includes(
         item.priority ?? ""
       )
@@ -208,7 +198,6 @@ export function calculateShoppingStats<T extends ShoppingStatsItemBase>(
     skippedCount,
     purchased,
     remaining,
-    remainingByTimeframe,
     remainingByPriority,
     remainingByCategory: sortCategories(remainingByCategory),
     purchasedByCategory: sortCategories(purchasedByCategory),

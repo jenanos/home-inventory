@@ -39,7 +39,6 @@ const item: ShoppingItemData = {
   name: "Drill",
   description: null,
   priority: "MEDIUM",
-  timeframe: null,
   dueDate: null,
   estimatedPrice: 1000,
   effectivePrice: 1000,

@@ -3,7 +3,6 @@ import {
   type ItemStatus,
   type Priority,
   type Prisma,
-  type Timeframe,
 } from "@workspace/db"
 
 import type { ApplicationContext } from "../context"
@@ -20,7 +19,6 @@ export async function listShoppingLists(context: ApplicationContext) {
           status: true,
           estimatedPrice: true,
           priority: true,
-          timeframe: true,
           purchasedAt: true,
           category: { select: { name: true } },
           alternatives: {
@@ -317,7 +315,6 @@ function shoppingItemPageSelect(includeAlternatives: boolean) {
     description: true,
     status: true,
     priority: true,
-    timeframe: true,
     dueDate: true,
     estimatedPrice: true,
     url: true,
@@ -385,7 +382,6 @@ export type ShoppingItemSearch = {
   listId?: string
   status?: ItemStatus
   priority?: Priority
-  timeframe?: Timeframe
   /** `null` finds items without a category. */
   categoryId?: string | null
 }
@@ -403,7 +399,6 @@ export async function searchShoppingItemsPage(
     ...(options.listId ? { listId: options.listId } : {}),
     ...(options.status ? { status: options.status } : {}),
     ...(options.priority ? { priority: options.priority } : {}),
-    ...(options.timeframe ? { timeframe: options.timeframe } : {}),
     ...(options.categoryId !== undefined
       ? { categoryId: options.categoryId }
       : {}),
