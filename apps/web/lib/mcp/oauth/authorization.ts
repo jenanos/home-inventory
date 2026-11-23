@@ -21,6 +21,8 @@ export const DEFAULT_REQUESTED_SCOPES: McpScope[] = [
   "budget:read",
   "maintenance:read",
   "garden:read",
+  "events:read",
+  "packing:read",
 ]
 
 export type AuthorizeRequestParams = {

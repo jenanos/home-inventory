@@ -30,6 +30,14 @@ const mocks = vi.hoisted(() => ({
   gardenBedFindFirst: vi.fn(),
   attachmentFindMany: vi.fn(),
   attachmentFindFirst: vi.fn(),
+  calendarEventFindMany: vi.fn(),
+  calendarEventFindFirst: vi.fn(),
+  packingListCount: vi.fn(),
+  packingListFindMany: vi.fn(),
+  packingListFindFirst: vi.fn(),
+  packingBundleCount: vi.fn(),
+  packingBundleFindMany: vi.fn(),
+  packingBundleFindFirst: vi.fn(),
 }))
 
 vi.mock("@workspace/db", async (importOriginal) => ({
@@ -84,6 +92,20 @@ vi.mock("@workspace/db", async (importOriginal) => ({
     attachment: {
       findMany: mocks.attachmentFindMany,
       findFirst: mocks.attachmentFindFirst,
+    },
+    calendarEvent: {
+      findMany: mocks.calendarEventFindMany,
+      findFirst: mocks.calendarEventFindFirst,
+    },
+    packingList: {
+      count: mocks.packingListCount,
+      findMany: mocks.packingListFindMany,
+      findFirst: mocks.packingListFindFirst,
+    },
+    packingBundle: {
+      count: mocks.packingBundleCount,
+      findMany: mocks.packingBundleFindMany,
+      findFirst: mocks.packingBundleFindFirst,
     },
   },
 }))
@@ -164,6 +186,7 @@ beforeEach(() => {
       color: "#fff",
       isPrivate: false,
       projectId: null,
+      eventId: null,
       createdAt: new Date("2026-01-01T00:00:00Z"),
       updatedAt: new Date("2026-02-01T00:00:00Z"),
       items: [
@@ -186,6 +209,7 @@ beforeEach(() => {
     color: null,
     isPrivate: false,
     projectId: PROJECT_ID,
+    eventId: null,
     createdAt: new Date("2026-01-01T00:00:00Z"),
     updatedAt: new Date("2026-02-01T00:00:00Z"),
     // Present on the browser-facing read of the same table. Swapping the tool
@@ -459,7 +483,125 @@ beforeEach(() => {
   mocks.gardenBedFindFirst.mockResolvedValue(BED)
   mocks.attachmentFindMany.mockResolvedValue([ATTACHMENT])
   mocks.attachmentFindFirst.mockResolvedValue(ATTACHMENT)
+  mocks.calendarEventFindMany.mockResolvedValue([EVENT_ROW])
+  mocks.calendarEventFindFirst.mockResolvedValue(EVENT_ROW)
+  mocks.packingListCount.mockResolvedValue(1)
+  mocks.packingListFindMany.mockResolvedValue([PACKING_LIST_ROW])
+  mocks.packingListFindFirst.mockResolvedValue(PACKING_LIST_ROW)
+  mocks.packingBundleCount.mockResolvedValue(1)
+  mocks.packingBundleFindMany.mockResolvedValue([BUNDLE_ROW])
+  mocks.packingBundleFindFirst.mockResolvedValue(BUNDLE_ROW)
 })
+
+const EVENT_ID = "77777777-7777-4777-8777-777777777777"
+const PACKING_LIST_ID = "88888888-8888-4888-8888-888888888888"
+const BUNDLE_ID = "99999999-9999-4999-8999-999999999999"
+
+const EVENT_ROW = {
+  id: EVENT_ID,
+  householdId: "household-1",
+  title: "Mormor",
+  type: "BIRTHDAY",
+  recurrence: "YEARLY",
+  month: 8,
+  day: 20,
+  year: 1946,
+  notes: "Liker lyng",
+  createdAt: new Date("2026-01-01T00:00:00Z"),
+  updatedAt: new Date("2026-01-01T00:00:00Z"),
+  shoppingLists: [
+    {
+      id: LIST_ID,
+      name: "Gaver til Mormor",
+      color: null,
+      isPrivate: false,
+      updatedAt: new Date("2026-02-01T00:00:00Z"),
+      items: [
+        {
+          id: "item-1",
+          name: "Lyngplante",
+          description: null,
+          status: "PENDING",
+          priority: "MEDIUM",
+          estimatedPrice: decimal("249"),
+          url: null,
+          storeName: null,
+          updatedAt: new Date("2026-02-01T00:00:00Z"),
+          alternatives: [],
+          // On the row, never on the whitelist.
+          assignedTo: { name: POISON.assignee },
+        },
+      ],
+    },
+  ],
+}
+
+const BUNDLE_REF = { id: BUNDLE_ID, name: "Treningstøy" }
+
+const PACKING_LIST_ROW = {
+  id: PACKING_LIST_ID,
+  householdId: "household-1",
+  name: "Hytta påske",
+  season: "SPRING",
+  duration: "WEEKEND",
+  abroad: false,
+  departureOn: new Date("2026-04-01T00:00:00Z"),
+  notes: null,
+  createdAt: new Date("2026-03-01T00:00:00Z"),
+  updatedAt: new Date("2026-03-01T00:00:00Z"),
+  items: [
+    {
+      id: "packing-item-1",
+      listId: PACKING_LIST_ID,
+      name: "Joggesko",
+      quantity: 1,
+      packed: true,
+      notes: null,
+      sortOrder: 0,
+      bundleId: BUNDLE_ID,
+      bundle: BUNDLE_REF,
+      createdAt: new Date("2026-03-01T00:00:00Z"),
+      updatedAt: new Date("2026-03-01T00:00:00Z"),
+    },
+    {
+      id: "packing-item-2",
+      listId: PACKING_LIST_ID,
+      name: "Ullsokker",
+      quantity: 3,
+      packed: false,
+      notes: null,
+      sortOrder: 1,
+      bundleId: null,
+      bundle: null,
+      createdAt: new Date("2026-03-01T00:00:00Z"),
+      updatedAt: new Date("2026-03-01T00:00:00Z"),
+    },
+  ],
+}
+
+const BUNDLE_ROW = {
+  ...BUNDLE_REF,
+  householdId: "household-1",
+  description: null,
+  seasons: [],
+  durations: ["WEEKEND", "WEEK"],
+  abroadOnly: false,
+  autoAdd: false,
+  createdAt: new Date("2026-03-01T00:00:00Z"),
+  updatedAt: new Date("2026-03-01T00:00:00Z"),
+  items: [
+    {
+      id: "bundle-item-1",
+      bundleId: BUNDLE_ID,
+      name: "Joggesko",
+      quantity: 1,
+      notes: null,
+      sortOrder: 0,
+      createdAt: new Date("2026-03-01T00:00:00Z"),
+      updatedAt: new Date("2026-03-01T00:00:00Z"),
+    },
+  ],
+}
 
 const BED_ID = "44444444-4444-4444-8444-444444444444"
 const ATTACHMENT_ID = "66666666-6666-4666-8666-666666666666"
@@ -561,6 +703,12 @@ const HAPPY_PATH_ARGS: Array<[string, Record<string, unknown>]> = [
   ["get-plant", { plantId: PLANT_ID }],
   ["list-garden-beds", {}],
   ["get-garden-bed", { bedId: BED_ID }],
+  ["list-events", {}],
+  ["get-event", { eventId: EVENT_ID }],
+  ["list-packing-lists", {}],
+  ["get-packing-list", { listId: PACKING_LIST_ID }],
+  ["list-packing-bundles", {}],
+  ["get-packing-bundle", { bundleId: BUNDLE_ID }],
   ["list-attachments", { targetType: "plant", targetId: PLANT_ID }],
   ["get-attachment", { attachmentId: ATTACHMENT_ID }],
 ]
@@ -639,6 +787,96 @@ describe("scope enforcement in tools/call", () => {
   })
 })
 
+describe("events", () => {
+  it("lists the next occurrence with the age the person turns", async () => {
+    const { structured } = await callTool("list-events", {})
+
+    expect(structured).toMatchObject({
+      today: "2026-08-03",
+      events: [
+        {
+          title: "Mormor",
+          date: "1946-08-20",
+          occurrence: { date: "2026-08-20", daysUntil: 17, years: 80 },
+          gifts: { listCount: 1, pendingCount: 1, purchasedCount: 0 },
+        },
+      ],
+    })
+  })
+
+  it("returns one row per occurrence in a range", async () => {
+    const { structured } = await callTool("list-events", {
+      from: "2026-01-01",
+      to: "2027-12-31",
+    })
+
+    expect(
+      (
+        structured as { events: Array<{ occurrence: { date: string } }> }
+      ).events.map((event) => event.occurrence.date)
+    ).toEqual(["2026-08-20", "2027-08-20"])
+  })
+
+  it("rejects half a range", async () => {
+    const { structured } = await callTool("list-events", { from: "2026-01-01" })
+
+    expect(structured).toMatchObject({ error: { code: "VALIDATION_ERROR" } })
+  })
+
+  it("bounds gift lists by list visibility", async () => {
+    await callTool("get-event", { eventId: EVENT_ID })
+
+    expect(mocks.calendarEventFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: EVENT_ID, householdId: "household-1" },
+        include: {
+          shoppingLists: expect.objectContaining({
+            where: {
+              householdId: "household-1",
+              OR: [{ isPrivate: false }, { createdById: "user-1" }],
+            },
+          }),
+        },
+      })
+    )
+  })
+})
+
+describe("packing", () => {
+  it("summarizes a list with the bundles on it", async () => {
+    const { structured } = await callTool("get-packing-list", {
+      listId: PACKING_LIST_ID,
+    })
+
+    expect(structured).toMatchObject({
+      list: {
+        itemCount: 2,
+        packedCount: 1,
+        bundles: [BUNDLE_REF],
+        departureOn: "2026-04-01",
+      },
+    })
+  })
+
+  it("finds bundles for a season including those without a season", async () => {
+    await callTool("list-packing-bundles", { season: "WINTER" })
+
+    expect(mocks.packingBundleCount).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        householdId: "household-1",
+        AND: [
+          {
+            OR: [
+              { seasons: { isEmpty: true } },
+              { seasons: { has: "WINTER" } },
+            ],
+          },
+        ],
+      }),
+    })
+  })
+})
+
 describe("tool input validation", () => {
   it("rejects a limit above the maximum instead of clamping it", async () => {
     const { result, structured } = await callTool("list-plants", { limit: 500 })
@@ -692,6 +930,9 @@ describe("resource boundaries", () => {
     ["get-shopping-list", "listId"],
     ["get-project", "projectId"],
     ["get-plant", "plantId"],
+    ["get-event", "eventId"],
+    ["get-packing-list", "listId"],
+    ["get-packing-bundle", "bundleId"],
   ])("%s rejects a malformed id as a validation error", async (name, field) => {
     const { structured } = await callTool(name, { [field]: "../../etc/passwd" })
 

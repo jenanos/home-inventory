@@ -18,6 +18,8 @@ import { CategoriesSection } from "./categories-section"
 import { ConnectedAppsSection } from "./connected-apps-section"
 import { AppearanceSection } from "./appearance-section"
 import { MoveInPeriodForm } from "./move-in-period-form"
+import { QuickNavSection } from "./quick-nav-section"
+import { resolveQuickNavPages } from "@/lib/quick-nav"
 import { getHouseholdSettings } from "@/lib/application/households/read"
 import { COLOR_PALETTE_COOKIE, parseColorPalette } from "@/lib/color-palettes"
 
@@ -96,6 +98,20 @@ export default async function SettingsPage() {
         </CardHeader>
         <CardContent>
           <AppearanceSection palette={palette} />
+        </CardContent>
+      </Card>
+
+      <Card id="hurtigpanel" className="scroll-mt-20">
+        <CardHeader>
+          <CardTitle>Hurtigpanel</CardTitle>
+          <CardDescription>
+            Velg opptil fire sider til panelet nederst på mobilen, og
+            rekkefølgen deres. Resten av sidene ligger under «Mer». Valget
+            lagres på brukeren din og gjelder alle enhetene dine.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <QuickNavSection pages={resolveQuickNavPages(user?.quickNavPages)} />
         </CardContent>
       </Card>
 

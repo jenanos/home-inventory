@@ -85,6 +85,7 @@ export const SHOPPING_LIST_RESULT_SELECT = {
   createdById: true,
   householdId: true,
   projectId: true,
+  eventId: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.ShoppingListSelect
@@ -278,6 +279,25 @@ async function assertProjectInHousehold(
   }
 }
 
+/** Same rule for a list of gift wishes and the event it buys for. */
+async function assertEventInHousehold(
+  tx: Tx,
+  context: ApplicationContext,
+  eventId: string | null | undefined
+) {
+  if (!eventId) return
+
+  const found =
+    UUID_PATTERN.test(eventId) &&
+    (await tx.calendarEvent.count({
+      where: { id: eventId, householdId: context.householdId },
+    })) === 1
+
+  if (!found) {
+    throw validationError("Hendelsen finnes ikke i husstanden.")
+  }
+}
+
 export async function createShoppingList(
   context: ApplicationContext,
   input: {
@@ -286,6 +306,8 @@ export async function createShoppingList(
     color?: string | null
     /** Project the list buys for, in the same household. */
     projectId?: string | null
+    /** Event the list holds gift wishes for, in the same household. */
+    eventId?: string | null
   }
 ) {
   if (input.isPrivate !== undefined && typeof input.isPrivate !== "boolean") {
@@ -296,6 +318,7 @@ export async function createShoppingList(
 
   return db.$transaction(async (tx) => {
     await assertProjectInHousehold(tx, context, input.projectId)
+    await assertEventInHousehold(tx, context, input.eventId)
 
     return tx.shoppingList.create({
       data: {
@@ -305,6 +328,7 @@ export async function createShoppingList(
         householdId: context.householdId,
         createdById: context.userId,
         projectId: input.projectId ?? null,
+        eventId: input.eventId ?? null,
       },
       select: SHOPPING_LIST_RESULT_SELECT,
     })
@@ -319,6 +343,8 @@ export async function updateShoppingList(
     color?: string | null
     /** `null` unlinks the list from its project. */
     projectId?: string | null
+    /** `null` unlinks the list from its event. */
+    eventId?: string | null
     expectedUpdatedAt?: Date
   }
 ) {
@@ -328,6 +354,7 @@ export async function updateShoppingList(
       input.name === undefined ? undefined : requiredText(input.name, "Navn"),
     color: normalizeColor(input.color),
     projectId: input.projectId,
+    eventId: input.eventId,
   })
   const scope = { ...visibleLists(context), id: listId }
 
@@ -346,6 +373,7 @@ export async function updateShoppingList(
     write: () =>
       db.$transaction(async (tx) => {
         await assertProjectInHousehold(tx, context, input.projectId)
+        await assertEventInHousehold(tx, context, input.eventId)
 
         return tx.shoppingList.update({
           where: { ...scope, ...freshness(input.expectedUpdatedAt) },

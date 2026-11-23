@@ -32,7 +32,10 @@ describe("loadMcpConfig", () => {
     ["", []],
     ["garden", ["garden"]],
     [" Budget , shopping,budget", ["shopping", "budget"]],
-    ["all", ["shopping", "budget", "maintenance", "garden"]],
+    [
+      "all",
+      ["shopping", "budget", "maintenance", "garden", "events", "packing"],
+    ],
   ])("parses write domains %j", (value, expected) => {
     expect(
       loadMcpConfig({

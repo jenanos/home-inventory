@@ -11,7 +11,7 @@ import { sessionHasToolScope } from "./tools/define"
  * it carries the conventions the old copy-paste LLM import prompt used to
  * explain. Keep it short: it is paid for on every conversation.
  */
-export const MCP_SERVER_INSTRUCTIONS = `Home Overview manages one household's home: shopping lists for things to buy for the house, budget, home projects and garden plants. Text in the app is Norwegian; write names and descriptions in Norwegian unless the user asks otherwise.
+export const MCP_SERVER_INSTRUCTIONS = `Home Overview manages one household's home: shopping lists for things to buy for the house, budget, home projects, garden plants, a calendar of birthdays and other dates with gift wishes, and packing lists. Text in the app is Norwegian; write names and descriptions in Norwegian unless the user asks otherwise.
 
 Shopping:
 - A shopping item is a purchase need ("Vaskemaskin", "Hageslange"), not a product. Put concrete products, models and offers for the same need under the item's alternatives, best first; the first alternative's price is the item's effective price.
@@ -49,6 +49,17 @@ Garden:
 - imageUrl and sourceUrl are plain absolute https URLs you have seen, not markdown links; the server never fetches them.
 - Record watering and pruning with record-plant-care; list-plants with notWateredSince finds plants that need water.
 - Delete only mistakes, duplicates and plants that are gone, and confirm with the user first.
+
+Events (calendar):
+- Birthdays, anniversaries and other dates. For a birthday the title is the person's name and the date is the birth date (YYYY-MM-DD), or --MM-DD when the birth year is unknown; the age they turn is calculated. YEARLY repeats every year; NONE happens once.
+- list-events with withinDays answers "what is coming up?"; check it before adding someone so they are not added twice.
+- Gift wishes are shopping items on a gift list linked to the event. Add them with add-gift-wishes (it creates the list when needed); mark bought gifts with set-shopping-item-status. A private gift list keeps a surprise from the rest of the household.
+
+Packing lists:
+- A packing list is one trip, with season (SPRING, SUMMER, AUTUMN, WINTER), duration (DAY, WEEKEND 1–3 nights, WEEK 4–8 nights, LONG) and abroad.
+- A bundle is a reusable group of things packed together ("Treningstøy", "Vintertøy barn", "Utenlandsreise"). It can be limited to seasons, durations and trips abroad; with autoAdd it is added to every new list that fits. Prefer bundles over repeating the same items on every list, and check list-packing-bundles before creating one.
+- create-packing-list copies in the fitting autoAdd bundles and the bundles you name; a name already on the list is packed once. Tick things off with set-packing-items-packed; to reuse a list, unpack it or copy it with duplicate-packing-list.
+- Delete lists and bundles only when the user wants them gone, and confirm first.
 
 Photos and documents:
 - Plants, garden beds and projects can have attached images and PDFs (list-attachments). get-attachment shows you an image, e.g. to identify a plant or judge its health.

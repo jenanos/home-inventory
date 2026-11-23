@@ -67,6 +67,12 @@ export const shoppingListSummarySchema = z.object({
     .string()
     .nullable()
     .describe("The project this list buys for, if any (see get-project)."),
+  eventId: z
+    .string()
+    .nullable()
+    .describe(
+      "The calendar event (birthday) this list holds gift wishes for, if any (see get-event)."
+    ),
   createdAt: timestampSchema,
   updatedAt: timestampSchema,
 })
@@ -77,6 +83,7 @@ type ShoppingListSummaryRow = {
   color: string | null
   isPrivate: boolean
   projectId: string | null
+  eventId: string | null
   createdAt: Date
   updatedAt: Date
 }
@@ -90,6 +97,7 @@ export function serializeShoppingListSummary(
     color: list.color,
     isPrivate: list.isPrivate,
     projectId: list.projectId,
+    eventId: list.eventId,
     createdAt: timestamp(list.createdAt),
     updatedAt: timestamp(list.updatedAt),
   }
@@ -235,6 +243,9 @@ export const listShoppingListsTool = defineTool({
       .describe(
         "Only lists that buy for this project (id from list-projects)."
       ),
+    eventId: idSchema
+      .optional()
+      .describe("Only gift lists for this event (id from list-events)."),
     ...paginationInputSchema,
   },
   outputSchema: {
@@ -247,6 +258,7 @@ export const listShoppingListsTool = defineTool({
           .boolean()
           .describe("Private lists are visible only to their creator."),
         projectId: z.string().nullable(),
+        eventId: z.string().nullable(),
         itemCounts: itemCountsSchema,
         estimatedTotal: calculatedMoneySchema.describe(
           "Estimated cost of every item, using the top-ranked alternative price when present."
@@ -265,6 +277,7 @@ export const listShoppingListsTool = defineTool({
       ...page,
       name: args.name,
       projectId: args.projectId,
+      eventId: args.eventId,
     })
 
     const serialized = lists.map((list) => {
@@ -289,6 +302,7 @@ export const listShoppingListsTool = defineTool({
         color: list.color,
         isPrivate: list.isPrivate,
         projectId: list.projectId,
+        eventId: list.eventId,
         itemCounts: counts,
         estimatedTotal: calculated(estimatedTotal),
         pendingTotal: calculated(pendingTotal),

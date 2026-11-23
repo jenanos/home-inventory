@@ -1,7 +1,7 @@
 import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js"
 
 export const MCP_SERVER_NAME = "home-overview"
-export const MCP_SERVER_VERSION = "0.13.0"
+export const MCP_SERVER_VERSION = "0.14.0"
 export const MCP_PROTOCOL_VERSION = LATEST_PROTOCOL_VERSION
 export const MCP_MAX_REQUEST_BYTES = 64 * 1024
 
@@ -20,6 +20,8 @@ export const MCP_DOMAINS = [
   "budget",
   "maintenance",
   "garden",
+  "events",
+  "packing",
 ] as const
 
 export type McpDomain = (typeof MCP_DOMAINS)[number]

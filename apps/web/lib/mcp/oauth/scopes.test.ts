@@ -86,6 +86,8 @@ describe("write domain switch", () => {
       "maintenance:read",
       "garden:read",
       "garden:write",
+      "events:read",
+      "packing:read",
     ])
   })
 
