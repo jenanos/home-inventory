@@ -74,6 +74,15 @@ describe("event dates", () => {
     )
   })
 
+  it("finds the first time of a yearly event that starts after next year", () => {
+    expect(
+      nextOccurrence(
+        { month: 6, day: 15, year: 2028, recurrence: "YEARLY" },
+        "2026-11-23"
+      )
+    ).toEqual({ date: "2028-06-15", daysUntil: 570, years: null })
+  })
+
   it("lists every occurrence in a range", () => {
     expect(occurrencesBetween(birthday, "2026-01-01", "2028-08-19")).toEqual([
       "2026-08-20",

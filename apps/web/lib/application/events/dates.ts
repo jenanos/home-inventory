@@ -134,11 +134,16 @@ export function nextOccurrence(
     }
   }
 
-  // A one-off event further ahead than next year.
-  if (event.recurrence === "NONE" && event.year !== null && event.year > year) {
+  // An event that starts further ahead than next year: a one-off event, or a
+  // yearly one (an anniversary) whose first time is still to come.
+  if (event.year !== null && event.year > year + 1) {
     const date = occurrenceInYear(event, event.year)
     if (date) {
-      return { date, daysUntil: daysBetween(today, date), years: null }
+      return {
+        date,
+        daysUntil: daysBetween(today, date),
+        years: yearsAt(event, date),
+      }
     }
   }
 
