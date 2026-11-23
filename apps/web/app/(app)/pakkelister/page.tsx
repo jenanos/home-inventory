@@ -12,6 +12,7 @@ import { requireHousehold } from "@/lib/session"
 import {
   listPackingBundles,
   listPackingLists,
+  listPackingPersons,
   type PackingListSummary,
 } from "@/lib/application/packing/read"
 import {
@@ -27,6 +28,7 @@ import {
 } from "@/lib/packing-labels"
 import { FilterChipRow } from "./filter-chips"
 import { NewPackingListButton } from "./packing-list-form-dialog"
+import { PersonsDialog } from "./persons-dialog"
 import { TripBadges } from "./trip-badges"
 
 interface PakkelisterPageProps {
@@ -46,12 +48,13 @@ export default async function PakkelisterPage({
   const isFiltered =
     season !== undefined || duration !== undefined || abroad !== undefined
 
-  const [lists, allCount, bundles] = await Promise.all([
+  const [lists, allCount, bundles, persons] = await Promise.all([
     listPackingLists(context, { season, duration, abroad }),
     isFiltered
       ? listPackingLists(context).then((all) => all.length)
       : Promise.resolve(null),
     listPackingBundles(context),
+    listPackingPersons(context),
   ])
   const totalCount = allCount ?? lists.length
 
@@ -79,6 +82,9 @@ export default async function PakkelisterPage({
               Pakker ({bundles.length})
             </Link>
           </Button>
+          <PersonsDialog
+            persons={persons.map(({ id, name }) => ({ id, name }))}
+          />
           <NewPackingListButton
             bundles={bundles.map((bundle) => ({
               id: bundle.id,

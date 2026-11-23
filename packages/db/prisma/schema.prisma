@@ -145,6 +145,7 @@ model Household {
   calendarEvents CalendarEvent[]
   packingLists   PackingList[]
   packingBundles PackingBundle[]
+  packingPersons PackingPerson[]
 }
 
 model HouseholdMember {
@@ -619,14 +620,33 @@ model PackingItem {
   /// The bundle the item was copied from. Deleting the bundle keeps the item
   /// and clears the link.
   bundleId  String?  @db.Uuid
+  /// Who the item is for. Null means shared, or not decided.
+  personId  String?  @db.Uuid
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   list   PackingList    @relation(fields: [listId], references: [id], onDelete: Cascade)
   bundle PackingBundle? @relation(fields: [bundleId], references: [id], onDelete: SetNull)
+  person PackingPerson? @relation(fields: [personId], references: [id], onDelete: SetNull)
 
   @@index([listId, sortOrder])
   @@index([bundleId])
+  @@index([personId])
+}
+
+/// Someone things are packed for: a member of the family, who need not use
+/// the app (a child). Shared by every packing list in the household.
+model PackingPerson {
+  id          String   @id @default(uuid()) @db.Uuid
+  householdId String   @db.Uuid
+  name        String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  household Household     @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  items     PackingItem[]
+
+  @@unique([householdId, name])
 }
 
 /// A reusable group of things that are packed together ("Treningstøy",

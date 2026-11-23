@@ -21,6 +21,7 @@ import {
 import {
   getPackingList,
   packingBundleInclude,
+  packingItemRelations,
   packingItemOrder,
   type PackingBundleWithItems,
   type PackingListDetail,
@@ -40,6 +41,7 @@ import { bundleFitsTrip, packingItemKey } from "./rules"
 const LIST = "pakkeliste"
 const ITEM = "ting"
 const BUNDLE = "pakke"
+const PERSON = "person"
 
 const SEASON_VALUES = Object.values(PackingSeason)
 const DURATION_VALUES = Object.values(PackingDuration)
@@ -103,6 +105,12 @@ export type PackingItemFields = {
   name: string
   quantity?: number
   notes?: string | null
+}
+
+/** A thing on a list: a bundle item's fields, and who it is for. */
+export type PackingListItemFields = PackingItemFields & {
+  /** A person from listPackingPersons; null or omitted means shared. */
+  personId?: string | null
 }
 
 export type PackingBundleFields = {
@@ -169,6 +177,13 @@ function normalizeItem(input: PackingItemFields) {
   }
 }
 
+function normalizeListItem(input: PackingListItemFields) {
+  return {
+    ...normalizeItem(input),
+    personId: optionalPersonId(input.personId) ?? null,
+  }
+}
+
 function normalizeBundleFields(input: Partial<PackingBundleFields>) {
   return definedFields({
     name:
@@ -229,6 +244,29 @@ function duplicateBundleName() {
   )
 }
 
+// ─── People ─────────────────────────────────────────────────────
+
+/** `undefined` leaves the person alone, `null` clears it. */
+function optionalPersonId(value: string | null | undefined) {
+  return value == null ? value : assertResourceId(value, PERSON)
+}
+
+/** Every person must be in the household; unknown ids are NOT_FOUND. */
+async function assertPersonsInHousehold(
+  tx: Tx,
+  context: ApplicationContext,
+  personIds: Array<string | null | undefined>
+) {
+  const ids = [
+    ...new Set(personIds.filter((id): id is string => typeof id === "string")),
+  ]
+  if (ids.length === 0) return
+  const found = await tx.packingPerson.count({
+    where: { id: { in: ids }, householdId: context.householdId },
+  })
+  if (found !== ids.length) throw notFound(PERSON)
+}
+
 // ─── Copying items into a list ──────────────────────────────────
 
 type NewListItem = {
@@ -236,6 +274,12 @@ type NewListItem = {
   quantity: number
   notes: string | null
   bundleId: string | null
+  personId: string | null
+}
+
+/** The same thing for the same person; Ola's and Kari's mittens are two. */
+function itemKey(item: { name: string; personId: string | null }) {
+  return `${item.personId ?? ""}\u0000${packingItemKey(item.name)}`
 }
 
 export type SkippedPackingItem = {
@@ -245,9 +289,9 @@ export type SkippedPackingItem = {
 }
 
 /**
- * Appends items after the list's last item. A name already on the list, or
- * earlier in the same call, is skipped and reported: two bundles that both
- * hold "Ladekabel" give one charger, not two.
+ * Appends items after the list's last item. The same thing for the same
+ * person, already on the list or earlier in the same call, is skipped and
+ * reported: two bundles that both hold "Ladekabel" give one charger, not two.
  */
 async function appendItems(
   tx: Tx,
@@ -257,30 +301,26 @@ async function appendItems(
 ) {
   const existing = await tx.packingItem.findMany({
     where: { listId },
-    select: { id: true, name: true, sortOrder: true },
+    select: { id: true, name: true, personId: true, sortOrder: true },
     orderBy: packingItemOrder,
   })
-  if (existing.length + entries.length > MAX_PACKING_ITEMS) {
-    const room = MAX_PACKING_ITEMS - existing.length
-    // Duplicates would be skipped, so only fail when the new names overflow.
-    const fresh = new Set(
-      entries
-        .map((entry) => packingItemKey(entry.name))
-        .filter(
-          (key) => !existing.some((item) => packingItemKey(item.name) === key)
-        )
-    )
-    if (fresh.size > room) {
-      throw validationError(
-        `En pakkeliste kan ha maks ${MAX_PACKING_ITEMS} ting.`
-      )
-    }
-  }
 
   const known = new Map<string, string>()
   for (const item of existing) {
-    const key = packingItemKey(item.name)
+    const key = itemKey(item)
     if (!known.has(key)) known.set(key, item.id)
+  }
+
+  // In "create" mode every entry becomes a row; in "skip" mode only the
+  // distinct things not already on the list do.
+  const added =
+    onDuplicate === "create"
+      ? entries.length
+      : new Set(entries.map(itemKey).filter((key) => !known.has(key))).size
+  if (existing.length + added > MAX_PACKING_ITEMS) {
+    throw validationError(
+      `En pakkeliste kan ha maks ${MAX_PACKING_ITEMS} ting.`
+    )
   }
 
   let sortOrder = existing.reduce(
@@ -291,7 +331,7 @@ async function appendItems(
   const skipped: SkippedPackingItem[] = []
 
   for (const entry of entries) {
-    const key = packingItemKey(entry.name)
+    const key = itemKey(entry)
     const existingItemId = known.get(key)
     if (onDuplicate === "skip" && existingItemId) {
       skipped.push({ name: entry.name, existingItemId })
@@ -317,29 +357,62 @@ async function loadBundles(
   bundleIds: string[]
 ) {
   if (bundleIds.length === 0) return []
+  // The same bundle may come twice, once per person.
+  const unique = [...new Set(bundleIds)]
   const bundles = await tx.packingBundle.findMany({
-    where: { id: { in: bundleIds }, householdId: context.householdId },
+    where: { id: { in: unique }, householdId: context.householdId },
     include: packingBundleInclude,
   })
-  if (bundles.length !== bundleIds.length) throw notFound(BUNDLE)
+  if (bundles.length !== unique.length) throw notFound(BUNDLE)
   return bundleIds.map((id) => bundles.find((bundle) => bundle.id === id)!)
 }
 
-function bundleEntries(bundles: PackingBundleWithItems[]): NewListItem[] {
-  return bundles.flatMap((bundle) =>
+/** A bundle to copy in, and who its things are for (null: shared). */
+type BundlePlacement = {
+  bundle: PackingBundleWithItems
+  personId: string | null
+}
+
+function bundleEntries(placements: BundlePlacement[]): NewListItem[] {
+  return placements.flatMap(({ bundle, personId }) =>
     bundle.items.map((item) => ({
       name: item.name,
       quantity: item.quantity,
       notes: item.notes,
       bundleId: bundle.id,
+      personId,
     }))
   )
 }
 
+function addedBundles(placements: BundlePlacement[]) {
+  return placements.map(({ bundle, personId }) => ({
+    id: bundle.id,
+    name: bundle.name,
+    personId,
+  }))
+}
+
+export type BundleRequest = {
+  bundleId: string
+  /** Copy the bundle's things for this person. Omit for shared things. */
+  personId?: string | null
+}
+
+function normalizeBundleRequests(requests: BundleRequest[]) {
+  if (!Array.isArray(requests)) {
+    throw validationError("Pakkene må være en liste.")
+  }
+  return requests.map((request) => ({
+    bundleId: assertResourceId(request?.bundleId, BUNDLE),
+    personId: optionalPersonId(request.personId) ?? null,
+  }))
+}
+
 export type PackingChangeResult = {
   list: PackingListDetail
-  /** Bundles whose items were copied in by this call. */
-  addedBundles: Array<{ id: string; name: string }>
+  /** Bundles whose items were copied in by this call, and for whom. */
+  addedBundles: Array<{ id: string; name: string; personId: string | null }>
   createdItemIds: string[]
   skipped: SkippedPackingItem[]
 }
@@ -353,15 +426,17 @@ async function reloadList(context: ApplicationContext, listId: string) {
 // ─── Lists ──────────────────────────────────────────────────────
 
 export type CreatePackingListInput = PackingListFields & {
-  /** Bundles to add, in order. */
+  /** Bundles to add, in order, as shared things. */
   bundleIds?: string[]
+  /** Bundles to add for a person, e.g. "Vintertøy barn" once per child. */
+  bundles?: BundleRequest[]
   /**
    * Also add every bundle marked "legg til automatisk" that fits the trip's
    * season, duration and abroad flag. Defaults to true.
    */
   applyAutoBundles?: boolean
   /** Loose items, added after the bundles. */
-  items?: PackingItemFields[]
+  items?: PackingListItemFields[]
 }
 
 export async function createPackingList(
@@ -370,9 +445,18 @@ export async function createPackingList(
 ): Promise<PackingChangeResult> {
   const fields = normalizeListFields(input)
   const name = requiredText(input.name, "Navn")
-  const bundleIds = assertResourceIds(input.bundleIds ?? [], BUNDLE)
+  const requests = [
+    ...assertResourceIds(input.bundleIds ?? [], BUNDLE).map((bundleId) => ({
+      bundleId,
+      personId: null,
+    })),
+    ...normalizeBundleRequests(input.bundles ?? []),
+  ]
+  if (requests.length > MAX_BATCH_SIZE) {
+    throw validationError(`Maks ${MAX_BATCH_SIZE} pakker per kall.`)
+  }
   const items = (input.items ?? []).map((item, index) =>
-    inBatch(index, "Ting", () => normalizeItem(item))
+    inBatch(index, "Ting", () => normalizeListItem(item))
   )
   if (items.length > MAX_PACKING_ITEMS) {
     throw validationError(
@@ -388,7 +472,14 @@ export async function createPackingList(
       select: { id: true, season: true, duration: true, abroad: true },
     })
 
-    const chosen = await loadBundles(tx, context, bundleIds)
+    await assertPersonsInHousehold(tx, context, [
+      ...requests.map((request) => request.personId),
+      ...items.map((item) => item.personId),
+    ])
+    const bundleIds = requests.map((request) => request.bundleId)
+    const chosen = (await loadBundles(tx, context, bundleIds)).map(
+      (bundle, index) => ({ bundle, personId: requests[index]!.personId })
+    )
     const automatic = applyAutoBundles
       ? (
           await tx.packingBundle.findMany({
@@ -400,18 +491,20 @@ export async function createPackingList(
             include: packingBundleInclude,
             orderBy: [{ name: "asc" }, { id: "asc" }],
           })
-        ).filter((bundle) => bundleFitsTrip(bundle, list))
+        )
+          .filter((bundle) => bundleFitsTrip(bundle, list))
+          .map((bundle) => ({ bundle, personId: null }))
       : []
-    const bundles = [...chosen, ...automatic]
+    const placements = [...chosen, ...automatic]
 
     const appended = await appendItems(tx, list.id, [
-      ...bundleEntries(bundles),
+      ...bundleEntries(placements),
       ...items.map((item) => ({ ...item, bundleId: null })),
     ])
 
     return {
       listId: list.id,
-      addedBundles: bundles.map(({ id, name }) => ({ id, name })),
+      addedBundles: addedBundles(placements),
       ...appended,
     }
   }, BATCH_TRANSACTION_OPTIONS)
@@ -501,6 +594,7 @@ export async function duplicatePackingList(
             quantity: item.quantity,
             notes: item.notes,
             bundleId: item.bundleId,
+            personId: item.personId,
             sortOrder: index,
           })),
         },
@@ -518,13 +612,13 @@ export async function duplicatePackingList(
 export async function addPackingItems(
   context: ApplicationContext,
   listId: string,
-  items: PackingItemFields[],
+  items: PackingListItemFields[],
   options: { onDuplicate?: "skip" | "create" } = {}
 ): Promise<PackingChangeResult> {
   assertResourceId(listId, LIST)
   assertBatchSize(items.length, "Ting")
   const normalized = items.map((item, index) =>
-    inBatch(index, "Ting", () => normalizeItem(item))
+    inBatch(index, "Ting", () => normalizeListItem(item))
   )
 
   const appended = await db.$transaction(async (tx) => {
@@ -533,6 +627,11 @@ export async function addPackingItems(
       select: { id: true },
     })
     if (!list) throw notFound(LIST)
+    await assertPersonsInHousehold(
+      tx,
+      context,
+      normalized.map((item) => item.personId)
+    )
 
     return appendItems(
       tx,
@@ -553,18 +652,20 @@ export async function addPackingItems(
 export async function updatePackingItem(
   context: ApplicationContext,
   itemId: string,
-  input: Partial<PackingItemFields> & {
+  input: Partial<PackingListItemFields> & {
     packed?: boolean
     expectedUpdatedAt?: Date
   }
 ) {
   assertResourceId(itemId, ITEM)
+  const personId = optionalPersonId(input.personId)
   const data = definedFields({
     name:
       input.name === undefined ? undefined : requiredText(input.name, "Navn"),
     quantity: quantity(input.quantity),
     notes: optionalText(input.notes, "Notat"),
     packed: optionalBoolean(input.packed, "Pakket"),
+    personId,
   })
   const scope = { id: itemId, list: { householdId: context.householdId } }
 
@@ -572,10 +673,13 @@ export async function updatePackingItem(
     resource: ITEM,
     expectedUpdatedAt: input.expectedUpdatedAt,
     write: () =>
-      db.packingItem.update({
-        where: { ...scope, ...freshness(input.expectedUpdatedAt) },
-        data,
-        include: { bundle: { select: { id: true, name: true } } },
+      db.$transaction(async (tx) => {
+        await assertPersonsInHousehold(tx, context, [personId])
+        return tx.packingItem.update({
+          where: { ...scope, ...freshness(input.expectedUpdatedAt) },
+          data,
+          include: packingItemRelations,
+        })
       }),
     existsInScope: async () =>
       (await db.packingItem.count({ where: scope })) > 0,
@@ -584,13 +688,14 @@ export async function updatePackingItem(
 
 /**
  * Ticks items off, or clears them. Without `itemIds` it applies to the whole
- * list, e.g. to unpack everything before the next trip. Every id must be on
+ * list, e.g. to unpack everything before the next trip, or to everything for
+ * one person (`personId`; `null` for the shared things). Every id must be on
  * the list, or nothing changes.
  */
 export async function setPackingItemsPacked(
   context: ApplicationContext,
   listId: string,
-  input: { packed: boolean; itemIds?: string[] }
+  input: { packed: boolean; itemIds?: string[]; personId?: string | null }
 ) {
   assertResourceId(listId, LIST)
   if (typeof input.packed !== "boolean") {
@@ -601,6 +706,7 @@ export async function setPackingItemsPacked(
       ? undefined
       : assertResourceIds(input.itemIds, ITEM)
   if (itemIds) assertBatchSize(itemIds.length, "Ting")
+  const personId = optionalPersonId(input.personId)
 
   const changed = await db.$transaction(async (tx) => {
     const list = await tx.packingList.findFirst({
@@ -610,7 +716,11 @@ export async function setPackingItemsPacked(
     if (!list) throw notFound(LIST)
 
     const result = await tx.packingItem.updateMany({
-      where: { listId, ...(itemIds ? { id: { in: itemIds } } : {}) },
+      where: {
+        listId,
+        ...(itemIds ? { id: { in: itemIds } } : {}),
+        ...(personId !== undefined ? { personId } : {}),
+      },
       data: { packed: input.packed },
     })
     if (itemIds && result.count !== itemIds.length) throw notFound(ITEM)
@@ -639,15 +749,20 @@ export async function deletePackingItems(
 
 // ─── Bundles on a list ──────────────────────────────────────────
 
-/** Copies the bundles' items into the list, skipping names already there. */
+/**
+ * Copies the bundles' items into the list, for one person or as shared
+ * things, skipping what that person already has on the list.
+ */
 export async function addBundlesToList(
   context: ApplicationContext,
   listId: string,
-  bundleIds: string[]
+  bundleIds: string[],
+  options: { personId?: string | null } = {}
 ): Promise<PackingChangeResult> {
   assertResourceId(listId, LIST)
   const ids = assertResourceIds(bundleIds, BUNDLE)
   assertBatchSize(ids.length, "Pakker")
+  const personId = optionalPersonId(options.personId) ?? null
 
   const result = await db.$transaction(async (tx) => {
     const list = await tx.packingList.findFirst({
@@ -656,12 +771,13 @@ export async function addBundlesToList(
     })
     if (!list) throw notFound(LIST)
 
-    const bundles = await loadBundles(tx, context, ids)
-    const appended = await appendItems(tx, list.id, bundleEntries(bundles))
-    return {
-      addedBundles: bundles.map(({ id, name }) => ({ id, name })),
-      ...appended,
-    }
+    await assertPersonsInHousehold(tx, context, [personId])
+    const placements = (await loadBundles(tx, context, ids)).map((bundle) => ({
+      bundle,
+      personId,
+    }))
+    const appended = await appendItems(tx, list.id, bundleEntries(placements))
+    return { addedBundles: addedBundles(placements), ...appended }
   }, BATCH_TRANSACTION_OPTIONS)
 
   return {
@@ -673,17 +789,22 @@ export async function addBundlesToList(
 }
 
 /**
- * Takes a bundle's items off a list again. With `keepPacked` the items already
- * packed stay, since someone has put them in the bag.
+ * Takes a bundle's items off a list again: for everyone, or only for one
+ * person (`personId`; `null` for the shared copy). With `keepPacked` the items
+ * already packed stay, since someone has put them in the bag.
  */
 export async function removeBundleFromList(
   context: ApplicationContext,
   listId: string,
   bundleId: string,
-  { keepPacked = false }: { keepPacked?: boolean } = {}
+  {
+    keepPacked = false,
+    personId: rawPersonId,
+  }: { keepPacked?: boolean; personId?: string | null } = {}
 ) {
   assertResourceId(listId, LIST)
   assertResourceId(bundleId, BUNDLE)
+  const personId = optionalPersonId(rawPersonId)
 
   const deleted = await db.$transaction(async (tx) => {
     const list = await tx.packingList.findFirst({
@@ -693,7 +814,12 @@ export async function removeBundleFromList(
     if (!list) throw notFound(LIST)
 
     const result = await tx.packingItem.deleteMany({
-      where: { listId, bundleId, ...(keepPacked ? { packed: false } : {}) },
+      where: {
+        listId,
+        bundleId,
+        ...(keepPacked ? { packed: false } : {}),
+        ...(personId !== undefined ? { personId } : {}),
+      },
     })
     return result.count
   })
@@ -794,6 +920,97 @@ export async function deletePackingBundle(
     write: () =>
       db.packingBundle.delete({
         where: { id: bundleId, householdId: context.householdId },
+        select: { id: true, name: true },
+      }),
+  })
+}
+
+// ─── People ─────────────────────────────────────────────────────
+
+const PERSON_SELECT = { id: true, name: true, updatedAt: true } as const
+
+function duplicatePersonName() {
+  return new ApplicationError(
+    "CONFLICT",
+    "Det finnes allerede en person med det navnet."
+  )
+}
+
+/** Case-insensitive, like bundle names; the unique index is the backstop. */
+async function assertPersonNameFree(
+  context: ApplicationContext,
+  name: string,
+  exceptId?: string
+) {
+  const taken = await db.packingPerson.count({
+    where: {
+      householdId: context.householdId,
+      name: { equals: name, mode: "insensitive" },
+      ...(exceptId ? { id: { not: exceptId } } : {}),
+    },
+  })
+  if (taken > 0) throw duplicatePersonName()
+}
+
+/** Someone to pack for. They need not use the app, e.g. a child. */
+export async function createPackingPerson(
+  context: ApplicationContext,
+  input: { name: string }
+) {
+  const name = requiredText(input.name, "Navn")
+  await assertPersonNameFree(context, name)
+
+  try {
+    return await db.packingPerson.create({
+      data: { name, householdId: context.householdId },
+      select: PERSON_SELECT,
+    })
+  } catch (error) {
+    if (isUniqueConstraintError(error)) throw duplicatePersonName()
+    throw error
+  }
+}
+
+export async function updatePackingPerson(
+  context: ApplicationContext,
+  personId: string,
+  input: { name: string; expectedUpdatedAt?: Date }
+) {
+  assertResourceId(personId, PERSON)
+  const name = requiredText(input.name, "Navn")
+  const scope = { id: personId, householdId: context.householdId }
+  await assertPersonNameFree(context, name, personId)
+
+  try {
+    return await scopedWrite({
+      resource: PERSON,
+      expectedUpdatedAt: input.expectedUpdatedAt,
+      write: () =>
+        db.packingPerson.update({
+          where: { ...scope, ...freshness(input.expectedUpdatedAt) },
+          data: { name },
+          select: PERSON_SELECT,
+        }),
+      existsInScope: async () =>
+        (await db.packingPerson.count({ where: scope })) > 0,
+    })
+  } catch (error) {
+    if (isUniqueConstraintError(error)) throw duplicatePersonName()
+    throw error
+  }
+}
+
+/** Deletes the person. Their things stay on the lists, as shared things. */
+export async function deletePackingPerson(
+  context: ApplicationContext,
+  personId: string
+) {
+  assertResourceId(personId, PERSON)
+  return scopedWrite({
+    resource: PERSON,
+    write: () =>
+      db.packingPerson.delete({
+        where: { id: personId, householdId: context.householdId },
         select: { id: true, name: true },
       }),
   })

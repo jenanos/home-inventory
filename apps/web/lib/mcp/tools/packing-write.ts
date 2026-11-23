@@ -7,7 +7,9 @@ import {
   addPackingItems,
   createPackingBundle,
   createPackingList,
+  createPackingPerson,
   deletePackingBundle,
+  deletePackingPerson,
   deletePackingItems,
   deletePackingList,
   duplicatePackingList,
@@ -16,6 +18,7 @@ import {
   updatePackingBundle,
   updatePackingItem,
   updatePackingList,
+  updatePackingPerson,
   type PackingChangeResult,
 } from "../../application/packing/write"
 import {
@@ -28,6 +31,7 @@ import {
   packingBundleSchema,
   packingItemSchema,
   packingListCardSchema,
+  packingPersonSchema,
   serializePackingBundle,
   serializePackingList,
 } from "./packing"
@@ -70,6 +74,18 @@ const itemInputSchema = z.object({
   notes: shortTextInputSchema,
 })
 
+const personIdInputSchema = idSchema
+  .nullable()
+  .optional()
+  .describe(
+    "Who the thing is for, from list-packing-persons (create missing people with create-packing-person). Omit or null for shared things."
+  )
+
+/** A thing on a list: a bundle item, plus who it is for. */
+const listItemInputSchema = itemInputSchema.extend({
+  personId: personIdInputSchema,
+})
+
 const bundleFieldsInputSchema = {
   description: shortTextInputSchema,
   seasons: z
@@ -100,7 +116,13 @@ const skippedSchema = z
 
 const changeOutputSchema = {
   list: packingListCardSchema,
-  addedBundles: z.array(z.object({ id: z.string(), name: z.string() })),
+  addedBundles: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      personId: z.string().nullable(),
+    })
+  ),
   createdItemIds: z.array(z.string()),
   skipped: skippedSchema,
 }
@@ -133,7 +155,7 @@ export const createPackingListTool = defineWriteTool({
   scope: "packing:write",
   title: "Create a packing list",
   description:
-    "Creates a packing list for a trip. Set season, duration and abroad so the right bundles are added: every bundle marked autoAdd that fits the trip comes along automatically (turn off with applyAutoBundles false), plus the bundles you name in bundleIds and any loose items. Names that appear twice are packed once. Check list-packing-bundles first and reuse bundles instead of listing their items again. Returns the list with its items.",
+    "Creates a packing list for a trip. Set season, duration and abroad so the right bundles are added: every bundle marked autoAdd that fits the trip comes along automatically as shared things (turn off with applyAutoBundles false), plus the bundles you name in bundleIds, the bundles for a person in bundles, and any loose items. The same thing for the same person is packed once; when packing for a family, give each person their own copy of a bundle. Check list-packing-bundles first and reuse bundles instead of listing their items again. Returns the list with its items.",
   inputSchema: {
     name: nameInputSchema.describe("E.g. 'Hytta påske' or 'Sydentur juli'."),
     ...tripInputSchema,
@@ -141,13 +163,20 @@ export const createPackingListTool = defineWriteTool({
       .array(idSchema)
       .max(MAX_BATCH_SIZE)
       .optional()
-      .describe("Bundles to add, from list-packing-bundles."),
+      .describe("Bundles to add as shared things, from list-packing-bundles."),
+    bundles: z
+      .array(z.object({ bundleId: idSchema, personId: personIdInputSchema }))
+      .max(MAX_BATCH_SIZE)
+      .optional()
+      .describe(
+        "Bundles to add for a person, e.g. 'Vintertøy barn' once for each child. The same bundle may appear once per person."
+      ),
     applyAutoBundles: z
       .boolean()
       .optional()
       .describe("Add the fitting autoAdd bundles. Defaults to true."),
     items: z
-      .array(itemInputSchema)
+      .array(listItemInputSchema)
       .max(MAX_BATCH_SIZE)
       .optional()
       .describe("Loose things that are not in any bundle."),
@@ -257,10 +286,10 @@ export const addPackingItemsTool = defineWriteTool({
   name: "add-packing-items",
   scope: "packing:write",
   title: "Add things to a packing list",
-  description: `Adds 1–${MAX_BATCH_SIZE} loose things to a packing list in one all-or-nothing call. Names already on the list (case-insensitive) are skipped and reported; set onDuplicate to "create" to add them anyway. For a group of things that belong together and recur across trips, create a bundle with create-packing-bundle instead.`,
+  description: `Adds 1–${MAX_BATCH_SIZE} loose things to a packing list in one all-or-nothing call. A name the same person (or nobody) already has on the list, case-insensitive, is skipped and reported; set onDuplicate to "create" to add them anyway. For a group of things that belong together and recur across trips, create a bundle with create-packing-bundle instead.`,
   inputSchema: {
     listId: idSchema.describe("Id from list-packing-lists."),
-    items: z.array(itemInputSchema).min(1).max(MAX_BATCH_SIZE),
+    items: z.array(listItemInputSchema).min(1).max(MAX_BATCH_SIZE),
     onDuplicate: z.enum(["skip", "create"]).optional(),
   },
   outputSchema: changeOutputSchema,
@@ -287,13 +316,19 @@ export const updatePackingItemTool = defineWriteTool({
   scope: "packing:write",
   title: "Update a thing on a packing list",
   description:
-    "Changes one item's name, quantity, notes or packed state and leaves omitted fields as they are. To tick off several at once use set-packing-items-packed.",
+    "Changes one item's name, quantity, notes, packed state or person and leaves omitted fields as they are. To tick off several at once use set-packing-items-packed.",
   inputSchema: {
     itemId: idSchema.describe("Id from get-packing-list."),
     name: nameInputSchema.optional(),
     quantity: z.number().int().min(1).max(MAX_PACKING_QUANTITY).optional(),
     notes: shortTextInputSchema,
     packed: z.boolean().optional(),
+    personId: idSchema
+      .nullable()
+      .optional()
+      .describe(
+        "Assign to a person, or null to make it shared. Omit to leave as is."
+      ),
     expectedUpdatedAt: expectedUpdatedAtSchema,
   },
   outputSchema: { item: packingItemSchema },
@@ -316,6 +351,8 @@ export const updatePackingItemTool = defineWriteTool({
           notes: item.notes,
           bundleId: item.bundleId,
           bundleName: item.bundle?.name ?? null,
+          personId: item.personId,
+          personName: item.person?.name ?? null,
           updatedAt: timestamp(item.updatedAt),
         },
       },
@@ -334,6 +371,12 @@ export const setPackingItemsPackedTool = defineWriteTool({
     listId: idSchema.describe("Id from list-packing-lists."),
     packed: z.boolean(),
     itemIds: z.array(idSchema).min(1).max(MAX_BATCH_SIZE).optional(),
+    personId: idSchema
+      .nullable()
+      .optional()
+      .describe(
+        "With no itemIds: only this person's things, or null for the shared ones."
+      ),
   },
   outputSchema: {
     changedCount: z.number().int(),
@@ -345,6 +388,7 @@ export const setPackingItemsPackedTool = defineWriteTool({
     const result = await setPackingItemsPacked(session.context, args.listId, {
       packed: args.packed,
       itemIds: args.itemIds,
+      personId: args.personId,
     })
     const card = serializePackingList(result.list)
 
@@ -393,6 +437,12 @@ export const addPackingBundleToListTool = defineWriteTool({
       .min(1)
       .max(MAX_BATCH_SIZE)
       .describe("Ids from list-packing-bundles."),
+    personId: idSchema
+      .nullable()
+      .optional()
+      .describe(
+        "Copy the bundles' things for this person, e.g. 'Vintertøy barn' for one child. Call once per person. Omit for shared things."
+      ),
   },
   outputSchema: changeOutputSchema,
   annotations: CREATE_ANNOTATIONS,
@@ -401,7 +451,8 @@ export const addPackingBundleToListTool = defineWriteTool({
     const result = await addBundlesToList(
       session.context,
       args.listId,
-      args.bundleIds
+      args.bundleIds,
+      { personId: args.personId }
     )
 
     return {
@@ -422,6 +473,12 @@ export const removePackingBundleFromListTool = defineWriteTool({
     listId: idSchema.describe("Id from list-packing-lists."),
     bundleId: idSchema.describe("Id from get-packing-list's bundles."),
     keepPacked: z.boolean().optional(),
+    personId: idSchema
+      .nullable()
+      .optional()
+      .describe(
+        "Only remove the copy for this person, or null for the shared copy. Omit to remove it for everyone."
+      ),
   },
   outputSchema: {
     deletedCount: z.number().int(),
@@ -434,7 +491,7 @@ export const removePackingBundleFromListTool = defineWriteTool({
       session.context,
       args.listId,
       args.bundleId,
-      { keepPacked: args.keepPacked }
+      { keepPacked: args.keepPacked, personId: args.personId }
     )
 
     return {
@@ -541,6 +598,93 @@ export const deletePackingBundleTool = defineWriteTool({
   },
 })
 
+// ─── People ─────────────────────────────────────────────────────
+
+function serializePerson(person: {
+  id: string
+  name: string
+  updatedAt: Date
+}) {
+  return {
+    id: person.id,
+    name: person.name,
+    updatedAt: timestamp(person.updatedAt),
+  }
+}
+
+export const createPackingPersonTool = defineWriteTool({
+  name: "create-packing-person",
+  scope: "packing:write",
+  title: "Add a person to pack for",
+  description:
+    "Adds someone the household packs for, e.g. a child who does not use the app. Names are unique in the household; check list-packing-persons first. Assign things to them with personId.",
+  inputSchema: { name: nameInputSchema.describe("E.g. 'Ola' or 'Mamma'.") },
+  outputSchema: { person: packingPersonSchema },
+  annotations: CREATE_ANNOTATIONS,
+  resourceType: "packing_person",
+  handler: async (args, session) => {
+    const person = await createPackingPerson(session.context, args)
+
+    return {
+      structuredContent: { person: serializePerson(person) },
+      summary: `La til ${person.name}.`,
+      resourceId: person.id,
+    }
+  },
+})
+
+export const updatePackingPersonTool = defineWriteTool({
+  name: "update-packing-person",
+  scope: "packing:write",
+  title: "Rename a person to pack for",
+  description: "Renames a person. Their things on every list follow along.",
+  inputSchema: {
+    personId: idSchema.describe("Id from list-packing-persons."),
+    name: nameInputSchema,
+    expectedUpdatedAt: expectedUpdatedAtSchema,
+  },
+  outputSchema: { person: packingPersonSchema },
+  annotations: UPDATE_ANNOTATIONS,
+  resourceType: "packing_person",
+  handler: async (args, session) => {
+    const person = await updatePackingPerson(session.context, args.personId, {
+      name: args.name,
+      expectedUpdatedAt: parseExpectedUpdatedAt(args.expectedUpdatedAt),
+    })
+
+    return {
+      structuredContent: { person: serializePerson(person) },
+      summary: `Endret navnet til ${person.name}.`,
+      resourceId: person.id,
+    }
+  },
+})
+
+export const deletePackingPersonTool = defineWriteTool({
+  name: "delete-packing-person",
+  scope: "packing:write",
+  title: "Remove a person to pack for",
+  description:
+    "Removes a person. Their things stay on the lists as shared things. Confirm with the user first.",
+  inputSchema: {
+    personId: idSchema.describe("Id from list-packing-persons."),
+  },
+  outputSchema: {
+    deleted: z.object({ id: z.string(), name: z.string() }),
+  },
+  annotations: DELETE_ANNOTATIONS,
+  resourceType: "packing_person",
+  handler: async (args, session) => {
+    const deleted = await deletePackingPerson(session.context, args.personId)
+
+    return {
+      structuredContent: { deleted },
+      summary: `Fjernet ${deleted.name}.`,
+      resourceId: deleted.id,
+    }
+  },
+})
+
 export const packingWriteTools = [
   createPackingListTool,
   updatePackingListTool,
@@ -555,4 +699,7 @@ export const packingWriteTools = [
   createPackingBundleTool,
   updatePackingBundleTool,
   deletePackingBundleTool,
+  createPackingPersonTool,
+  updatePackingPersonTool,
+  deletePackingPersonTool,
 ]

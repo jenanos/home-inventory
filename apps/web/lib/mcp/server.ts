@@ -59,6 +59,7 @@ Packing lists:
 - A packing list is one trip, with season (SPRING, SUMMER, AUTUMN, WINTER), duration (DAY, WEEKEND 1–3 nights, WEEK 4–8 nights, LONG) and abroad.
 - A bundle is a reusable group of things packed together ("Treningstøy", "Vintertøy barn", "Utenlandsreise"). It can be limited to seasons, durations and trips abroad; with autoAdd it is added to every new list that fits. Prefer bundles over repeating the same items on every list, and check list-packing-bundles before creating one.
 - create-packing-list copies in the fitting autoAdd bundles and the bundles you name; a name already on the list is packed once. Tick things off with set-packing-items-packed; to reuse a list, unpack it or copy it with duplicate-packing-list.
+- When packing for several people (a family trip), assign things with personId to people from list-packing-persons; they need not use the app, e.g. children, so add missing ones with create-packing-person. The same thing for two people is two items, and a bundle can be added once per person ("Vintertøy barn" for each child). get-packing-list and set-packing-items-packed take personId to work on one person's things.
 - Delete lists and bundles only when the user wants them gone, and confirm first.
 
 Photos and documents:

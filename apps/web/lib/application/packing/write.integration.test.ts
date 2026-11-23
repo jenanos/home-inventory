@@ -8,8 +8,11 @@ import {
   addBundlesToList,
   addPackingItems,
   createPackingBundle,
+  MAX_PACKING_ITEMS,
   createPackingList,
+  createPackingPerson,
   deletePackingBundle,
+  deletePackingPerson,
   deletePackingItems,
   duplicatePackingList,
   removeBundleFromList,
@@ -253,6 +256,133 @@ describe("packing write service", () => {
 
     const winter = await listPackingBundles(context, { season: "WINTER" })
     expect(winter.map((bundle) => bundle.name)).toEqual(["Alltid", "Vinter"])
+  })
+})
+
+describe("packing for people", () => {
+  it("gives each person their own copy of a bundle and of a thing", async () => {
+    const { context } = await fixtures.createHousehold()
+    const ola = await createPackingPerson(context, { name: "Ola" })
+    const kari = await createPackingPerson(context, { name: "Kari" })
+    const winter = await createPackingBundle(context, {
+      name: "Vintertøy barn",
+      items: [{ name: "Votter" }, { name: "Lue" }],
+    })
+
+    const result = await createPackingList(context, {
+      name: "Hytta",
+      bundles: [
+        { bundleId: winter.id, personId: ola.id },
+        { bundleId: winter.id, personId: kari.id },
+      ],
+      items: [{ name: "Votter", personId: ola.id }, { name: "Votter" }],
+    })
+
+    expect(
+      result.list.items.map(
+        (item) => `${item.name}:${item.person?.name ?? "-"}`
+      )
+    ).toEqual(["Votter:Ola", "Lue:Ola", "Votter:Kari", "Lue:Kari", "Votter:-"])
+    // Ola already had mittens from the bundle.
+    expect(result.skipped.map((item) => item.name)).toEqual(["Votter"])
+    expect(result.addedBundles).toEqual([
+      { id: winter.id, name: "Vintertøy barn", personId: ola.id },
+      { id: winter.id, name: "Vintertøy barn", personId: kari.id },
+    ])
+  })
+
+  it("packs and removes one person's things only", async () => {
+    const { context } = await fixtures.createHousehold()
+    const ola = await createPackingPerson(context, { name: "Ola" })
+    const kari = await createPackingPerson(context, { name: "Kari" })
+    const winter = await createPackingBundle(context, {
+      name: "Vintertøy barn",
+      items: [{ name: "Votter" }],
+    })
+    const { list } = await createPackingList(context, { name: "Hytta" })
+    await addBundlesToList(context, list.id, [winter.id], { personId: ola.id })
+    await addBundlesToList(context, list.id, [winter.id], { personId: kari.id })
+
+    const packed = await setPackingItemsPacked(context, list.id, {
+      packed: true,
+      personId: ola.id,
+    })
+    expect(packed.changedCount).toBe(1)
+
+    const removed = await removeBundleFromList(context, list.id, winter.id, {
+      personId: kari.id,
+    })
+    expect(removed.list.items).toMatchObject([
+      { name: "Votter", personId: ola.id, packed: true },
+    ])
+  })
+
+  it("keeps a deleted person's things as shared things", async () => {
+    const { context } = await fixtures.createHousehold()
+    const ola = await createPackingPerson(context, { name: "Ola" })
+    const { list } = await createPackingList(context, {
+      name: "Hytta",
+      items: [{ name: "Bamse", personId: ola.id }],
+    })
+
+    await deletePackingPerson(context, ola.id)
+
+    expect((await getPackingList(context, list.id))?.items).toMatchObject([
+      { name: "Bamse", personId: null },
+    ])
+  })
+
+  it("rejects a person from another household and duplicate names", async () => {
+    const owner = await fixtures.createHousehold()
+    const other = await fixtures.createHousehold()
+    const theirs = await createPackingPerson(other.context, { name: "Ola" })
+    const { list } = await createPackingList(owner.context, {
+      name: "Hytta",
+      items: [{ name: "Ski" }],
+    })
+
+    await expect(
+      addPackingItems(owner.context, list.id, [
+        { name: "Bamse", personId: theirs.id },
+      ])
+    ).rejects.toMatchObject({ code: "NOT_FOUND" })
+    await expect(
+      updatePackingItem(owner.context, list.items[0]!.id, {
+        personId: theirs.id,
+      })
+    ).rejects.toMatchObject({ code: "NOT_FOUND" })
+    await createPackingPerson(owner.context, { name: "Ola" })
+    await expect(
+      createPackingPerson(owner.context, { name: "ola" })
+    ).rejects.toMatchObject({ code: "CONFLICT" })
+  })
+})
+
+describe("packing list capacity", () => {
+  it("counts every row when duplicates are created on purpose", async () => {
+    const { context } = await fixtures.createHousehold()
+    const { list } = await createPackingList(context, { name: "Stor" })
+    await db.packingItem.createMany({
+      data: Array.from({ length: MAX_PACKING_ITEMS }, (_, index) => ({
+        listId: list.id,
+        name: `Ting ${index}`,
+        sortOrder: index,
+      })),
+    })
+
+    // A name already on the list is skipped, so it fits.
+    await expect(
+      addPackingItems(context, list.id, [{ name: "Ting 1" }])
+    ).resolves.toMatchObject({ skipped: [{ name: "Ting 1" }] })
+    // Created anyway, it would be item 301.
+    await expect(
+      addPackingItems(context, list.id, [{ name: "Ting 1" }], {
+        onDuplicate: "create",
+      })
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" })
+    expect(await db.packingItem.count({ where: { listId: list.id } })).toBe(
+      MAX_PACKING_ITEMS
+    )
   })
 })
 

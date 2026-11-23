@@ -38,6 +38,7 @@ const mocks = vi.hoisted(() => ({
   packingBundleCount: vi.fn(),
   packingBundleFindMany: vi.fn(),
   packingBundleFindFirst: vi.fn(),
+  packingPersonFindMany: vi.fn(),
 }))
 
 vi.mock("@workspace/db", async (importOriginal) => ({
@@ -107,6 +108,7 @@ vi.mock("@workspace/db", async (importOriginal) => ({
       findMany: mocks.packingBundleFindMany,
       findFirst: mocks.packingBundleFindFirst,
     },
+    packingPerson: { findMany: mocks.packingPersonFindMany },
   },
 }))
 
@@ -491,6 +493,7 @@ beforeEach(() => {
   mocks.packingBundleCount.mockResolvedValue(1)
   mocks.packingBundleFindMany.mockResolvedValue([BUNDLE_ROW])
   mocks.packingBundleFindFirst.mockResolvedValue(BUNDLE_ROW)
+  mocks.packingPersonFindMany.mockResolvedValue([PERSON])
 })
 
 const EVENT_ID = "77777777-7777-4777-8777-777777777777"
@@ -538,6 +541,12 @@ const EVENT_ROW = {
 
 const BUNDLE_REF = { id: BUNDLE_ID, name: "Treningstøy" }
 
+const PERSON = {
+  id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  name: "Ola",
+  updatedAt: new Date("2026-03-01T00:00:00Z"),
+}
+
 const PACKING_LIST_ROW = {
   id: PACKING_LIST_ID,
   householdId: "household-1",
@@ -560,6 +569,8 @@ const PACKING_LIST_ROW = {
       sortOrder: 0,
       bundleId: BUNDLE_ID,
       bundle: BUNDLE_REF,
+      personId: PERSON.id,
+      person: { id: PERSON.id, name: PERSON.name },
       createdAt: new Date("2026-03-01T00:00:00Z"),
       updatedAt: new Date("2026-03-01T00:00:00Z"),
     },
@@ -573,6 +584,8 @@ const PACKING_LIST_ROW = {
       sortOrder: 1,
       bundleId: null,
       bundle: null,
+      personId: null,
+      person: null,
       createdAt: new Date("2026-03-01T00:00:00Z"),
       updatedAt: new Date("2026-03-01T00:00:00Z"),
     },
@@ -709,6 +722,7 @@ const HAPPY_PATH_ARGS: Array<[string, Record<string, unknown>]> = [
   ["get-packing-list", { listId: PACKING_LIST_ID }],
   ["list-packing-bundles", {}],
   ["get-packing-bundle", { bundleId: BUNDLE_ID }],
+  ["list-packing-persons", {}],
   ["list-attachments", { targetType: "plant", targetId: PLANT_ID }],
   ["get-attachment", { attachmentId: ATTACHMENT_ID }],
 ]
@@ -853,9 +867,24 @@ describe("packing", () => {
         itemCount: 2,
         packedCount: 1,
         bundles: [BUNDLE_REF],
+        persons: [{ name: "Ola", itemCount: 1, packedCount: 1 }],
         departureOn: "2026-04-01",
       },
     })
+  })
+
+  it("lists only one person's things on request", async () => {
+    const { structured } = await callTool("get-packing-list", {
+      listId: PACKING_LIST_ID,
+      personId: null,
+    })
+
+    expect(structured).toMatchObject({
+      list: { itemCount: 2, items: [{ name: "Ullsokker", personId: null }] },
+    })
+    expect(
+      (structured as { list: { items: unknown[] } }).list.items
+    ).toHaveLength(1)
   })
 
   it("finds bundles for a season including those without a season", async () => {

@@ -51,6 +51,23 @@ får de automatiske pakkene som standard.
 Filtrene på sesong og varighet finnes både for lister og pakker. For pakker
 gir et filter også pakkene uten begrensning, siden de gjelder alltid.
 
+### Personer
+
+Familien pakker ofte for flere, og barna bruker ikke appen. `PackingPerson`
+er et navn i husstanden («Ola», «Kari»), ikke en bruker, og deles av alle
+pakkelistene. En ting kan tildeles én person (`PackingItem.personId`); uten
+person er den felles. Slettes personen, blir tingene felles.
+
+- Samme ting for to personer er to ting: duplikatsjekken bruker navn *og*
+  person, så Olas og Karis votter er to rader.
+- En pakke kan legges til én gang per person («Vintertøy barn» for hvert
+  barn); `create-packing-list` tar `bundles: [{ bundleId, personId }]`.
+  Automatiske pakker legges inn som felles.
+- Listesiden filtrerer på person (Alle, Felles, hver person med hvor mye som
+  er pakket), og det man legger til, går til personen man har valgt. En pakke
+  kan fjernes for én person, og alt til én person kan krysses av samlet.
+- Navn er unike i husstanden uten hensyn til store og små bokstaver.
+
 ### MCP
 
 Nytt domene `packing` med scopene `packing:read` og `packing:write`:
@@ -60,10 +77,15 @@ Nytt domene `packing` med scopene `packing:read` og `packing:write`:
 `update-packing-item`, `set-packing-items-packed`, `delete-packing-items`,
 `add-packing-bundle-to-list`, `remove-packing-bundle-from-list`,
 `create-packing-bundle`, `update-packing-bundle` (tingene sendes som hele
-settet, slik plasseringer på planter gjør) og `delete-packing-bundle`.
+settet, slik plasseringer på planter gjør), `delete-packing-bundle`,
+`list-packing-persons`, `create-packing-person`, `update-packing-person` og
+`delete-packing-person`. Tingene har `personId`, og `get-packing-list`,
+`list-packing-lists`, `set-packing-items-packed`,
+`add-packing-bundle-to-list` og `remove-packing-bundle-from-list` tar
+`personId`.
 
-Sletting er tillatt for lister, ting og pakker, og for å ta en pakke ut av en
-liste. Beskrivelsene ber assistenten bekrefte med brukeren først.
+Sletting er tillatt for lister, ting, pakker og personer, og for å ta en
+pakke ut av en liste. Beskrivelsene ber assistenten bekrefte med brukeren først.
 `write-tools.test.ts` låser listen. Skriving må slås på med `packing` i
 `HOME_OVERVIEW_MCP_WRITE_DOMAINS` (eller `all`).
 

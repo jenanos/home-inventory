@@ -8,7 +8,9 @@ import {
   addPackingItems as addPackingItemsService,
   createPackingBundle as createPackingBundleService,
   createPackingList as createPackingListService,
+  createPackingPerson as createPackingPersonService,
   deletePackingBundle as deletePackingBundleService,
+  deletePackingPerson as deletePackingPersonService,
   deletePackingItems as deletePackingItemsService,
   deletePackingList as deletePackingListService,
   duplicatePackingList as duplicatePackingListService,
@@ -17,11 +19,12 @@ import {
   updatePackingBundle as updatePackingBundleService,
   updatePackingItem as updatePackingItemService,
   updatePackingList as updatePackingListService,
+  updatePackingPerson as updatePackingPersonService,
   type CreatePackingBundleInput,
   type CreatePackingListInput,
   type PackingChangeResult,
-  type PackingItemFields,
   type PackingListFields,
+  type PackingListItemFields,
   type UpdatePackingBundleInput,
 } from "@/lib/application/packing/write"
 import { requireHousehold } from "@/lib/session"
@@ -109,7 +112,7 @@ export async function duplicatePackingList(input: {
 
 export async function addPackingItems(input: {
   listId: string
-  items: PackingItemFields[]
+  items: PackingListItemFields[]
 }): Promise<ActionResult<ItemsAdded>> {
   const { context } = await requireHousehold()
   const result = await toActionResult(async () =>
@@ -120,7 +123,7 @@ export async function addPackingItems(input: {
 }
 
 export async function updatePackingItem(
-  input: { id: string; packed?: boolean } & Partial<PackingItemFields>
+  input: { id: string; packed?: boolean } & Partial<PackingListItemFields>
 ): Promise<ActionResult<null>> {
   const { context } = await requireHousehold()
   const { id, ...fields } = input
@@ -139,17 +142,21 @@ export async function togglePackingItem(input: {
   return updatePackingItem({ id: input.id, packed: input.packed })
 }
 
-/** Ticks off or clears every item on the list ("Nullstill avkrysning"). */
+/**
+ * Ticks off or clears every item on the list ("Nullstill avkrysning"), or
+ * every item for one person (`personId`; `null` for the shared things).
+ */
 export async function setAllPackingItemsPacked(input: {
   listId: string
   packed: boolean
+  personId?: string | null
 }): Promise<ActionResult<{ changedCount: number }>> {
   const { context } = await requireHousehold()
   const result = await toActionResult(async () => {
     const { changedCount } = await setPackingItemsPackedService(
       context,
       input.listId,
-      { packed: input.packed }
+      { packed: input.packed, personId: input.personId }
     )
     return { changedCount }
   })
@@ -173,11 +180,15 @@ export async function deletePackingItems(
 export async function addBundlesToList(input: {
   listId: string
   bundleIds: string[]
+  /** Copy the bundle for this person; omit or null for shared things. */
+  personId?: string | null
 }): Promise<ActionResult<ItemsAdded>> {
   const { context } = await requireHousehold()
   const result = await toActionResult(async () =>
     itemsAdded(
-      await addBundlesToListService(context, input.listId, input.bundleIds)
+      await addBundlesToListService(context, input.listId, input.bundleIds, {
+        personId: input.personId,
+      })
     )
   )
   revalidatePacking()
@@ -188,6 +199,8 @@ export async function removeBundleFromList(input: {
   listId: string
   bundleId: string
   keepPacked?: boolean
+  /** Only this person's copy; `null` for the shared one; omit for all. */
+  personId?: string | null
 }): Promise<ActionResult<{ deletedCount: number }>> {
   const { context } = await requireHousehold()
   const result = await toActionResult(async () => {
@@ -195,7 +208,7 @@ export async function removeBundleFromList(input: {
       context,
       input.listId,
       input.bundleId,
-      { keepPacked: input.keepPacked }
+      { keepPacked: input.keepPacked, personId: input.personId }
     )
     return { deletedCount }
   })
@@ -236,6 +249,45 @@ export async function deletePackingBundle(
   const { context } = await requireHousehold()
   const result = await toActionResult(async () => {
     await deletePackingBundleService(context, bundleId)
+    return null
+  })
+  revalidatePacking()
+  return result
+}
+
+// ─── People ─────────────────────────────────────────────────────
+
+export async function createPackingPerson(input: {
+  name: string
+}): Promise<ActionResult<{ id: string; name: string }>> {
+  const { context } = await requireHousehold()
+  const result = await toActionResult(async () => {
+    const person = await createPackingPersonService(context, input)
+    return { id: person.id, name: person.name }
+  })
+  revalidatePacking()
+  return result
+}
+
+export async function renamePackingPerson(input: {
+  id: string
+  name: string
+}): Promise<ActionResult<null>> {
+  const { context } = await requireHousehold()
+  const result = await toActionResult(async () => {
+    await updatePackingPersonService(context, input.id, { name: input.name })
+    return null
+  })
+  revalidatePacking()
+  return result
+}
+
+export async function deletePackingPerson(
+  personId: string
+): Promise<ActionResult<null>> {
+  const { context } = await requireHousehold()
+  const result = await toActionResult(async () => {
+    await deletePackingPersonService(context, personId)
     return null
   })
   revalidatePacking()

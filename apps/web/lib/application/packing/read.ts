@@ -13,10 +13,16 @@ export const packingItemOrder = [
   { id: "asc" as const },
 ]
 
+/** The bundle an item came from and who it is for, by name for display. */
+export const packingItemRelations = {
+  bundle: { select: { id: true, name: true } },
+  person: { select: { id: true, name: true } },
+} satisfies Prisma.PackingItemInclude
+
 export const packingListDetailInclude = {
   items: {
     orderBy: packingItemOrder,
-    include: { bundle: { select: { id: true, name: true } } },
+    include: packingItemRelations,
   },
 } satisfies Prisma.PackingListInclude
 
@@ -48,6 +54,8 @@ const listSummarySelect = {
       packed: true,
       bundleId: true,
       bundle: { select: { id: true, name: true } },
+      personId: true,
+      person: { select: { id: true, name: true } },
     },
     orderBy: packingItemOrder,
   },
@@ -63,6 +71,8 @@ export type PackingListFilter = {
   season?: PackingSeason
   duration?: PackingDuration
   abroad?: boolean
+  /** Lists with something packed for this person. */
+  personId?: string
 }
 
 function listWhere(
@@ -77,6 +87,9 @@ function listWhere(
     ...(filter.season ? { season: filter.season } : {}),
     ...(filter.duration ? { duration: filter.duration } : {}),
     ...(filter.abroad !== undefined ? { abroad: filter.abroad } : {}),
+    ...(filter.personId
+      ? { items: { some: { personId: filter.personId } } }
+      : {}),
     ...(contains ? { OR: [{ name: contains }, { notes: contains }] } : {}),
   }
 }
@@ -215,3 +228,18 @@ export async function getPackingBundle(
     include: packingBundleInclude,
   })
 }
+
+// ─── People ─────────────────────────────────────────────────────
+
+/** Everyone things are packed for in the household, by name. */
+export async function listPackingPersons(context: ApplicationContext) {
+  return db.packingPerson.findMany({
+    where: { householdId: context.householdId },
+    select: { id: true, name: true, updatedAt: true },
+    orderBy: [{ name: "asc" }, { id: "asc" }],
+  })
+}
+
+export type PackingPersonRow = Awaited<
+  ReturnType<typeof listPackingPersons>
+>[number]

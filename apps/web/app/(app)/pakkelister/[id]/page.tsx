@@ -6,6 +6,7 @@ import { Progress } from "@workspace/ui/components/progress"
 import {
   getPackingList,
   listPackingBundles,
+  listPackingPersons,
 } from "@/lib/application/packing/read"
 import { bundleFitsTrip } from "@/lib/application/packing/rules"
 import { formatDeparture } from "@/lib/packing-labels"
@@ -28,9 +29,10 @@ export default async function PackingListPage({
   if (!UUID_PATTERN.test(id)) notFound()
 
   const { context } = await requireHousehold()
-  const [list, bundles] = await Promise.all([
+  const [list, bundles, persons] = await Promise.all([
     getPackingList(context, id),
     listPackingBundles(context),
+    listPackingPersons(context),
   ])
   if (!list) notFound()
 
@@ -38,16 +40,22 @@ export default async function PackingListPage({
   const packed = list.items.filter((item) => item.packed).length
   const percent = total > 0 ? Math.round((packed / total) * 100) : 0
 
-  // One group per bundle on the list, in the order they first appear, then
-  // the loose items.
+  // One group per bundle and person on the list ("Vintertøy barn · Ola"), in
+  // the order they first appear, then the loose items.
   const groups: ItemGroup[] = []
   for (const item of list.items) {
-    const key = item.bundle?.id ?? null
-    let group = groups.find((entry) => entry.bundleId === key)
+    const bundleId = item.bundle?.id ?? null
+    const personId = bundleId ? item.personId : null
+    let group = groups.find(
+      (entry) => entry.bundleId === bundleId && entry.personId === personId
+    )
     if (!group) {
       group = {
-        bundleId: key,
+        key: `${bundleId ?? "loose"}:${personId ?? "shared"}`,
+        bundleId,
+        personId,
         name: item.bundle?.name ?? "Andre ting",
+        personName: bundleId ? (item.person?.name ?? null) : null,
         items: [],
       }
       groups.push(group)
@@ -58,15 +66,16 @@ export default async function PackingListPage({
       quantity: item.quantity,
       notes: item.notes,
       packed: item.packed,
+      personId: item.personId,
+      personName: item.person?.name ?? null,
     })
   }
   groups.sort(
     (a, b) => Number(a.bundleId === null) - Number(b.bundleId === null)
   )
 
-  const onList = new Set(groups.map((group) => group.bundleId))
+  // A bundle can be added once per person, so every bundle stays on offer.
   const bundlesToAdd: BundleToAdd[] = bundles
-    .filter((bundle) => !onList.has(bundle.id))
     .map((bundle) => ({
       id: bundle.id,
       name: bundle.name,
@@ -136,6 +145,7 @@ export default async function PackingListPage({
         listId={list.id}
         groups={groups}
         bundlesToAdd={bundlesToAdd}
+        persons={persons.map(({ id, name }) => ({ id, name }))}
       />
     </div>
   )

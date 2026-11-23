@@ -19,9 +19,20 @@ import {
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu"
 import { cn } from "@workspace/ui/lib/utils"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@workspace/ui/components/select"
+import { Badge } from "@workspace/ui/components/badge"
 import { Loader2, MoreHorizontal, Pencil, Save, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { deletePackingItems, updatePackingItem } from "@/lib/actions/packing"
+import type { PackingPersonOption } from "../persons-dialog"
+
+const SHARED = "__shared__"
 
 export type PackingItemView = {
   id: string
@@ -29,13 +40,20 @@ export type PackingItemView = {
   quantity: number
   notes: string | null
   packed: boolean
+  personId: string | null
+  personName: string | null
 }
 
 export function PackingItemRow({
   item,
+  persons,
+  showPerson,
   onToggle,
 }: {
   item: PackingItemView
+  persons: PackingPersonOption[]
+  /** Off when the section or the filter already says who it is for. */
+  showPerson: boolean
   onToggle: (packed: boolean) => void
 }) {
   const router = useRouter()
@@ -77,6 +95,11 @@ export function PackingItemRow({
                 × {item.quantity}
               </span>
             )}
+            {showPerson && item.personName && (
+              <Badge variant="secondary" className="ml-2 align-middle text-xs">
+                {item.personName}
+              </Badge>
+            )}
           </span>
           {item.notes && (
             <span className="text-xs break-words text-muted-foreground">
@@ -113,7 +136,11 @@ export function PackingItemRow({
         </DropdownMenuContent>
       </DropdownMenu>
       {editing && (
-        <EditItemDialog item={item} onClose={() => setEditing(false)} />
+        <EditItemDialog
+          item={item}
+          persons={persons}
+          onClose={() => setEditing(false)}
+        />
       )}
     </li>
   )
@@ -121,9 +148,11 @@ export function PackingItemRow({
 
 function EditItemDialog({
   item,
+  persons,
   onClose,
 }: {
   item: PackingItemView
+  persons: PackingPersonOption[]
   onClose: () => void
 }) {
   const router = useRouter()
@@ -131,6 +160,7 @@ function EditItemDialog({
   const [name, setName] = useState(item.name)
   const [quantity, setQuantity] = useState(String(item.quantity))
   const [notes, setNotes] = useState(item.notes ?? "")
+  const [personId, setPersonId] = useState(item.personId ?? SHARED)
   const [error, setError] = useState("")
 
   function handleSave() {
@@ -149,6 +179,7 @@ function EditItemDialog({
         name: name.trim(),
         quantity: count,
         notes: notes.trim() || null,
+        personId: personId === SHARED ? null : personId,
       })
       if (!result.ok) {
         setError(result.error)
@@ -195,6 +226,24 @@ function EditItemDialog({
               onChange={(e) => setQuantity(e.target.value)}
             />
           </div>
+          {persons.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <Label>Til</Label>
+              <Select value={personId} onValueChange={setPersonId}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={SHARED}>Felles</SelectItem>
+                  {persons.map((person) => (
+                    <SelectItem key={person.id} value={person.id}>
+                      {person.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className="flex flex-col gap-2">
             <Label htmlFor="packing-item-notes">Notat</Label>
             <Input
