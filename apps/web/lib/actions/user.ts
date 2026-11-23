@@ -1,7 +1,8 @@
 "use server"
 
 import { db } from "@workspace/db"
-import { requireAuth } from "@/lib/session"
+import { requireAuth, requireHousehold } from "@/lib/session"
+import { setQuickNavPages as setQuickNavPagesService } from "@/lib/application/users/preferences"
 import { revalidatePath } from "next/cache"
 import { cookies } from "next/headers"
 import {
@@ -39,4 +40,13 @@ export async function setColorPalette(palette: string) {
   })
 
   revalidatePath("/", "layout")
+}
+
+/** The pages in the phone's bottom bar. Saved on the user, so every device gets it. */
+export async function setQuickNavPages(pages: string[]) {
+  const { context } = await requireHousehold()
+  const saved = await setQuickNavPagesService(context, pages)
+
+  revalidatePath("/", "layout")
+  return saved
 }

@@ -23,6 +23,12 @@ import {
   CalendarClock,
 } from "lucide-react"
 import { isActiveProject } from "@/lib/dashboard-stats"
+import {
+  UpcomingEventsPanel,
+  toUpcomingRows,
+} from "@/components/upcoming-events-panel"
+import { listUpcomingEvents } from "@/lib/application/events/read"
+import { osloToday } from "@/lib/application/events/dates"
 
 export default async function DashboardPage() {
   const { context } = await requireHousehold()
@@ -35,6 +41,10 @@ export default async function DashboardPage() {
     projects,
     currentDeals,
   } = await getDashboardData(context)
+  // Only the next month: the page is an overview, the calendar is a tap away.
+  const upcomingEvents = toUpcomingRows(
+    await listUpcomingEvents(context, osloToday(), { withinDays: 30, limit: 5 })
+  )
 
   const cashFlow = budgetStats.hasBudget ? budgetStats.disposable : 0
 
@@ -51,6 +61,24 @@ export default async function DashboardPage() {
         deals={currentDeals.deals}
         today={currentDeals.today}
       />
+
+      {upcomingEvents.length > 0 && (
+        <section className="flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <h2 className="font-heading text-xl tracking-tight">
+              Kommende hendelser
+            </h2>
+            <Link
+              href="/hendelser"
+              className="flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Se kalender
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+          <UpcomingEventsPanel rows={upcomingEvents} />
+        </section>
+      )}
 
       {/* ── BUDGET SECTION ── */}
       <section className="flex flex-col gap-4">

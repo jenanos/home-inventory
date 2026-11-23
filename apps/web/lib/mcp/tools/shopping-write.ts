@@ -69,7 +69,7 @@ const colorInputSchema = z
   .describe("Card color preset. null or 'default' resets to the default.")
 
 /** Optional item fields shared by add and update. `assignedTo` is web-only. */
-const itemFieldsInputSchema = {
+export const itemFieldsInputSchema = {
   description: longTextInputSchema,
   categoryId: idSchema
     .nullable()
@@ -96,7 +96,7 @@ const itemFieldsInputSchema = {
   storeName: shortTextInputSchema,
 }
 
-const alternativeFieldsInputSchema = {
+export const alternativeFieldsInputSchema = {
   price: moneyInputSchema.nullable().optional(),
   url: urlInputSchema,
   imageUrl: urlInputSchema.describe(
@@ -125,6 +125,12 @@ export const createShoppingListTool = defineWriteTool({
       .describe(
         "Project the list buys for (id from list-projects), e.g. materials for a renovation."
       ),
+    eventId: idSchema
+      .nullable()
+      .optional()
+      .describe(
+        "Event the list holds gift wishes for (id from list-events), e.g. a birthday. add-gift-wishes creates such a list for you."
+      ),
   },
   outputSchema: { list: shoppingListSummarySchema },
   annotations: CREATE_ANNOTATIONS,
@@ -143,9 +149,9 @@ export const createShoppingListTool = defineWriteTool({
 export const updateShoppingListTool = defineWriteTool({
   name: "update-shopping-list",
   scope: "shopping:write",
-  title: "Rename, recolor or link a shopping list to a project",
+  title: "Rename, recolor or link a shopping list to a project or event",
   description:
-    "Changes a list's name, color or project and leaves omitted fields as they are. Set projectId to link the list to a project, or null to unlink it. Whether a list is private cannot be changed here; that is done in the app. Returns the saved list.",
+    "Changes a list's name, color, project or event and leaves omitted fields as they are. Set projectId to link the list to a project, or null to unlink it; eventId does the same for a calendar event's gift wishes. Whether a list is private cannot be changed here; that is done in the app. Returns the saved list.",
   inputSchema: {
     listId: idSchema.describe("Id from list-shopping-lists."),
     name: nameInputSchema.optional(),
@@ -154,6 +160,10 @@ export const updateShoppingListTool = defineWriteTool({
       .nullable()
       .optional()
       .describe("Project id from list-projects, or null to unlink."),
+    eventId: idSchema
+      .nullable()
+      .optional()
+      .describe("Event id from list-events, or null to unlink."),
     expectedUpdatedAt: expectedUpdatedAtSchema,
   },
   outputSchema: { list: shoppingListSummarySchema },
@@ -164,6 +174,7 @@ export const updateShoppingListTool = defineWriteTool({
       name: args.name,
       color: args.color,
       projectId: args.projectId,
+      eventId: args.eventId,
       expectedUpdatedAt: parseExpectedUpdatedAt(args.expectedUpdatedAt),
     })
 

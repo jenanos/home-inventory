@@ -47,8 +47,10 @@ describe("write tool contracts", () => {
     )
     expect([...domains].sort()).toEqual([
       "budget",
+      "events",
       "garden",
       "maintenance",
+      "packing",
       "shopping",
     ])
   })
@@ -107,6 +109,26 @@ describe("write tool contracts", () => {
         "create-garden-bed",
         "update-garden-bed",
         "delete-garden-bed",
+        "create-event",
+        "update-event",
+        "delete-event",
+        "add-gift-wishes",
+        "create-packing-list",
+        "update-packing-list",
+        "duplicate-packing-list",
+        "delete-packing-list",
+        "add-packing-items",
+        "update-packing-item",
+        "set-packing-items-packed",
+        "delete-packing-items",
+        "add-packing-bundle-to-list",
+        "remove-packing-bundle-from-list",
+        "create-packing-bundle",
+        "update-packing-bundle",
+        "delete-packing-bundle",
+        "create-packing-person",
+        "update-packing-person",
+        "delete-packing-person",
         "create-attachment-upload-link",
         "attach-uploaded-file",
         "attach-file-from-url",
@@ -191,8 +213,9 @@ describe("write tool contracts", () => {
 
   // Deleting is allowed for shopping items and alternatives (ADR 0005), for
   // projects with their steps and vendors (ADR 0006), for budget rows
-  // (ADR 0007), for plants (ADR 0008), for garden beds (ADR 0009) and for
-  // attachments (ADR 0011). A new delete tool is a decision, not a side effect of adding a
+  // (ADR 0007), for plants (ADR 0008), for garden beds (ADR 0009), for
+  // attachments (ADR 0011), for calendar events (ADR 0015) and for packing
+  // lists, their items, bundles and people (ADR 0016). A new delete tool is a decision, not a side effect of adding a
   // feature.
   it("allows deletion only where it was decided", () => {
     const deleting = registry
@@ -207,13 +230,19 @@ describe("write tool contracts", () => {
       "delete-budget-loan",
       "delete-budget-member",
       "delete-budget-trip",
+      "delete-event",
       "delete-garden-bed",
+      "delete-packing-bundle",
+      "delete-packing-items",
+      "delete-packing-list",
+      "delete-packing-person",
       "delete-plant",
       "delete-product-alternative",
       "delete-project",
       "delete-project-step",
       "delete-project-vendor",
       "delete-shopping-items",
+      "remove-packing-bundle-from-list",
     ])
   })
 

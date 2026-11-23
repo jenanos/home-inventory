@@ -1,0 +1,421 @@
+import { z } from "zod"
+
+import {
+  getPackingBundle,
+  getPackingList,
+  listPackingBundlesPage,
+  listPackingListsPage,
+  listPackingPersons,
+  type PackingBundleWithItems,
+  type PackingListDetail,
+  type PackingListSummary,
+} from "../../application/packing/read"
+import {
+  buildPageInfo,
+  pageInfoSchema,
+  paginationInputSchema,
+  resolvePageRequest,
+} from "../pagination"
+import { notFoundError, toolSuccess } from "../result"
+import { defineTool, READ_ONLY_ANNOTATIONS } from "./define"
+import {
+  PACKING_DURATIONS,
+  PACKING_SEASONS,
+  assertId,
+  calendarDate,
+  calendarDateOutputSchema,
+  filterTextSchema,
+  idSchema,
+  timestamp,
+  timestampSchema,
+} from "./shared"
+
+// ─── Shapes ─────────────────────────────────────────────────────
+
+const tripShape = {
+  season: z.enum(PACKING_SEASONS).nullable(),
+  duration: z
+    .enum(PACKING_DURATIONS)
+    .nullable()
+    .describe(
+      "DAY = day trip, WEEKEND = 1–3 nights, WEEK = 4–8 nights, LONG = more than 8 nights."
+    ),
+  abroad: z.boolean().describe("A trip abroad."),
+  departureOn: calendarDateOutputSchema,
+  notes: z.string().nullable(),
+}
+
+export const packingItemSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  quantity: z.number().int(),
+  packed: z.boolean(),
+  notes: z.string().nullable(),
+  bundleId: z
+    .string()
+    .nullable()
+    .describe("The bundle the item came from, or null for a loose item."),
+  bundleName: z.string().nullable(),
+  personId: z
+    .string()
+    .nullable()
+    .describe("Who the item is for (list-packing-persons), or null if shared."),
+  personName: z.string().nullable(),
+  updatedAt: timestampSchema,
+})
+
+export const packingListCardSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  ...tripShape,
+  itemCount: z.number().int(),
+  packedCount: z.number().int(),
+  persons: z
+    .array(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+        itemCount: z.number().int(),
+        packedCount: z.number().int(),
+      })
+    )
+    .describe(
+      "People with things on the list, and how much of theirs is packed."
+    ),
+  bundles: z
+    .array(z.object({ id: z.string(), name: z.string() }))
+    .describe("Bundles with items on the list."),
+  items: z.array(packingItemSchema),
+  createdAt: timestampSchema,
+  updatedAt: timestampSchema,
+})
+
+const packingListRowSchema = packingListCardSchema.omit({ items: true })
+
+export const packingBundleSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  seasons: z
+    .array(z.enum(PACKING_SEASONS))
+    .describe("Seasons the bundle is for; empty means every season."),
+  durations: z
+    .array(z.enum(PACKING_DURATIONS))
+    .describe("Trip lengths the bundle is for; empty means any length."),
+  abroadOnly: z.boolean().describe("Only for trips abroad."),
+  autoAdd: z
+    .boolean()
+    .describe(
+      "Added automatically to every new packing list that fits its seasons, durations and abroad rule."
+    ),
+  items: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      quantity: z.number().int(),
+      notes: z.string().nullable(),
+    })
+  ),
+  updatedAt: timestampSchema,
+})
+
+// ─── Serialization ──────────────────────────────────────────────
+
+function bundlesOnList(
+  items: Array<{ bundle: { id: string; name: string } | null }>
+) {
+  const seen = new Map<string, string>()
+  for (const item of items) {
+    if (item.bundle && !seen.has(item.bundle.id)) {
+      seen.set(item.bundle.id, item.bundle.name)
+    }
+  }
+  return [...seen].map(([id, name]) => ({ id, name }))
+}
+
+type PersonItem = {
+  packed: boolean
+  person: { id: string; name: string } | null
+}
+
+function personsOnList(items: PersonItem[]) {
+  const persons = new Map<
+    string,
+    { id: string; name: string; itemCount: number; packedCount: number }
+  >()
+  for (const item of items) {
+    if (!item.person) continue
+    const entry = persons.get(item.person.id) ?? {
+      ...item.person,
+      itemCount: 0,
+      packedCount: 0,
+    }
+    entry.itemCount += 1
+    if (item.packed) entry.packedCount += 1
+    persons.set(item.person.id, entry)
+  }
+  return [...persons.values()].sort((a, b) =>
+    a.name.localeCompare(b.name, "nb-NO")
+  )
+}
+
+function serializeTrip(list: PackingListSummary | PackingListDetail) {
+  return {
+    season: list.season,
+    duration: list.duration,
+    abroad: list.abroad,
+    departureOn: calendarDate(list.departureOn),
+    notes: list.notes,
+  }
+}
+
+/**
+ * The list card. With `personId` only that person's things are listed
+ * (`null`: the shared ones); the counts and people always cover the list.
+ */
+export function serializePackingList(
+  list: PackingListDetail,
+  { personId }: { personId?: string | null } = {}
+): z.infer<typeof packingListCardSchema> {
+  const items =
+    personId === undefined
+      ? list.items
+      : list.items.filter((item) => item.personId === personId)
+  return {
+    id: list.id,
+    name: list.name,
+    ...serializeTrip(list),
+    itemCount: list.items.length,
+    packedCount: list.items.filter((item) => item.packed).length,
+    persons: personsOnList(list.items),
+    bundles: bundlesOnList(list.items),
+    items: items.map((item) => ({
+      id: item.id,
+      name: item.name,
+      quantity: item.quantity,
+      packed: item.packed,
+      notes: item.notes,
+      bundleId: item.bundleId,
+      bundleName: item.bundle?.name ?? null,
+      personId: item.personId,
+      personName: item.person?.name ?? null,
+      updatedAt: timestamp(item.updatedAt),
+    })),
+    createdAt: timestamp(list.createdAt),
+    updatedAt: timestamp(list.updatedAt),
+  }
+}
+
+export function serializePackingBundle(
+  bundle: PackingBundleWithItems
+): z.infer<typeof packingBundleSchema> {
+  return {
+    id: bundle.id,
+    name: bundle.name,
+    description: bundle.description,
+    seasons: bundle.seasons,
+    durations: bundle.durations,
+    abroadOnly: bundle.abroadOnly,
+    autoAdd: bundle.autoAdd,
+    items: bundle.items.map((item) => ({
+      id: item.id,
+      name: item.name,
+      quantity: item.quantity,
+      notes: item.notes,
+    })),
+    updatedAt: timestamp(bundle.updatedAt),
+  }
+}
+
+// ─── Tools ──────────────────────────────────────────────────────
+
+export const listPackingListsTool = defineTool({
+  name: "list-packing-lists",
+  scope: "packing:read",
+  title: "List packing lists",
+  description:
+    "Lists the household's packing lists, upcoming departures first, with the trip's season, duration and abroad flag and how much is packed. get-packing-list returns the items.",
+  inputSchema: {
+    query: filterTextSchema
+      .optional()
+      .describe("Case-insensitive substring match on the name or notes."),
+    season: z.enum(PACKING_SEASONS).optional(),
+    duration: z.enum(PACKING_DURATIONS).optional(),
+    abroad: z.boolean().optional(),
+    personId: idSchema
+      .optional()
+      .describe("Only lists with something packed for this person."),
+    ...paginationInputSchema,
+  },
+  outputSchema: {
+    lists: z.array(packingListRowSchema),
+    pageInfo: pageInfoSchema,
+  },
+  annotations: READ_ONLY_ANNOTATIONS,
+  handler: async (args, session) => {
+    const page = resolvePageRequest(args)
+    const { totalCount, lists } = await listPackingListsPage(session.context, {
+      ...page,
+      query: args.query,
+      season: args.season,
+      duration: args.duration,
+      abroad: args.abroad,
+      personId: args.personId,
+    })
+    const rows = lists.map((list) => ({
+      id: list.id,
+      name: list.name,
+      ...serializeTrip(list),
+      itemCount: list.items.length,
+      packedCount: list.items.filter((item) => item.packed).length,
+      persons: personsOnList(list.items),
+      bundles: bundlesOnList(list.items),
+      createdAt: timestamp(list.createdAt),
+      updatedAt: timestamp(list.updatedAt),
+    }))
+
+    return toolSuccess(
+      { lists: rows, pageInfo: buildPageInfo(page, rows.length, totalCount) },
+      `Fant ${totalCount} pakkeliste(r).`
+    )
+  },
+})
+
+export const getPackingListTool = defineTool({
+  name: "get-packing-list",
+  scope: "packing:read",
+  title: "Get a packing list",
+  description:
+    "Returns one packing list with every item, whether it is packed, and the bundle it came from.",
+  inputSchema: {
+    listId: idSchema.describe("Id from list-packing-lists."),
+    personId: idSchema
+      .nullable()
+      .optional()
+      .describe(
+        "Only this person's things (from list-packing-persons), or null for the shared ones. Omit for everything."
+      ),
+  },
+  outputSchema: { list: packingListCardSchema },
+  annotations: READ_ONLY_ANNOTATIONS,
+  handler: async (args, session) => {
+    assertId(args.listId, "listId")
+    const list = await getPackingList(session.context, args.listId)
+    if (!list) return notFoundError("pakkeliste")
+
+    const card = serializePackingList(list, { personId: args.personId })
+    return toolSuccess(
+      { list: card },
+      `${list.name}: ${card.packedCount}/${card.itemCount} pakket.`
+    )
+  },
+})
+
+export const listPackingBundlesTool = defineTool({
+  name: "list-packing-bundles",
+  scope: "packing:read",
+  title: "List packing bundles",
+  description:
+    "Lists the household's reusable bundles: groups of things packed together, such as 'Treningstøy' or 'Vintertøy barn', with their items and the seasons, trip lengths and abroad rule they are for. season and duration return the bundles that apply, including those without a limit.",
+  inputSchema: {
+    query: filterTextSchema
+      .optional()
+      .describe("Substring of the name, description or an item's name."),
+    season: z.enum(PACKING_SEASONS).optional(),
+    duration: z.enum(PACKING_DURATIONS).optional(),
+    abroadOnly: z.boolean().optional(),
+    autoAdd: z.boolean().optional(),
+    ...paginationInputSchema,
+  },
+  outputSchema: {
+    bundles: z.array(packingBundleSchema),
+    pageInfo: pageInfoSchema,
+  },
+  annotations: READ_ONLY_ANNOTATIONS,
+  handler: async (args, session) => {
+    const page = resolvePageRequest(args)
+    const { totalCount, bundles } = await listPackingBundlesPage(
+      session.context,
+      {
+        ...page,
+        query: args.query,
+        season: args.season,
+        duration: args.duration,
+        abroadOnly: args.abroadOnly,
+        autoAdd: args.autoAdd,
+      }
+    )
+    const rows = bundles.map(serializePackingBundle)
+
+    return toolSuccess(
+      {
+        bundles: rows,
+        pageInfo: buildPageInfo(page, rows.length, totalCount),
+      },
+      `Fant ${totalCount} pakke(r)${rows.length > 0 ? `: ${rows.map((bundle) => bundle.name).join(", ")}` : ""}.`
+    )
+  },
+})
+
+export const getPackingBundleTool = defineTool({
+  name: "get-packing-bundle",
+  scope: "packing:read",
+  title: "Get a packing bundle",
+  description: "Returns one bundle with its items and conditions.",
+  inputSchema: {
+    bundleId: idSchema.describe("Id from list-packing-bundles."),
+  },
+  outputSchema: { bundle: packingBundleSchema },
+  annotations: READ_ONLY_ANNOTATIONS,
+  handler: async (args, session) => {
+    assertId(args.bundleId, "bundleId")
+    const bundle = await getPackingBundle(session.context, args.bundleId)
+    if (!bundle) return notFoundError("pakke")
+
+    return toolSuccess(
+      { bundle: serializePackingBundle(bundle) },
+      `${bundle.name}: ${bundle.items.length} ting.`
+    )
+  },
+})
+
+export const packingPersonSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  updatedAt: timestampSchema,
+})
+
+export const listPackingPersonsTool = defineTool({
+  name: "list-packing-persons",
+  scope: "packing:read",
+  title: "List people to pack for",
+  description:
+    "Lists the people the household packs for: family members, including children who do not use the app. Items and bundles on a packing list can be assigned to one of them.",
+  inputSchema: {},
+  outputSchema: { persons: z.array(packingPersonSchema) },
+  annotations: READ_ONLY_ANNOTATIONS,
+  handler: async (_args, session) => {
+    const persons = await listPackingPersons(session.context)
+
+    return toolSuccess(
+      {
+        persons: persons.map((person) => ({
+          id: person.id,
+          name: person.name,
+          updatedAt: timestamp(person.updatedAt),
+        })),
+      },
+      persons.length === 0
+        ? "Ingen personer lagt inn."
+        : `Personer: ${persons.map((person) => person.name).join(", ")}.`
+    )
+  },
+})
+
+export const packingTools = [
+  listPackingListsTool,
+  getPackingListTool,
+  listPackingBundlesTool,
+  getPackingBundleTool,
+  listPackingPersonsTool,
+]

@@ -13,8 +13,11 @@ A personal app for managing home projects and finances, built with Next.js 16 an
 - **Projects** — maintenance, repairs, renovations and other home projects, with checklist steps, optional vendor quotes and linked shopping lists
 - **Budget** — salaries, loans, recurring trips and entries with their own frequency (weekly to yearly), savings, and key figures such as savings rate, debt-to-income and loan-to-value. Optional details (provider, payment day, contract end, actual net pay) can be shown or hidden
 - **Garden** — plants with care details (sun, water, soil, hardiness, pruning, toxicity) and when they were last watered and pruned; garden beds, with one plant placed in as many beds as it grows in
+- **Events** — a calendar of birthdays, anniversaries and other dates, with the age someone turns, and gift wishes kept on a linked shopping list so they can be bought like anything else (ADR 0015)
+- **Packing lists** — one list per trip with season, length and abroad; reusable bundles of things packed together ("Treningstøy", "Vintertøy barn") that can be added automatically to every trip they fit; things can be assigned to people (children who don't use the app included) and the list filtered by person (ADR 0016)
+- **Quick panel** — each user chooses which pages sit in the phone's bottom bar; the rest are under "Mer"
 - **Photos and documents** — upload images and PDFs to plants, beds and projects (stored in PostgreSQL; images are resized and stripped of location data)
-- **MCP server** — an OAuth-protected MCP endpoint (`/api/mcp`) lets AI assistants read and update shopping lists, budget, projects and garden, look at attached photos, and attach new ones through short-lived upload links, ChatGPT chat files or a URL
+- **MCP server** — an OAuth-protected MCP endpoint (`/api/mcp`) lets AI assistants read and update shopping lists, budget, projects, garden, events with gift wishes and packing lists, look at attached photos, and attach new ones through short-lived upload links, ChatGPT chat files or a URL
 - **Authentication** — magic link email login via Resend
 - **Dark mode** — toggle with the `d` hotkey in dev
 

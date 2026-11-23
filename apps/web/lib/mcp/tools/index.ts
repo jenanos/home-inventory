@@ -3,8 +3,12 @@ import { createAttachmentTools } from "./attachments"
 import { budgetTools } from "./budget"
 import { budgetWriteTools } from "./budget-write"
 import { sessionHasToolScope, type McpToolDefinition } from "./define"
+import { createEventTools } from "./events"
+import { createEventWriteTools } from "./events-write"
 import { gardenTools } from "./garden"
 import { gardenWriteTools } from "./garden-write"
+import { packingTools } from "./packing"
+import { packingWriteTools } from "./packing-write"
 import { projectTools } from "./projects"
 import { projectWriteTools } from "./projects-write"
 import { createServerInfoTool } from "./server-info"
@@ -37,6 +41,10 @@ export function createToolRegistry(
     ...projectWriteTools,
     ...gardenTools,
     ...gardenWriteTools,
+    ...createEventTools(now),
+    ...createEventWriteTools(now),
+    ...packingTools,
+    ...packingWriteTools,
     ...createAttachmentTools(),
   ]
 }

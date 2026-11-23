@@ -3,17 +3,7 @@
 import { usePathname } from "next/navigation"
 import Link from "next/link"
 import { signOut } from "next-auth/react"
-import {
-  LayoutDashboard,
-  ShoppingCart,
-  Settings,
-  LogOut,
-  Plus,
-  Hammer,
-  Wallet,
-  Flower2,
-  Shield,
-} from "lucide-react"
+import { ShoppingCart, LogOut, Plus, Shield } from "lucide-react"
 import { Logo } from "@/components/logo"
 import {
   Sidebar,
@@ -34,7 +24,7 @@ import {
   AvatarImage,
 } from "@workspace/ui/components/avatar"
 import { Button } from "@workspace/ui/components/button"
-import { cn } from "@workspace/ui/lib/utils"
+import { NAV_ITEMS, isNavItemActive } from "./nav-items"
 
 interface AppSidebarProps {
   user: {
@@ -57,12 +47,7 @@ export function AppSidebar({
   const pathname = usePathname()
 
   const navItems = [
-    { href: "/", label: "Oversikt", icon: LayoutDashboard },
-    { href: "/lists", label: "Innkjøp", icon: ShoppingCart },
-    { href: "/prosjekter", label: "Prosjekter", icon: Hammer },
-    { href: "/budsjett", label: "Budsjett", icon: Wallet },
-    { href: "/hage", label: "Hage", icon: Flower2 },
-    { href: "/settings", label: "Innstillinger", icon: Settings },
+    ...NAV_ITEMS,
     ...(isAdmin
       ? [{ href: "/admin", label: "Administrasjon", icon: Shield }]
       : []),
@@ -87,11 +72,7 @@ export function AppSidebar({
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton
                     asChild
-                    isActive={
-                      item.href === "/"
-                        ? pathname === "/"
-                        : pathname.startsWith(item.href)
-                    }
+                    isActive={isNavItemActive(item.href, pathname)}
                   >
                     <Link href={item.href}>
                       <item.icon className="h-4 w-4" />

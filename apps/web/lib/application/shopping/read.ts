@@ -1,9 +1,4 @@
-import {
-  db,
-  type ItemStatus,
-  type Priority,
-  type Prisma,
-} from "@workspace/db"
+import { db, type ItemStatus, type Priority, type Prisma } from "@workspace/db"
 
 import type { ApplicationContext } from "../context"
 import { getVisibleShoppingListsWhere } from "../../shopping-list-access"
@@ -218,9 +213,16 @@ function shoppingListFilter(
 
 export async function listShoppingListsPage(
   context: ApplicationContext,
-  options: PageOptions & { name?: string; projectId?: string }
+  options: PageOptions & {
+    name?: string
+    projectId?: string
+    eventId?: string
+  }
 ) {
-  const where = shoppingListFilter(context, options.name, options.projectId)
+  const where = {
+    ...shoppingListFilter(context, options.name, options.projectId),
+    ...(options.eventId ? { eventId: options.eventId } : {}),
+  }
 
   const [totalCount, lists] = await Promise.all([
     db.shoppingList.count({ where }),
@@ -232,6 +234,7 @@ export async function listShoppingListsPage(
         color: true,
         isPrivate: true,
         projectId: true,
+        eventId: true,
         createdAt: true,
         updatedAt: true,
         items: {
@@ -274,6 +277,7 @@ export async function getShoppingListSummary(
       color: true,
       isPrivate: true,
       projectId: true,
+      eventId: true,
       createdAt: true,
       updatedAt: true,
     },

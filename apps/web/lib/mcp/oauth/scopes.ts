@@ -9,6 +9,10 @@ export const MCP_SCOPES = [
   "maintenance:write",
   "garden:read",
   "garden:write",
+  "events:read",
+  "events:write",
+  "packing:read",
+  "packing:write",
 ] as const
 
 export type McpScope = (typeof MCP_SCOPES)[number]
@@ -62,6 +66,26 @@ export const MCP_SCOPE_DESCRIPTIONS: Record<McpScope, ScopeDescription> = {
     title: "Endre hage",
     description:
       "Opprette, endre og slette planter og bed, og flytte planter mellom bed. Inkluderer lesetilgang.",
+  },
+  "events:read": {
+    title: "Se hendelser",
+    description:
+      "Lese bursdager og andre hendelser i kalenderen, med gaveønskene som er knyttet til dem. Private gavelister er kun synlige for deg.",
+  },
+  "events:write": {
+    title: "Endre hendelser",
+    description:
+      "Opprette, endre og slette bursdager og andre hendelser. Inkluderer lesetilgang. Gaveønsker legges inn med tilgangen til handlelister.",
+  },
+  "packing:read": {
+    title: "Se pakkelister",
+    description:
+      "Lese pakkelister, hva som er pakket, og pakkene med ting som hører sammen.",
+  },
+  "packing:write": {
+    title: "Endre pakkelister",
+    description:
+      "Opprette, endre og slette pakkelister og pakker, og krysse av det som er pakket. Inkluderer lesetilgang.",
   },
 }
 

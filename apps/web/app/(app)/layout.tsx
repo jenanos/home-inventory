@@ -1,4 +1,5 @@
 import { requireHousehold } from "@/lib/session"
+import { resolveQuickNavPages } from "@/lib/quick-nav"
 import { db } from "@workspace/db"
 import { SidebarProvider } from "@workspace/ui/components/sidebar"
 import { Toaster } from "@workspace/ui/components/sonner"
@@ -20,7 +21,7 @@ export default async function AppLayout({
     }),
     db.user.findUnique({
       where: { id: session.user.id },
-      select: { isAdmin: true },
+      select: { isAdmin: true, quickNavPages: true },
     }),
   ])
 
@@ -33,6 +34,7 @@ export default async function AppLayout({
 
   const householdName = membership.household.name
   const isAdmin = currentUser?.isAdmin === true
+  const quickPages = resolveQuickNavPages(currentUser?.quickNavPages)
 
   return (
     <SidebarProvider>
@@ -49,7 +51,7 @@ export default async function AppLayout({
             {children}
           </div>
         </main>
-        <MobileNav />
+        <MobileNav quickPages={quickPages} isAdmin={isAdmin} />
       </div>
       <Toaster />
     </SidebarProvider>

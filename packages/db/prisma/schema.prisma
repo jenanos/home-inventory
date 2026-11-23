@@ -16,6 +16,10 @@ model User {
   emailVerified DateTime?
   image         String?
   isAdmin       Boolean   @default(false)
+  /// Pages (nav ids such as "lists" or "hendelser") in the phone's bottom
+  /// bar, in order. Empty means the default selection; the rest are behind
+  /// "Mer". See `apps/web/lib/navigation.ts`.
+  quickNavPages String[]  @default([])
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -138,6 +142,10 @@ model Household {
   uploadLinks    AttachmentUploadLink[]
   budget         Budget?
   mcpAuditEvents McpAuditEvent[]
+  calendarEvents CalendarEvent[]
+  packingLists   PackingList[]
+  packingBundles PackingBundle[]
+  packingPersons PackingPerson[]
 }
 
 model HouseholdMember {
@@ -318,17 +326,22 @@ model ShoppingList {
   /// Optional project the list buys for. Must be in the same household; the
   /// shopping write services enforce that. Deleting the project keeps the list.
   projectId   String?  @db.Uuid
+  /// Optional calendar event the list buys gifts for (gift wishes). Same
+  /// household rule as `projectId`; deleting the event keeps the list.
+  eventId     String?  @db.Uuid
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   household  Household      @relation(fields: [householdId], references: [id], onDelete: Cascade)
   createdBy  User?          @relation("CreatedShoppingLists", fields: [createdById], references: [id], onDelete: SetNull)
   project    Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  event      CalendarEvent? @relation(fields: [eventId], references: [id], onDelete: SetNull)
   items      ShoppingItem[]
   shareLinks ShareLink[]
 
   @@index([householdId, isPrivate])
   @@index([projectId])
+  @@index([eventId])
 }
 
 model ShoppingItem {
@@ -507,6 +520,171 @@ model ProjectStep {
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId, sortOrder])
+}
+
+// ─── Hendelser (calendar events) ────────────────────────────────
+//
+// Birthdays and other dates the household wants to remember (ADR 0015).
+// Gift wishes are shopping items on lists linked through `ShoppingList.eventId`.
+
+enum CalendarEventType {
+  BIRTHDAY
+  ANNIVERSARY
+  HOLIDAY
+  OTHER
+}
+
+enum CalendarEventRecurrence {
+  /// Every year on the same day and month (birthdays, anniversaries).
+  YEARLY
+  /// Once, on the given year.
+  NONE
+}
+
+/// The date is stored as parts so a yearly event can leave the year out
+/// (a birthday where the birth year is unknown). A one-off event always has a
+/// year; the write services enforce it and that the day exists. A yearly event
+/// on 29 February falls on 28 February in other years.
+model CalendarEvent {
+  id          String                  @id @default(uuid()) @db.Uuid
+  householdId String                  @db.Uuid
+  /// For a birthday: the person's name ("Mormor").
+  title       String
+  type        CalendarEventType       @default(BIRTHDAY)
+  recurrence  CalendarEventRecurrence @default(YEARLY)
+  month       Int
+  day         Int
+  /// Birth year, wedding year, or the year of a one-off event.
+  year        Int?
+  notes       String?                 @db.Text
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+
+  household     Household      @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  shoppingLists ShoppingList[]
+
+  @@index([householdId, month, day])
+}
+
+// ─── Pakkelister ────────────────────────────────────────────────
+//
+// Packing lists and reusable bundles of things that go together (ADR 0016).
+// Adding a bundle to a list copies its items, so a list is a snapshot that can
+// be ticked off and edited without changing the bundle.
+
+enum PackingSeason {
+  SPRING
+  SUMMER
+  AUTUMN
+  WINTER
+}
+
+enum PackingDuration {
+  /// A day trip, no overnight stay.
+  DAY
+  /// One to three nights.
+  WEEKEND
+  /// Four to eight nights.
+  WEEK
+  /// More than eight nights.
+  LONG
+}
+
+model PackingList {
+  id          String           @id @default(uuid()) @db.Uuid
+  householdId String           @db.Uuid
+  name        String
+  season      PackingSeason?
+  duration    PackingDuration?
+  abroad      Boolean          @default(false)
+  /// When the trip starts, if planned.
+  departureOn DateTime?        @db.Date
+  notes       String?          @db.Text
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  household Household     @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  items     PackingItem[]
+
+  @@index([householdId])
+}
+
+model PackingItem {
+  id        String   @id @default(uuid()) @db.Uuid
+  listId    String   @db.Uuid
+  name      String
+  quantity  Int      @default(1)
+  packed    Boolean  @default(false)
+  notes     String?
+  sortOrder Int      @default(0)
+  /// The bundle the item was copied from. Deleting the bundle keeps the item
+  /// and clears the link.
+  bundleId  String?  @db.Uuid
+  /// Who the item is for. Null means shared, or not decided.
+  personId  String?  @db.Uuid
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  list   PackingList    @relation(fields: [listId], references: [id], onDelete: Cascade)
+  bundle PackingBundle? @relation(fields: [bundleId], references: [id], onDelete: SetNull)
+  person PackingPerson? @relation(fields: [personId], references: [id], onDelete: SetNull)
+
+  @@index([listId, sortOrder])
+  @@index([bundleId])
+  @@index([personId])
+}
+
+/// Someone things are packed for: a member of the family, who need not use
+/// the app (a child). Shared by every packing list in the household.
+model PackingPerson {
+  id          String   @id @default(uuid()) @db.Uuid
+  householdId String   @db.Uuid
+  name        String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  household Household     @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  items     PackingItem[]
+
+  @@unique([householdId, name])
+}
+
+/// A reusable group of things that are packed together ("Treningstøy",
+/// "Vintertøy barn", "Utenlandsreise"). Empty `seasons` or `durations` means
+/// any. With `autoAdd` the bundle is added to every new list that matches.
+model PackingBundle {
+  id          String            @id @default(uuid()) @db.Uuid
+  householdId String            @db.Uuid
+  name        String
+  description String?
+  seasons     PackingSeason[]   @default([])
+  durations   PackingDuration[] @default([])
+  /// Only for trips abroad (passport, travel insurance, adapter).
+  abroadOnly  Boolean           @default(false)
+  autoAdd     Boolean           @default(false)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  household Household           @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  items     PackingBundleItem[]
+  listItems PackingItem[]
+
+  @@unique([householdId, name])
+}
+
+model PackingBundleItem {
+  id        String   @id @default(uuid()) @db.Uuid
+  bundleId  String   @db.Uuid
+  name      String
+  quantity  Int      @default(1)
+  notes     String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bundle PackingBundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+
+  @@index([bundleId, sortOrder])
 }
 
 // ─── Hage / Planter models ──────────────────────────────────────

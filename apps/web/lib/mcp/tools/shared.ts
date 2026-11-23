@@ -94,6 +94,19 @@ export const BUDGET_LOAN_REPAYMENT_TYPES = ["ANNUITY", "SERIAL"] as const
 
 export const TRIP_TRANSPORT_TYPES = ["AIR_OR_PUBLIC", "CAR"] as const
 
+export const EVENT_TYPES = [
+  "BIRTHDAY",
+  "ANNIVERSARY",
+  "HOLIDAY",
+  "OTHER",
+] as const
+
+export const EVENT_RECURRENCES = ["YEARLY", "NONE"] as const
+
+export const PACKING_SEASONS = ["SPRING", "SUMMER", "AUTUMN", "WINTER"] as const
+
+export const PACKING_DURATIONS = ["DAY", "WEEKEND", "WEEK", "LONG"] as const
+
 // ─── Field schemas ──────────────────────────────────────────────
 
 export const idSchema = z.string().uuid()
