@@ -68,6 +68,13 @@ Pakken lagres nå ting for ting (match på id, ellers navn), så koblingen
 overlever en redigering; tidligere ble alle tingene slettet og laget på nytt.
 Eksisterende ting ble koblet på navn i migreringen.
 
+Hvilke pakker en liste har, og for hvem, lagres for seg i
+`PackingListBundle`, ikke bare utledet av tingene. Ellers ville en pakke som
+tømmes og synkes, miste malene sine for godt: tingene forsvinner, og dermed
+koblingen. Raden lages når pakken legges til (også automatisk og ved
+kopiering), og slettes når pakken fjernes fra listen. Migreringen lager rader
+for lister fra før.
+
 `syncBundleToTemplates` (`sync-packing-bundle-to-templates`, «Oppdater
 maler») oppdaterer bare maler: nye ting legges til, navn, notat og antall (for
 malens varighet) kopieres, og ting som er tatt ut av pakken, fjernes. Hver

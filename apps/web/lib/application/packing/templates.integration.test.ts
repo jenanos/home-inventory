@@ -3,7 +3,11 @@ import { afterAll, describe, expect, it } from "vitest"
 
 import { createToolRegistry } from "../../mcp/tools"
 import { createHouseholdFixtures } from "../../test/household-fixtures"
-import { getPackingList, listPackingLists } from "./read"
+import {
+  getPackingList,
+  listBundleTemplateUsage,
+  listPackingLists,
+} from "./read"
 import {
   addBundlesToList,
   addPackingItems,
@@ -14,6 +18,7 @@ import {
   deletePackingGroup,
   deletePackingPerson,
   duplicatePackingList,
+  removeBundleFromList,
   syncBundleToTemplates,
   updatePackingBundle,
   updatePackingGroup,
@@ -335,6 +340,65 @@ describe("templates follow their bundles", () => {
     expect(synced?.items).toMatchObject([
       { name: "badetøy", quantity: 2, bundleItemId: bundle.items[0]!.id },
     ])
+  })
+
+  it("keeps following a bundle that was empty for a while", async () => {
+    const { context } = await fixtures.createHousehold()
+    const ola = await createPackingPerson(context, { name: "Ola" })
+    const bundle = await createPackingBundle(context, {
+      name: "Bad",
+      items: [{ name: "Badetøy" }],
+    })
+    const { list } = await createPackingList(context, {
+      name: "Syden",
+      kind: "TEMPLATE",
+      bundles: [{ bundleId: bundle.id, personId: ola.id }],
+    })
+
+    await updatePackingBundle(context, bundle.id, { items: [] })
+    await syncBundleToTemplates(context, bundle.id)
+    expect((await getPackingList(context, list.id))?.items).toEqual([])
+    expect((await listBundleTemplateUsage(context)).get(bundle.id)).toEqual([
+      { id: list.id, name: "Syden" },
+    ])
+
+    await updatePackingBundle(context, bundle.id, {
+      items: [{ name: "Solkrem" }],
+    })
+    const result = await syncBundleToTemplates(context, bundle.id, {
+      listIds: [list.id],
+    })
+
+    expect(result.lists).toMatchObject([{ listId: list.id, added: 1 }])
+    expect((await getPackingList(context, list.id))?.items).toMatchObject([
+      { name: "Solkrem", personId: ola.id, bundleId: bundle.id },
+    ])
+  })
+
+  it("stops following a bundle that was removed from the template", async () => {
+    const { context } = await fixtures.createHousehold()
+    const bundle = await createPackingBundle(context, {
+      name: "Bad",
+      items: [{ name: "Badetøy" }],
+    })
+    const { list } = await createPackingList(context, {
+      name: "Syden",
+      kind: "TEMPLATE",
+      bundleIds: [bundle.id],
+    })
+    const copy = await duplicatePackingList(context, list.id)
+    expect(
+      (await listBundleTemplateUsage(context)).get(bundle.id)
+    ).toHaveLength(2)
+
+    await removeBundleFromList(context, list.id, bundle.id)
+    await updatePackingBundle(context, bundle.id, {
+      items: [{ name: "Badetøy" }, { name: "Solkrem" }],
+    })
+    const result = await syncBundleToTemplates(context, bundle.id)
+
+    expect(result.lists.map((entry) => entry.listId)).toEqual([copy.id])
+    expect((await getPackingList(context, list.id))?.items).toEqual([])
   })
 
   it("rejects a list that is not a template using the bundle", async () => {

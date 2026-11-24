@@ -514,6 +514,44 @@ function addedBundles(placements: BundlePlacement[]) {
   }))
 }
 
+/**
+ * Records that the bundles are on the list, and for whom. The template sync
+ * finds a template's bundles here, not through its items, so a bundle that is
+ * empty for a while keeps its templates.
+ */
+async function recordPlacements(
+  tx: Tx,
+  listId: string,
+  placements: Array<{ bundleId: string; personId: string | null }>
+) {
+  if (placements.length === 0) return
+  const existing = await tx.packingListBundle.findMany({
+    where: { listId },
+    select: { bundleId: true, personId: true },
+  })
+  const key = (entry: { bundleId: string; personId: string | null }) =>
+    `${entry.bundleId}\u0000${entry.personId ?? ""}`
+  const known = new Set(existing.map(key))
+  const fresh: typeof placements = []
+  for (const placement of placements) {
+    if (known.has(key(placement))) continue
+    known.add(key(placement))
+    fresh.push(placement)
+  }
+  if (fresh.length > 0) {
+    await tx.packingListBundle.createMany({
+      data: fresh.map((placement) => ({ ...placement, listId })),
+    })
+  }
+}
+
+function placementRows(placements: BundlePlacement[]) {
+  return placements.map(({ bundle, personId }) => ({
+    bundleId: bundle.id,
+    personId,
+  }))
+}
+
 export type BundleRequest = {
   bundleId: string
   /**
@@ -680,6 +718,7 @@ export async function createPackingList(
       ...items.map((item) => ({ ...item, bundleId: null })),
       ...groupEntries,
     ])
+    await recordPlacements(tx, list.id, placementRows(placements))
 
     return {
       listId: list.id,
@@ -849,6 +888,7 @@ export async function duplicatePackingList(
       where: { id: listId, householdId: context.householdId },
       include: {
         groups: { orderBy: packingGroupOrder },
+        bundles: { select: { bundleId: true, personId: true } },
         items: {
           orderBy: packingItemOrder,
           include: {
@@ -908,6 +948,7 @@ export async function duplicatePackingList(
         }
       }),
     })
+    await recordPlacements(tx, copy.id, source.bundles)
     return copy.id
   }, BATCH_TRANSACTION_OPTIONS)
 
@@ -1110,6 +1151,7 @@ export async function addBundlesToList(
       list.id,
       bundleEntries(placements, list.duration)
     )
+    await recordPlacements(tx, list.id, placementRows(placements))
     return { addedBundles: addedBundles(placements), ...appended }
   }, BATCH_TRANSACTION_OPTIONS)
 
@@ -1151,6 +1193,14 @@ export async function removeBundleFromList(
         listId,
         bundleId,
         ...(keepPacked ? { packed: false } : {}),
+        ...(personId !== undefined ? { personId } : {}),
+      },
+    })
+    // The bundle is off the list (packed things may stay as loose things).
+    await tx.packingListBundle.deleteMany({
+      where: {
+        listId,
+        bundleId,
         ...(personId !== undefined ? { personId } : {}),
       },
     })
@@ -1481,13 +1531,18 @@ export async function syncBundleToTemplates(
         where: {
           householdId: context.householdId,
           kind: "TEMPLATE",
-          items: { some: { bundleId } },
+          OR: [
+            { bundles: { some: { bundleId } } },
+            // A copy whose placement row was lost still counts.
+            { items: { some: { bundleId } } },
+          ],
           ...(listIds ? { id: { in: listIds } } : {}),
         },
         select: {
           id: true,
           name: true,
           duration: true,
+          bundles: { where: { bundleId }, select: { personId: true } },
           items: {
             where: { bundleId },
             orderBy: packingItemOrder,
@@ -1533,6 +1588,8 @@ async function syncTemplate(
     id: string
     name: string
     duration: PackingDuration | null
+    /** Who the bundle is on the list for, from its placements. */
+    bundles: Array<{ personId: string | null }>
     items: Array<{
       id: string
       name: string
@@ -1554,8 +1611,12 @@ async function syncTemplate(
   const toRemove: string[] = []
   const missing: NewListItem[] = []
 
-  // Each person's copy of the bundle on its own: Ola's and Kari's.
+  // Each person's copy of the bundle on its own: Ola's and Kari's. A copy
+  // with no things left (the bundle was emptied) is filled again.
   const copies = new Map<string | null, typeof template.items>()
+  for (const placement of template.bundles) {
+    if (!copies.has(placement.personId)) copies.set(placement.personId, [])
+  }
   for (const item of template.items) {
     const copy = copies.get(item.personId) ?? []
     copy.push(item)
@@ -1627,6 +1688,11 @@ async function syncTemplate(
     }
   }
 
+  await recordPlacements(
+    tx,
+    template.id,
+    [...copies.keys()].map((personId) => ({ bundleId: bundle.id, personId }))
+  )
   if (toRemove.length > 0) {
     const removed = await tx.packingItem.deleteMany({
       where: { id: { in: toRemove }, listId: template.id },

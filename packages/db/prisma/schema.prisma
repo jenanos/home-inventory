@@ -616,11 +616,32 @@ model PackingList {
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
-  household Household          @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  household Household           @relation(fields: [householdId], references: [id], onDelete: Cascade)
   items     PackingItem[]
   groups    PackingListGroup[]
+  bundles   PackingListBundle[]
 
   @@index([householdId, kind])
+}
+
+/// A bundle added to a list, and who its copy is for (null: shared). Kept
+/// apart from the items, so a template keeps following its bundle even while
+/// the bundle has no things (ADR 0017). Not unique in the database: deleting a
+/// person can make two shared rows, which the services treat as one.
+model PackingListBundle {
+  id        String   @id @default(uuid()) @db.Uuid
+  listId    String   @db.Uuid
+  bundleId  String   @db.Uuid
+  personId  String?  @db.Uuid
+  createdAt DateTime @default(now())
+
+  list   PackingList    @relation(fields: [listId], references: [id], onDelete: Cascade)
+  bundle PackingBundle  @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  person PackingPerson? @relation(fields: [personId], references: [id], onDelete: SetNull)
+
+  @@index([listId])
+  @@index([bundleId])
+  @@index([personId])
 }
 
 /// A sub-list on one packing list ("Til bilen", "Kjøpe før avreise"): things
@@ -682,9 +703,10 @@ model PackingPerson {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  household Household       @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  items     PackingItem[]
-  bundles   PackingBundle[]
+  household   Household           @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  items       PackingItem[]
+  bundles     PackingBundle[]
+  listBundles PackingListBundle[]
 
   @@unique([householdId, name])
 }
@@ -712,6 +734,7 @@ model PackingBundle {
   person    PackingPerson?      @relation(fields: [personId], references: [id], onDelete: SetNull)
   items     PackingBundleItem[]
   listItems PackingItem[]
+  lists     PackingListBundle[]
 
   @@unique([householdId, name])
 }

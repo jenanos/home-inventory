@@ -253,17 +253,13 @@ export async function getPackingBundle(
 export async function listBundleTemplateUsage(
   context: ApplicationContext
 ): Promise<Map<string, Array<{ id: string; name: string }>>> {
-  const rows = await db.packingItem.findMany({
-    where: {
-      bundleId: { not: null },
-      list: { householdId: context.householdId, kind: "TEMPLATE" },
-    },
+  const rows = await db.packingListBundle.findMany({
+    where: { list: { householdId: context.householdId, kind: "TEMPLATE" } },
     distinct: ["bundleId", "listId"],
     select: { bundleId: true, list: { select: { id: true, name: true } } },
   })
   const usage = new Map<string, Array<{ id: string; name: string }>>()
   for (const row of rows) {
-    if (!row.bundleId) continue
     const lists = usage.get(row.bundleId) ?? []
     lists.push(row.list)
     usage.set(row.bundleId, lists)
