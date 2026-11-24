@@ -6,16 +6,20 @@ import {
   addBundlesToList,
   addPackingItems,
   createPackingBundle,
+  createPackingGroup,
   createPackingList,
   createPackingPerson,
   deletePackingBundle,
+  deletePackingGroup,
   deletePackingPerson,
   deletePackingItems,
   deletePackingList,
   duplicatePackingList,
   removeBundleFromList,
   setPackingItemsPacked,
+  syncBundleToTemplates,
   updatePackingBundle,
+  updatePackingGroup,
   updatePackingItem,
   updatePackingList,
   updatePackingPerson,
@@ -31,8 +35,10 @@ import {
   packingBundleSchema,
   packingItemSchema,
   packingListCardSchema,
+  packingListKindSchema,
   packingPersonSchema,
   serializePackingBundle,
+  serializePackingItem,
   serializePackingList,
 } from "./packing"
 import {
@@ -46,9 +52,11 @@ import {
   parseExpectedUpdatedAt,
   shortTextInputSchema,
   timestamp,
+  timestampSchema,
 } from "./shared"
 
 const tripInputSchema = {
+  kind: packingListKindSchema.optional(),
   season: z.enum(PACKING_SEASONS).nullable().optional(),
   duration: z
     .enum(PACKING_DURATIONS)
@@ -86,6 +94,44 @@ const listItemInputSchema = itemInputSchema.extend({
   personId: personIdInputSchema,
 })
 
+const groupIdInputSchema = idSchema
+  .nullable()
+  .optional()
+  .describe(
+    "A sub-list on the same list (get-packing-list's groups). Omit or null for none."
+  )
+
+const quantityInputSchema = z.number().int().min(1).max(MAX_PACKING_QUANTITY)
+
+/** A thing in a bundle, with numbers per trip length. */
+const bundleItemInputSchema = itemInputSchema.extend({
+  quantity: quantityInputSchema
+    .optional()
+    .describe(
+      "How many to pack when the trip's length is not set or has no own number. Defaults to 1."
+    ),
+  quantityByDuration: z
+    .object({
+      DAY: quantityInputSchema.nullable().optional(),
+      WEEKEND: quantityInputSchema.nullable().optional(),
+      WEEK: quantityInputSchema.nullable().optional(),
+      LONG: quantityInputSchema.nullable().optional(),
+    })
+    .optional()
+    .describe(
+      "How many for each trip length, e.g. underwear { WEEKEND: 3, WEEK: 7 }. Lengths left out use quantity. Used when the bundle is added to a list."
+    ),
+})
+
+/** On update the id keeps a renamed thing linked to the lists it is on. */
+const bundleItemUpdateInputSchema = bundleItemInputSchema.extend({
+  id: idSchema
+    .optional()
+    .describe(
+      "The item's id from get-packing-bundle. Send it for every existing item, so renames keep their link to templates; items without an id match by name."
+    ),
+})
+
 const bundleFieldsInputSchema = {
   description: shortTextInputSchema,
   seasons: z
@@ -107,6 +153,12 @@ const bundleFieldsInputSchema = {
     .optional()
     .describe(
       "Add the bundle automatically to every new packing list that fits its seasons, durations and abroad rule."
+    ),
+  personId: idSchema
+    .nullable()
+    .optional()
+    .describe(
+      "Whose bundle it is, from list-packing-persons, e.g. Astrid for 'Astrids toalettsaker'. Its things then go to that person whenever the bundle is added without a personId. null: shared."
     ),
 }
 
@@ -155,7 +207,7 @@ export const createPackingListTool = defineWriteTool({
   scope: "packing:write",
   title: "Create a packing list",
   description:
-    "Creates a packing list for a trip. Set season, duration and abroad so the right bundles are added: every bundle marked autoAdd that fits the trip comes along automatically as shared things (turn off with applyAutoBundles false), plus the bundles you name in bundleIds, the bundles for a person in bundles, and any loose items. The same thing for the same person is packed once; when packing for a family, give each person their own copy of a bundle. Check list-packing-bundles first and reuse bundles instead of listing their items again. Returns the list with its items.",
+    "Creates a packing list: a trip (kind TRIP, the default) or a reusable template (kind TEMPLATE). To start a trip from an existing template, use duplicate-packing-list instead. Set season, duration and abroad so the right bundles are added with the right numbers: every bundle marked autoAdd that fits the trip comes along automatically (turn off with applyAutoBundles false), plus the bundles you name in bundleIds, the bundles for a person in bundles, loose items and sub-lists in groups. A bundle with its own person goes to that person. The same thing for the same person is packed once; when packing for a family, give each person their own copy of a bundle. Check list-packing-bundles first and reuse bundles instead of listing their items again. Returns the list with its items.",
   inputSchema: {
     name: nameInputSchema.describe("E.g. 'Hytta påske' or 'Sydentur juli'."),
     ...tripInputSchema,
@@ -163,9 +215,21 @@ export const createPackingListTool = defineWriteTool({
       .array(idSchema)
       .max(MAX_BATCH_SIZE)
       .optional()
-      .describe("Bundles to add as shared things, from list-packing-bundles."),
+      .describe(
+        "Bundles to add, from list-packing-bundles: for the bundle's own person if it has one, otherwise as shared things."
+      ),
     bundles: z
-      .array(z.object({ bundleId: idSchema, personId: personIdInputSchema }))
+      .array(
+        z.object({
+          bundleId: idSchema,
+          personId: idSchema
+            .nullable()
+            .optional()
+            .describe(
+              "Who the copy is for; null for shared; omit for the bundle's own person."
+            ),
+        })
+      )
       .max(MAX_BATCH_SIZE)
       .optional()
       .describe(
@@ -180,6 +244,20 @@ export const createPackingListTool = defineWriteTool({
       .max(MAX_BATCH_SIZE)
       .optional()
       .describe("Loose things that are not in any bundle."),
+    groups: z
+      .array(
+        z.object({
+          name: nameInputSchema.describe(
+            "E.g. 'Til bilen' or 'Kjøpe før avreise'."
+          ),
+          items: z.array(listItemInputSchema).max(MAX_BATCH_SIZE).optional(),
+        })
+      )
+      .max(20)
+      .optional()
+      .describe(
+        "Sub-lists for things that belong together on this trip only. For a group that recurs across trips, create a bundle instead."
+      ),
   },
   outputSchema: changeOutputSchema,
   annotations: CREATE_ANNOTATIONS,
@@ -200,7 +278,7 @@ export const updatePackingListTool = defineWriteTool({
   scope: "packing:write",
   title: "Update a packing list",
   description:
-    "Changes the name, trip details or notes of a packing list and leaves omitted fields as they are; null clears a field. Changing season or duration does not add or remove bundles; use add-packing-bundle-to-list for that.",
+    "Changes the name, kind, trip details or notes of a packing list and leaves omitted fields as they are; null clears a field. Set kind ARCHIVED when a trip is over, and TRIP to reopen it. A new duration updates the numbers of bundle things that still have the number the bundle gave (not those changed by hand or already packed). Changing season or duration does not add or remove bundles; use add-packing-bundle-to-list for that.",
   inputSchema: {
     listId: idSchema.describe("Id from list-packing-lists."),
     name: nameInputSchema.optional(),
@@ -230,22 +308,34 @@ export const duplicatePackingListTool = defineWriteTool({
   scope: "packing:write",
   title: "Copy a packing list",
   description:
-    "Copies a packing list with all its items, nothing packed, e.g. last year's cabin trip as the start of this year's. Returns the new list.",
+    "Copies a packing list with its sub-lists and items, nothing packed. Use it to start a trip from a template (kind TRIP, with the trip's name, departureOn, season, duration and abroad), to save a trip as a template (kind TEMPLATE), or to reuse last year's trip. A different duration gives the bundle things the number for the new length. Returns the new list.",
   inputSchema: {
     listId: idSchema.describe("The list to copy, from list-packing-lists."),
     name: nameInputSchema
       .optional()
-      .describe("Name of the copy. Defaults to '<name> (kopi)'."),
+      .describe(
+        "Name of the copy. Defaults to the source's name, with ' (kopi)' when the kind stays the same."
+      ),
+    kind: packingListKindSchema
+      .optional()
+      .describe(
+        "Kind of the copy. Defaults to the source's kind, or TRIP when copying an ARCHIVED trip."
+      ),
     departureOn: calendarDateInputSchema.nullable().optional(),
+    season: z.enum(PACKING_SEASONS).nullable().optional(),
+    duration: z
+      .enum(PACKING_DURATIONS)
+      .nullable()
+      .optional()
+      .describe("The new trip's length. Omit to copy the source's."),
+    abroad: z.boolean().optional(),
   },
   outputSchema: { list: packingListCardSchema },
   annotations: CREATE_ANNOTATIONS,
   resourceType: "packing_list",
   handler: async (args, session) => {
-    const list = await duplicatePackingList(session.context, args.listId, {
-      name: args.name,
-      departureOn: args.departureOn,
-    })
+    const { listId, ...options } = args
+    const list = await duplicatePackingList(session.context, listId, options)
 
     return {
       structuredContent: { list: serializePackingList(list) },
@@ -289,7 +379,10 @@ export const addPackingItemsTool = defineWriteTool({
   description: `Adds 1–${MAX_BATCH_SIZE} loose things to a packing list in one all-or-nothing call. A name the same person (or nobody) already has on the list, case-insensitive, is skipped and reported; set onDuplicate to "create" to add them anyway. For a group of things that belong together and recur across trips, create a bundle with create-packing-bundle instead.`,
   inputSchema: {
     listId: idSchema.describe("Id from list-packing-lists."),
-    items: z.array(listItemInputSchema).min(1).max(MAX_BATCH_SIZE),
+    items: z
+      .array(listItemInputSchema.extend({ groupId: groupIdInputSchema }))
+      .min(1)
+      .max(MAX_BATCH_SIZE),
     onDuplicate: z.enum(["skip", "create"]).optional(),
   },
   outputSchema: changeOutputSchema,
@@ -316,7 +409,7 @@ export const updatePackingItemTool = defineWriteTool({
   scope: "packing:write",
   title: "Update a thing on a packing list",
   description:
-    "Changes one item's name, quantity, notes, packed state or person and leaves omitted fields as they are. To tick off several at once use set-packing-items-packed.",
+    "Changes one item's name, quantity, notes, packed state, person or sub-list and leaves omitted fields as they are. To tick off several at once use set-packing-items-packed.",
   inputSchema: {
     itemId: idSchema.describe("Id from get-packing-list."),
     name: nameInputSchema.optional(),
@@ -328,6 +421,12 @@ export const updatePackingItemTool = defineWriteTool({
       .optional()
       .describe(
         "Assign to a person, or null to make it shared. Omit to leave as is."
+      ),
+    groupId: idSchema
+      .nullable()
+      .optional()
+      .describe(
+        "Move into a sub-list on the same list, or null to take it out. Omit to leave as is."
       ),
     expectedUpdatedAt: expectedUpdatedAtSchema,
   },
@@ -342,20 +441,7 @@ export const updatePackingItemTool = defineWriteTool({
     })
 
     return {
-      structuredContent: {
-        item: {
-          id: item.id,
-          name: item.name,
-          quantity: item.quantity,
-          packed: item.packed,
-          notes: item.notes,
-          bundleId: item.bundleId,
-          bundleName: item.bundle?.name ?? null,
-          personId: item.personId,
-          personName: item.person?.name ?? null,
-          updatedAt: timestamp(item.updatedAt),
-        },
-      },
+      structuredContent: { item: serializePackingItem(item) },
       summary: `Oppdaterte ${item.name}${item.packed ? " (pakket)" : ""}.`,
       resourceId: item.id,
     }
@@ -429,7 +515,7 @@ export const addPackingBundleToListTool = defineWriteTool({
   scope: "packing:write",
   title: "Add bundles to a packing list",
   description:
-    "Copies the items of one or more bundles into a packing list, e.g. 'Treningstøy' for a trip with a gym. Things already on the list are skipped. Later changes to the bundle do not change the list.",
+    "Copies the items of one or more bundles into a packing list, e.g. 'Treningstøy' for a trip with a gym, with the numbers for the list's duration. Things already on the list are skipped. Later changes to the bundle do not change the list; for templates use sync-packing-bundle-to-templates.",
   inputSchema: {
     listId: idSchema.describe("Id from list-packing-lists."),
     bundleIds: z
@@ -441,7 +527,7 @@ export const addPackingBundleToListTool = defineWriteTool({
       .nullable()
       .optional()
       .describe(
-        "Copy the bundles' things for this person, e.g. 'Vintertøy barn' for one child. Call once per person. Omit for shared things."
+        "Copy the bundles' things for this person, e.g. 'Vintertøy barn' for one child; call once per person. null for shared things. Omit to give each bundle's things to its own person (shared when it has none)."
       ),
   },
   outputSchema: changeOutputSchema,
@@ -512,12 +598,12 @@ export const createPackingBundleTool = defineWriteTool({
   scope: "packing:write",
   title: "Create a packing bundle",
   description:
-    "Creates a reusable bundle of things that are packed together, such as 'Treningstøy' (shoes, shorts, t-shirt, water bottle), 'Vintertøy barn' or 'Utenlandsreise' (passport, travel insurance card, adapter; abroadOnly and autoAdd). Names are unique in the household. Returns the bundle.",
+    "Creates a reusable bundle of things that are packed together, such as 'Treningstøy' (shoes, shorts, t-shirt, water bottle), 'Vintertøy barn' or 'Utenlandsreise' (passport, travel insurance card, adapter; abroadOnly and autoAdd). Set personId for one person's own bundle ('Astrids toalettsaker'), and quantityByDuration for things whose number depends on the trip's length. Names are unique in the household. Returns the bundle.",
   inputSchema: {
     name: nameInputSchema,
     ...bundleFieldsInputSchema,
     items: z
-      .array(itemInputSchema)
+      .array(bundleItemInputSchema)
       .max(MAX_BATCH_SIZE)
       .optional()
       .describe("The things in the bundle, in packing order."),
@@ -541,13 +627,13 @@ export const updatePackingBundleTool = defineWriteTool({
   scope: "packing:write",
   title: "Update a packing bundle",
   description:
-    "Changes a bundle's name, conditions or items and leaves omitted fields as they are. items is the complete list after the call: read it with get-packing-bundle and send it back with your changes. Lists the bundle was already added to are not changed.",
+    "Changes a bundle's name, conditions, person or items and leaves omitted fields as they are. items is the complete list after the call: read it with get-packing-bundle and send it back with your changes, keeping each item's id. Lists the bundle was already added to are not changed; afterwards, offer to update the templates with sync-packing-bundle-to-templates.",
   inputSchema: {
     bundleId: idSchema.describe("Id from list-packing-bundles."),
     name: nameInputSchema.optional(),
     ...bundleFieldsInputSchema,
     items: z
-      .array(itemInputSchema)
+      .array(bundleItemUpdateInputSchema)
       .max(MAX_BATCH_SIZE)
       .optional()
       .describe(
@@ -593,6 +679,169 @@ export const deletePackingBundleTool = defineWriteTool({
     return {
       structuredContent: { deleted },
       summary: `Slettet pakken ${deleted.name}.`,
+      resourceId: deleted.id,
+    }
+  },
+})
+
+export const syncPackingBundleToTemplatesTool = defineWriteTool({
+  name: "sync-packing-bundle-to-templates",
+  scope: "packing:write",
+  title: "Update templates from a bundle",
+  description:
+    "Brings the templates (kind TEMPLATE) that use a bundle up to date with it: new things are added, changed names, notes and numbers are copied (for the template's duration) and things taken out of the bundle are removed, for each person's copy. Trips and finished trips are never changed. Use dryRun first to show the user what would change.",
+  inputSchema: {
+    bundleId: idSchema.describe("Id from list-packing-bundles."),
+    listIds: z
+      .array(idSchema)
+      .min(1)
+      .max(MAX_BATCH_SIZE)
+      .optional()
+      .describe("Only these templates. Omit for every template using it."),
+    dryRun: z
+      .boolean()
+      .optional()
+      .describe("Preview only: compute the changes, then discard them."),
+  },
+  outputSchema: {
+    bundle: z.object({ id: z.string(), name: z.string() }),
+    lists: z.array(
+      z.object({
+        listId: z.string(),
+        name: z.string(),
+        added: z.number().int(),
+        updated: z.number().int(),
+        removed: z.number().int(),
+      })
+    ),
+    dryRun: z.boolean(),
+  },
+  annotations: UPDATE_ANNOTATIONS,
+  resourceType: "packing_bundle",
+  handler: async (args, session) => {
+    const result = await syncBundleToTemplates(session.context, args.bundleId, {
+      listIds: args.listIds,
+      dryRun: args.dryRun,
+    })
+    const changes = result.lists
+      .map(
+        (list) =>
+          `${list.name} (+${list.added}, ~${list.updated}, −${list.removed})`
+      )
+      .join(", ")
+    const text =
+      result.lists.length === 0
+        ? "Ingen maler bruker pakken."
+        : `${result.lists.length} mal(er): ${changes}.`
+
+    return {
+      structuredContent: result,
+      summary: `${result.dryRun ? "Forhåndsvisning, ikke lagret: " : ""}${result.bundle.name}: ${text}`,
+      resourceId: result.bundle.id,
+      dryRun: result.dryRun,
+    }
+  },
+})
+
+// ─── Sub-lists ──────────────────────────────────────────────────
+
+const groupSchema = z.object({
+  id: z.string(),
+  listId: z.string(),
+  name: z.string(),
+  updatedAt: timestampSchema,
+})
+
+export const createPackingGroupTool = defineWriteTool({
+  name: "create-packing-group",
+  scope: "packing:write",
+  title: "Add a sub-list to a packing list",
+  description:
+    "Adds a sub-list to a packing list, e.g. 'Til bilen' or 'Kjøpe før avreise', with the things in it: things for this trip that belong together without being a reusable bundle. Names are unique on the list. Add more things to it with add-packing-items and groupId.",
+  inputSchema: {
+    listId: idSchema.describe("Id from list-packing-lists."),
+    name: nameInputSchema,
+    items: z.array(listItemInputSchema).max(MAX_BATCH_SIZE).optional(),
+  },
+  outputSchema: { ...changeOutputSchema, groupId: z.string() },
+  annotations: CREATE_ANNOTATIONS,
+  resourceType: "packing_list",
+  handler: async (args, session) => {
+    const result = await createPackingGroup(session.context, args.listId, {
+      name: args.name,
+      items: args.items,
+    })
+
+    return {
+      structuredContent: { ...changeResult(result), groupId: result.groupId },
+      summary: changeSummary(`${result.list.name} · ${args.name}`, result),
+      resourceId: result.list.id,
+    }
+  },
+})
+
+export const updatePackingGroupTool = defineWriteTool({
+  name: "update-packing-group",
+  scope: "packing:write",
+  title: "Rename a sub-list",
+  description: "Renames a sub-list on a packing list.",
+  inputSchema: {
+    groupId: idSchema.describe("Id from get-packing-list's groups."),
+    name: nameInputSchema,
+    expectedUpdatedAt: expectedUpdatedAtSchema,
+  },
+  outputSchema: { group: groupSchema },
+  annotations: UPDATE_ANNOTATIONS,
+  resourceType: "packing_group",
+  handler: async (args, session) => {
+    const group = await updatePackingGroup(session.context, args.groupId, {
+      name: args.name,
+      expectedUpdatedAt: parseExpectedUpdatedAt(args.expectedUpdatedAt),
+    })
+
+    return {
+      structuredContent: {
+        group: {
+          id: group.id,
+          listId: group.listId,
+          name: group.name,
+          updatedAt: timestamp(group.updatedAt),
+        },
+      },
+      summary: `Endret navnet til ${group.name}.`,
+      resourceId: group.id,
+    }
+  },
+})
+
+export const deletePackingGroupTool = defineWriteTool({
+  name: "delete-packing-group",
+  scope: "packing:write",
+  title: "Delete a sub-list",
+  description:
+    "Removes a sub-list and the things in it. With keepItems true only the sub-list goes and its things stay on the list. Confirm with the user first.",
+  inputSchema: {
+    groupId: idSchema.describe("Id from get-packing-list's groups."),
+    keepItems: z.boolean().optional(),
+  },
+  outputSchema: {
+    deleted: z.object({
+      id: z.string(),
+      name: z.string(),
+      listId: z.string(),
+      deletedItemCount: z.number().int(),
+    }),
+  },
+  annotations: DELETE_ANNOTATIONS,
+  resourceType: "packing_group",
+  handler: async (args, session) => {
+    const deleted = await deletePackingGroup(session.context, args.groupId, {
+      keepItems: args.keepItems,
+    })
+
+    return {
+      structuredContent: { deleted },
+      summary: `Slettet underlisten ${deleted.name}${deleted.deletedItemCount > 0 ? ` med ${deleted.deletedItemCount} ting` : ""}.`,
       resourceId: deleted.id,
     }
   },
@@ -699,6 +948,10 @@ export const packingWriteTools = [
   createPackingBundleTool,
   updatePackingBundleTool,
   deletePackingBundleTool,
+  syncPackingBundleToTemplatesTool,
+  createPackingGroupTool,
+  updatePackingGroupTool,
+  deletePackingGroupTool,
   createPackingPersonTool,
   updatePackingPersonTool,
   deletePackingPersonTool,

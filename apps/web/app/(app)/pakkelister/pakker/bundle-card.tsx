@@ -16,16 +16,55 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu"
-import { Loader2, MoreVertical, Pencil, Sparkles, Trash2 } from "lucide-react"
+import {
+  Copy,
+  Loader2,
+  MoreVertical,
+  Pencil,
+  RefreshCw,
+  Sparkles,
+  Trash2,
+  User,
+} from "lucide-react"
 import { toast } from "sonner"
-import { deletePackingBundle } from "@/lib/actions/packing"
-import { describeBundleConditions } from "@/lib/packing-labels"
-import { BundleFormDialog, type EditableBundle } from "./bundle-form-dialog"
+import {
+  deletePackingBundle,
+  syncBundleToTemplates,
+} from "@/lib/actions/packing"
+import {
+  describeBundleConditions,
+  describeQuantityByDuration,
+} from "@/lib/packing-labels"
+import type { PackingPersonOption } from "../persons-dialog"
+import {
+  BundleFormDialog,
+  describeSync,
+  type EditableBundle,
+} from "./bundle-form-dialog"
 
-export function BundleCard({ bundle }: { bundle: EditableBundle }) {
+export function BundleCard({
+  bundle,
+  persons,
+}: {
+  bundle: EditableBundle
+  persons: PackingPersonOption[]
+}) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [confirming, setConfirming] = useState(false)
+  const [editing, setEditing] = useState(false)
+
+  function handleSync() {
+    startTransition(async () => {
+      const result = await syncBundleToTemplates({ bundleId: bundle.id })
+      if (!result.ok) {
+        toast.error(result.error)
+        return
+      }
+      toast.success(describeSync(result.data.lists))
+      router.refresh()
+    })
+  }
 
   function handleDelete() {
     if (!confirming) {
@@ -71,15 +110,16 @@ export function BundleCard({ bundle }: { bundle: EditableBundle }) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="max-w-72">
-              <BundleFormDialog
-                bundle={bundle}
-                trigger={
-                  <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-                    <Pencil className="mr-2 h-4 w-4" />
-                    Rediger
-                  </DropdownMenuItem>
-                }
-              />
+              <DropdownMenuItem onSelect={() => setEditing(true)}>
+                <Pencil className="mr-2 h-4 w-4" />
+                Rediger
+              </DropdownMenuItem>
+              {bundle.templates.length > 0 && (
+                <DropdownMenuItem onSelect={handleSync} disabled={isPending}>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Oppdater maler ({bundle.templates.length})
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem
                 variant="destructive"
                 onSelect={(e) => {
@@ -99,15 +139,31 @@ export function BundleCard({ bundle }: { bundle: EditableBundle }) {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          {editing && (
+            <BundleFormDialog
+              bundle={bundle}
+              persons={persons}
+              defaultOpen
+              onClose={() => setEditing(false)}
+            />
+          )}
         </div>
       </CardHeader>
       <CardContent className="flex flex-1 flex-col gap-3">
-        {bundle.autoAdd && (
-          <div>
-            <Badge variant="secondary" className="text-xs">
-              <Sparkles className="mr-1 h-3 w-3" />
-              Legges til automatisk
-            </Badge>
+        {(bundle.autoAdd || bundle.personName) && (
+          <div className="flex flex-wrap gap-1.5">
+            {bundle.personName && (
+              <Badge variant="secondary" className="text-xs">
+                <User className="mr-1 h-3 w-3" />
+                {bundle.personName}
+              </Badge>
+            )}
+            {bundle.autoAdd && (
+              <Badge variant="secondary" className="text-xs">
+                <Sparkles className="mr-1 h-3 w-3" />
+                Legges til automatisk
+              </Badge>
+            )}
           </div>
         )}
         {bundle.description && (
@@ -119,18 +175,38 @@ export function BundleCard({ bundle }: { bundle: EditableBundle }) {
           <p className="text-sm text-muted-foreground">Ingen ting ennå</p>
         ) : (
           <ul className="flex flex-col gap-0.5 text-sm">
-            {bundle.items.map((item) => (
-              <li key={item.id} className="break-words">
-                {item.name}
-                {item.quantity > 1 && (
-                  <span className="text-muted-foreground tabular-nums">
-                    {" "}
-                    × {item.quantity}
-                  </span>
-                )}
-              </li>
-            ))}
+            {bundle.items.map((item) => {
+              const byDuration = describeQuantityByDuration(
+                item.quantityByDuration
+              )
+              return (
+                <li key={item.id} className="break-words">
+                  {item.name}
+                  {item.quantity > 1 && (
+                    <span className="text-muted-foreground tabular-nums">
+                      {" "}
+                      × {item.quantity}
+                    </span>
+                  )}
+                  {byDuration && (
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      {" "}
+                      ({byDuration})
+                    </span>
+                  )}
+                </li>
+              )
+            })}
           </ul>
+        )}
+        {bundle.templates.length > 0 && (
+          <p className="mt-auto flex items-start gap-1 pt-1 text-xs text-muted-foreground">
+            <Copy className="mt-0.5 h-3 w-3 shrink-0" />
+            <span>
+              Brukes i{" "}
+              {bundle.templates.map((template) => template.name).join(", ")}
+            </span>
+          </p>
         )}
       </CardContent>
     </Card>

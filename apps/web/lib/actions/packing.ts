@@ -7,24 +7,30 @@ import {
   addBundlesToList as addBundlesToListService,
   addPackingItems as addPackingItemsService,
   createPackingBundle as createPackingBundleService,
+  createPackingGroup as createPackingGroupService,
   createPackingList as createPackingListService,
   createPackingPerson as createPackingPersonService,
   deletePackingBundle as deletePackingBundleService,
+  deletePackingGroup as deletePackingGroupService,
   deletePackingPerson as deletePackingPersonService,
   deletePackingItems as deletePackingItemsService,
   deletePackingList as deletePackingListService,
   duplicatePackingList as duplicatePackingListService,
   removeBundleFromList as removeBundleFromListService,
   setPackingItemsPacked as setPackingItemsPackedService,
+  syncBundleToTemplates as syncBundleToTemplatesService,
   updatePackingBundle as updatePackingBundleService,
+  updatePackingGroup as updatePackingGroupService,
   updatePackingItem as updatePackingItemService,
   updatePackingList as updatePackingListService,
   updatePackingPerson as updatePackingPersonService,
   type CreatePackingBundleInput,
   type CreatePackingListInput,
+  type DuplicatePackingListInput,
   type PackingChangeResult,
   type PackingListFields,
   type PackingListItemFields,
+  type TemplateSyncChange,
   type UpdatePackingBundleInput,
 } from "@/lib/application/packing/write"
 import { requireHousehold } from "@/lib/session"
@@ -93,15 +99,17 @@ export async function deletePackingList(
   return result
 }
 
-export async function duplicatePackingList(input: {
-  listId: string
-  name?: string
-}): Promise<ActionResult<{ id: string }>> {
+/**
+ * Copies a list: "Kopier", "Start tur fra mal" (kind TRIP with the trip's
+ * details) and "Lagre som mal" (kind TEMPLATE).
+ */
+export async function duplicatePackingList(
+  input: { listId: string } & DuplicatePackingListInput
+): Promise<ActionResult<{ id: string }>> {
   const { context } = await requireHousehold()
+  const { listId, ...options } = input
   const result = await toActionResult(async () => {
-    const copy = await duplicatePackingListService(context, input.listId, {
-      name: input.name,
-    })
+    const copy = await duplicatePackingListService(context, listId, options)
     return { id: copy.id }
   })
   revalidatePacking()
@@ -249,6 +257,69 @@ export async function deletePackingBundle(
   const { context } = await requireHousehold()
   const result = await toActionResult(async () => {
     await deletePackingBundleService(context, bundleId)
+    return null
+  })
+  revalidatePacking()
+  return result
+}
+
+/** "Oppdater maler": brings the templates using the bundle up to date. */
+export async function syncBundleToTemplates(input: {
+  bundleId: string
+  listIds?: string[]
+}): Promise<ActionResult<{ lists: TemplateSyncChange[] }>> {
+  const { context } = await requireHousehold()
+  const result = await toActionResult(async () => {
+    const { lists } = await syncBundleToTemplatesService(
+      context,
+      input.bundleId,
+      { listIds: input.listIds }
+    )
+    return { lists }
+  })
+  revalidatePacking()
+  return result
+}
+
+// ─── Sub-lists ──────────────────────────────────────────────────
+
+export async function createPackingGroup(input: {
+  listId: string
+  name: string
+}): Promise<ActionResult<{ id: string }>> {
+  const { context } = await requireHousehold()
+  const result = await toActionResult(async () => {
+    const { groupId } = await createPackingGroupService(context, input.listId, {
+      name: input.name,
+    })
+    return { id: groupId }
+  })
+  revalidatePacking()
+  return result
+}
+
+export async function renamePackingGroup(input: {
+  id: string
+  name: string
+}): Promise<ActionResult<null>> {
+  const { context } = await requireHousehold()
+  const result = await toActionResult(async () => {
+    await updatePackingGroupService(context, input.id, { name: input.name })
+    return null
+  })
+  revalidatePacking()
+  return result
+}
+
+export async function deletePackingGroup(input: {
+  id: string
+  keepItems?: boolean
+}): Promise<ActionResult<null>> {
+  const { context } = await requireHousehold()
+  const result = await toActionResult(async () => {
+    await deletePackingGroupService(context, input.id, {
+      keepItems: input.keepItems,
+    })
     return null
   })
   revalidatePacking()
