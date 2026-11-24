@@ -107,6 +107,8 @@ export const PACKING_SEASONS = ["SPRING", "SUMMER", "AUTUMN", "WINTER"] as const
 
 export const PACKING_DURATIONS = ["DAY", "WEEKEND", "WEEK", "LONG"] as const
 
+export const PACKING_LIST_KINDS = ["TEMPLATE", "TRIP", "ARCHIVED"] as const
+
 // ─── Field schemas ──────────────────────────────────────────────
 
 export const idSchema = z.string().uuid()

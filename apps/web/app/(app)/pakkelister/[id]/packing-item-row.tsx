@@ -33,6 +33,7 @@ import { deletePackingItems, updatePackingItem } from "@/lib/actions/packing"
 import type { PackingPersonOption } from "../persons-dialog"
 
 const SHARED = "__shared__"
+const NO_GROUP = "__none__"
 
 export type PackingItemView = {
   id: string
@@ -42,16 +43,25 @@ export type PackingItemView = {
   packed: boolean
   personId: string | null
   personName: string | null
+  groupId: string | null
 }
+
+export type PackingGroupOption = { id: string; name: string }
 
 export function PackingItemRow({
   item,
   persons,
+  groups,
+  checkable,
   showPerson,
   onToggle,
 }: {
   item: PackingItemView
   persons: PackingPersonOption[]
+  /** The list's sub-lists, to move the item into. */
+  groups: PackingGroupOption[]
+  /** Off on a template: it is a list of things, never packed. */
+  checkable: boolean
   /** Off when the section or the filter already says who it is for. */
   showPerson: boolean
   onToggle: (packed: boolean) => void
@@ -69,23 +79,35 @@ export function PackingItemRow({
     })
   }
 
+  const Wrapper = checkable ? "label" : "div"
+
   return (
     <li className="flex items-center gap-1">
-      <label
-        htmlFor={checkboxId}
-        className="flex min-h-11 min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-md px-1 py-1.5 hover:bg-muted/50"
+      <Wrapper
+        {...(checkable ? { htmlFor: checkboxId } : {})}
+        className={cn(
+          "flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-md px-1 py-1.5",
+          checkable && "cursor-pointer hover:bg-muted/50"
+        )}
       >
-        <Checkbox
-          id={checkboxId}
-          className="size-5"
-          checked={item.packed}
-          onCheckedChange={(checked) => onToggle(checked === true)}
-        />
+        {checkable ? (
+          <Checkbox
+            id={checkboxId}
+            className="size-5"
+            checked={item.packed}
+            onCheckedChange={(checked) => onToggle(checked === true)}
+          />
+        ) : (
+          <span
+            aria-hidden
+            className="mx-1.5 size-1.5 shrink-0 rounded-full bg-muted-foreground/60"
+          />
+        )}
         <span className="flex min-w-0 flex-col">
           <span
             className={cn(
               "text-sm break-words",
-              item.packed && "text-muted-foreground line-through"
+              checkable && item.packed && "text-muted-foreground line-through"
             )}
           >
             {item.name}
@@ -107,7 +129,7 @@ export function PackingItemRow({
             </span>
           )}
         </span>
-      </label>
+      </Wrapper>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
@@ -139,6 +161,7 @@ export function PackingItemRow({
         <EditItemDialog
           item={item}
           persons={persons}
+          groups={groups}
           onClose={() => setEditing(false)}
         />
       )}
@@ -149,10 +172,12 @@ export function PackingItemRow({
 function EditItemDialog({
   item,
   persons,
+  groups,
   onClose,
 }: {
   item: PackingItemView
   persons: PackingPersonOption[]
+  groups: PackingGroupOption[]
   onClose: () => void
 }) {
   const router = useRouter()
@@ -161,6 +186,7 @@ function EditItemDialog({
   const [quantity, setQuantity] = useState(String(item.quantity))
   const [notes, setNotes] = useState(item.notes ?? "")
   const [personId, setPersonId] = useState(item.personId ?? SHARED)
+  const [groupId, setGroupId] = useState(item.groupId ?? NO_GROUP)
   const [error, setError] = useState("")
 
   function handleSave() {
@@ -180,6 +206,7 @@ function EditItemDialog({
         quantity: count,
         notes: notes.trim() || null,
         personId: personId === SHARED ? null : personId,
+        groupId: groupId === NO_GROUP ? null : groupId,
       })
       if (!result.ok) {
         setError(result.error)
@@ -238,6 +265,24 @@ function EditItemDialog({
                   {persons.map((person) => (
                     <SelectItem key={person.id} value={person.id}>
                       {person.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          {groups.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <Label>Underliste</Label>
+              <Select value={groupId} onValueChange={setGroupId}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_GROUP}>Ingen</SelectItem>
+                  {groups.map((group) => (
+                    <SelectItem key={group.id} value={group.id}>
+                      {group.name}
                     </SelectItem>
                   ))}
                 </SelectContent>

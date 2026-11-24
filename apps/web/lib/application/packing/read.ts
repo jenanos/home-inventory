@@ -1,6 +1,7 @@
 import {
   db,
   type PackingDuration,
+  type PackingListKind,
   type PackingSeason,
   type Prisma,
 } from "@workspace/db"
@@ -13,17 +14,28 @@ export const packingItemOrder = [
   { id: "asc" as const },
 ]
 
-/** The bundle an item came from and who it is for, by name for display. */
+/**
+ * The bundle an item came from, who it is for and the sub-list it is in, by
+ * name for display.
+ */
 export const packingItemRelations = {
   bundle: { select: { id: true, name: true } },
   person: { select: { id: true, name: true } },
+  group: { select: { id: true, name: true } },
 } satisfies Prisma.PackingItemInclude
+
+export const packingGroupOrder = [
+  { sortOrder: "asc" as const },
+  { createdAt: "asc" as const },
+  { id: "asc" as const },
+]
 
 export const packingListDetailInclude = {
   items: {
     orderBy: packingItemOrder,
     include: packingItemRelations,
   },
+  groups: { orderBy: packingGroupOrder },
 } satisfies Prisma.PackingListInclude
 
 export type PackingListDetail = Prisma.PackingListGetPayload<{
@@ -32,6 +44,7 @@ export type PackingListDetail = Prisma.PackingListGetPayload<{
 
 export const packingBundleInclude = {
   items: { orderBy: packingItemOrder },
+  person: { select: { id: true, name: true } },
 } satisfies Prisma.PackingBundleInclude
 
 export type PackingBundleWithItems = Prisma.PackingBundleGetPayload<{
@@ -42,6 +55,7 @@ export type PackingBundleWithItems = Prisma.PackingBundleGetPayload<{
 const listSummarySelect = {
   id: true,
   name: true,
+  kind: true,
   season: true,
   duration: true,
   abroad: true,
@@ -66,6 +80,8 @@ export type PackingListSummary = Prisma.PackingListGetPayload<{
 }>
 
 export type PackingListFilter = {
+  /** Templates, trips or finished trips. Omit for every kind. */
+  kind?: PackingListKind
   /** Substring of the name or notes. */
   query?: string
   season?: PackingSeason
@@ -84,6 +100,7 @@ function listWhere(
     : undefined
   return {
     householdId: context.householdId,
+    ...(filter.kind ? { kind: filter.kind } : {}),
     ...(filter.season ? { season: filter.season } : {}),
     ...(filter.duration ? { duration: filter.duration } : {}),
     ...(filter.abroad !== undefined ? { abroad: filter.abroad } : {}),
@@ -227,6 +244,46 @@ export async function getPackingBundle(
     where: { id: bundleId, householdId: context.householdId },
     include: packingBundleInclude,
   })
+}
+
+/**
+ * The templates each bundle has things on, by bundle id: the lists that
+ * sync-packing-bundle-to-templates would update.
+ */
+export async function listBundleTemplateUsage(
+  context: ApplicationContext
+): Promise<Map<string, Array<{ id: string; name: string }>>> {
+  const rows = await db.packingListBundle.findMany({
+    where: { list: { householdId: context.householdId, kind: "TEMPLATE" } },
+    distinct: ["bundleId", "listId"],
+    select: { bundleId: true, list: { select: { id: true, name: true } } },
+  })
+  const usage = new Map<string, Array<{ id: string; name: string }>>()
+  for (const row of rows) {
+    const lists = usage.get(row.bundleId) ?? []
+    lists.push(row.list)
+    usage.set(row.bundleId, lists)
+  }
+  for (const lists of usage.values()) {
+    lists.sort((a, b) => a.name.localeCompare(b.name, "nb-NO"))
+  }
+  return usage
+}
+
+/** How many lists of each kind the household has, for the overview tabs. */
+export async function countPackingListsByKind(context: ApplicationContext) {
+  const rows = await db.packingList.groupBy({
+    by: ["kind"],
+    where: { householdId: context.householdId },
+    _count: { _all: true },
+  })
+  const counts: Record<PackingListKind, number> = {
+    TEMPLATE: 0,
+    TRIP: 0,
+    ARCHIVED: 0,
+  }
+  for (const row of rows) counts[row.kind] = row._count._all
+  return counts
 }
 
 // ─── People ─────────────────────────────────────────────────────

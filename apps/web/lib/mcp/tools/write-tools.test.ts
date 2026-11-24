@@ -126,6 +126,10 @@ describe("write tool contracts", () => {
         "create-packing-bundle",
         "update-packing-bundle",
         "delete-packing-bundle",
+        "sync-packing-bundle-to-templates",
+        "create-packing-group",
+        "update-packing-group",
+        "delete-packing-group",
         "create-packing-person",
         "update-packing-person",
         "delete-packing-person",
@@ -215,7 +219,8 @@ describe("write tool contracts", () => {
   // projects with their steps and vendors (ADR 0006), for budget rows
   // (ADR 0007), for plants (ADR 0008), for garden beds (ADR 0009), for
   // attachments (ADR 0011), for calendar events (ADR 0015) and for packing
-  // lists, their items, bundles and people (ADR 0016). A new delete tool is a decision, not a side effect of adding a
+  // lists, their items, bundles and people (ADR 0016) and their sub-lists
+  // (ADR 0017). A new delete tool is a decision, not a side effect of adding a
   // feature.
   it("allows deletion only where it was decided", () => {
     const deleting = registry
@@ -233,6 +238,7 @@ describe("write tool contracts", () => {
       "delete-event",
       "delete-garden-bed",
       "delete-packing-bundle",
+      "delete-packing-group",
       "delete-packing-items",
       "delete-packing-list",
       "delete-packing-person",

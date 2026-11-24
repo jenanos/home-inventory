@@ -590,10 +590,23 @@ enum PackingDuration {
   LONG
 }
 
+/// What a packing list is for (ADR 0017). Replaces name prefixes such as
+/// "Mal:" that the lists used before.
+enum PackingListKind {
+  /// A reusable starting point, e.g. "Hytta vinter". Never packed; a trip is
+  /// started from it with duplicate-packing-list.
+  TEMPLATE
+  /// A trip being planned or packed.
+  TRIP
+  /// A finished trip, kept for reference. Bundle updates never touch it.
+  ARCHIVED
+}
+
 model PackingList {
   id          String           @id @default(uuid()) @db.Uuid
   householdId String           @db.Uuid
   name        String
+  kind        PackingListKind  @default(TRIP)
   season      PackingSeason?
   duration    PackingDuration?
   abroad      Boolean          @default(false)
@@ -603,35 +616,82 @@ model PackingList {
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
-  household Household     @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  household Household           @relation(fields: [householdId], references: [id], onDelete: Cascade)
   items     PackingItem[]
+  groups    PackingListGroup[]
+  bundles   PackingListBundle[]
 
-  @@index([householdId])
+  @@index([householdId, kind])
 }
 
-model PackingItem {
+/// A bundle added to a list, and who its copy is for (null: shared). Kept
+/// apart from the items, so a template keeps following its bundle even while
+/// the bundle has no things (ADR 0017). Not unique in the database: deleting a
+/// person can make two shared rows, which the services treat as one.
+model PackingListBundle {
+  id        String   @id @default(uuid()) @db.Uuid
+  listId    String   @db.Uuid
+  bundleId  String   @db.Uuid
+  personId  String?  @db.Uuid
+  createdAt DateTime @default(now())
+
+  list   PackingList    @relation(fields: [listId], references: [id], onDelete: Cascade)
+  bundle PackingBundle  @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  person PackingPerson? @relation(fields: [personId], references: [id], onDelete: SetNull)
+
+  @@index([listId])
+  @@index([bundleId])
+  @@index([personId])
+}
+
+/// A sub-list on one packing list ("Til bilen", "Kjøpe før avreise"): things
+/// that belong together on this trip without being a reusable bundle.
+model PackingListGroup {
   id        String   @id @default(uuid()) @db.Uuid
   listId    String   @db.Uuid
   name      String
-  quantity  Int      @default(1)
-  packed    Boolean  @default(false)
-  notes     String?
   sortOrder Int      @default(0)
-  /// The bundle the item was copied from. Deleting the bundle keeps the item
-  /// and clears the link.
-  bundleId  String?  @db.Uuid
-  /// Who the item is for. Null means shared, or not decided.
-  personId  String?  @db.Uuid
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  list   PackingList    @relation(fields: [listId], references: [id], onDelete: Cascade)
-  bundle PackingBundle? @relation(fields: [bundleId], references: [id], onDelete: SetNull)
-  person PackingPerson? @relation(fields: [personId], references: [id], onDelete: SetNull)
+  list  PackingList   @relation(fields: [listId], references: [id], onDelete: Cascade)
+  items PackingItem[]
+
+  @@index([listId, sortOrder])
+}
+
+model PackingItem {
+  id           String   @id @default(uuid()) @db.Uuid
+  listId       String   @db.Uuid
+  name         String
+  quantity     Int      @default(1)
+  packed       Boolean  @default(false)
+  notes        String?
+  sortOrder    Int      @default(0)
+  /// The bundle the item was copied from. Deleting the bundle keeps the item
+  /// and clears the link.
+  bundleId     String?  @db.Uuid
+  /// The bundle item it was copied from, so a template can follow later
+  /// changes to the bundle. Cleared when the bundle item is removed.
+  bundleItemId String?  @db.Uuid
+  /// Who the item is for. Null means shared, or not decided.
+  personId     String?  @db.Uuid
+  /// The sub-list it is in, if any.
+  groupId      String?  @db.Uuid
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  list       PackingList        @relation(fields: [listId], references: [id], onDelete: Cascade)
+  bundle     PackingBundle?     @relation(fields: [bundleId], references: [id], onDelete: SetNull)
+  bundleItem PackingBundleItem? @relation(fields: [bundleItemId], references: [id], onDelete: SetNull)
+  person     PackingPerson?     @relation(fields: [personId], references: [id], onDelete: SetNull)
+  group      PackingListGroup?  @relation(fields: [groupId], references: [id], onDelete: SetNull)
 
   @@index([listId, sortOrder])
   @@index([bundleId])
+  @@index([bundleItemId])
   @@index([personId])
+  @@index([groupId])
 }
 
 /// Someone things are packed for: a member of the family, who need not use
@@ -643,8 +703,10 @@ model PackingPerson {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  household Household     @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  items     PackingItem[]
+  household   Household           @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  items       PackingItem[]
+  bundles     PackingBundle[]
+  listBundles PackingListBundle[]
 
   @@unique([householdId, name])
 }
@@ -662,27 +724,40 @@ model PackingBundle {
   /// Only for trips abroad (passport, travel insurance, adapter).
   abroadOnly  Boolean           @default(false)
   autoAdd     Boolean           @default(false)
+  /// Whose bundle it is ("Astrids toalettsaker"): its things go to this
+  /// person when the bundle is added without naming someone else.
+  personId    String?           @db.Uuid
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
 
   household Household           @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  person    PackingPerson?      @relation(fields: [personId], references: [id], onDelete: SetNull)
   items     PackingBundleItem[]
   listItems PackingItem[]
+  lists     PackingListBundle[]
 
   @@unique([householdId, name])
 }
 
 model PackingBundleItem {
-  id        String   @id @default(uuid()) @db.Uuid
-  bundleId  String   @db.Uuid
-  name      String
-  quantity  Int      @default(1)
-  notes     String?
-  sortOrder Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id              String   @id @default(uuid()) @db.Uuid
+  bundleId        String   @db.Uuid
+  name            String
+  /// How many to pack when the trip's length is not set, or has no own number.
+  quantity        Int      @default(1)
+  /// How many for each trip length ("3 boksere til helg, 7 til uke"). Null
+  /// falls back to `quantity`; `quantityForTrip` in packing/rules.ts.
+  quantityDay     Int?
+  quantityWeekend Int?
+  quantityWeek    Int?
+  quantityLong    Int?
+  notes           String?
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  bundle PackingBundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  bundle    PackingBundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  listItems PackingItem[]
 
   @@index([bundleId, sortOrder])
 }

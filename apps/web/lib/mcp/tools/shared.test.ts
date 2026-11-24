@@ -8,6 +8,7 @@ import {
   ItemStatus,
   Lifecycle,
   PackingDuration,
+  PackingListKind,
   PackingSeason,
   PlantType,
   Priority,
@@ -32,6 +33,7 @@ import {
   ITEM_STATUSES,
   LIFECYCLES,
   PACKING_DURATIONS,
+  PACKING_LIST_KINDS,
   PACKING_SEASONS,
   PLANT_TYPES,
   PRIORITIES,
@@ -78,6 +80,7 @@ describe("tool enum contracts cover the Prisma schema", () => {
     ["CalendarEventRecurrence", EVENT_RECURRENCES, CalendarEventRecurrence],
     ["PackingSeason", PACKING_SEASONS, PackingSeason],
     ["PackingDuration", PACKING_DURATIONS, PackingDuration],
+    ["PackingListKind", PACKING_LIST_KINDS, PackingListKind],
   ])("%s", (_name, listed, prismaEnum) => {
     expect([...listed].sort()).toEqual(Object.values(prismaEnum).sort())
   })

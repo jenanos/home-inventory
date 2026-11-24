@@ -23,29 +23,44 @@ import {
 import { cn } from "@workspace/ui/lib/utils"
 import {
   CheckCheck,
+  ListPlus,
+  ListTree,
   Loader2,
   MoreVertical,
   Package,
   PackageMinus,
+  Pencil,
   Plus,
+  Trash2,
   User,
 } from "lucide-react"
 import { toast } from "sonner"
 import {
   addBundlesToList,
   addPackingItems,
+  createPackingGroup,
+  deletePackingGroup,
   removeBundleFromList,
+  renamePackingGroup,
   setAllPackingItemsPacked,
   togglePackingItem,
 } from "@/lib/actions/packing"
 import { PersonsDialog, type PackingPersonOption } from "../persons-dialog"
-import { PackingItemRow, type PackingItemView } from "./packing-item-row"
+import {
+  PackingItemRow,
+  type PackingGroupOption,
+  type PackingItemView,
+} from "./packing-item-row"
 
+/** A section on the list: a bundle's things, a sub-list, or the rest. */
 export type ItemGroup = {
   key: string
-  /** Null for items added by hand. */
+  kind: "bundle" | "group" | "loose"
+  /** The bundle, for a bundle section. */
   bundleId: string | null
-  /** Who this copy of the bundle is for; null for shared and loose items. */
+  /** The sub-list, for a sub-list section. */
+  groupId: string | null
+  /** Who this copy of the bundle is for; null for shared and other items. */
   personId: string | null
   name: string
   personName: string | null
@@ -56,6 +71,8 @@ export type BundleToAdd = {
   id: string
   name: string
   itemCount: number
+  /** Whose bundle it is; its things go to them unless "pakk for" says else. */
+  personName: string | null
   /** Fits the list's season, duration and abroad flag. */
   fits: boolean
 }
@@ -78,11 +95,14 @@ export function PackingItems({
   groups,
   bundlesToAdd,
   persons,
+  checkable,
 }: {
   listId: string
   groups: ItemGroup[]
   bundlesToAdd: BundleToAdd[]
   persons: PackingPersonOption[]
+  /** Off for a template, which is never packed. */
+  checkable: boolean
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -100,8 +120,14 @@ export function PackingItems({
     })
   )
 
+  const [addingGroup, setAddingGroup] = useState(false)
+  const [newGroup, setNewGroup] = useState("")
+
   const allItems = groups.flatMap((group) => group.items)
   const isEmpty = allItems.length === 0
+  const subLists: PackingGroupOption[] = groups
+    .filter((group) => group.kind === "group")
+    .map((group) => ({ id: group.groupId!, name: group.name }))
   const targetPersonId = packFor === SHARED ? null : packFor
   const targetName =
     persons.find((person) => person.id === targetPersonId)?.name ?? null
@@ -134,7 +160,8 @@ export function PackingItems({
       const result = await addBundlesToList({
         listId,
         bundleIds: [bundleId],
-        personId: targetPersonId,
+        // Without a chosen person, the bundle's own person gets its things.
+        personId: targetPersonId ?? undefined,
       })
       if (!result.ok) {
         toast.error(result.error)
@@ -192,6 +219,57 @@ export function PackingItems({
     })
   }
 
+  /** Adds to a sub-list; resolves true when it was added. */
+  function handleAddToGroup(groupId: string, name: string) {
+    return new Promise<boolean>((resolve) => {
+      startTransition(async () => {
+        const result = await addPackingItems({
+          listId,
+          items: [{ name, personId: targetPersonId, groupId }],
+        })
+        if (!result.ok) {
+          toast.error(result.error)
+          resolve(false)
+          return
+        }
+        reportSkipped(result.data.skippedNames)
+        router.refresh()
+        resolve(true)
+      })
+    })
+  }
+
+  function handleCreateGroup() {
+    const name = newGroup.trim()
+    if (!name) return
+    startTransition(async () => {
+      const result = await createPackingGroup({ listId, name })
+      if (!result.ok) {
+        toast.error(result.error)
+        return
+      }
+      setNewGroup("")
+      setAddingGroup(false)
+      router.refresh()
+    })
+  }
+
+  function handleRenameGroup(groupId: string, name: string) {
+    startTransition(async () => {
+      const result = await renamePackingGroup({ id: groupId, name })
+      if (!result.ok) toast.error(result.error)
+      router.refresh()
+    })
+  }
+
+  function handleDeleteGroup(groupId: string, keepItems: boolean) {
+    startTransition(async () => {
+      const result = await deletePackingGroup({ id: groupId, keepItems })
+      if (!result.ok) toast.error(result.error)
+      router.refresh()
+    })
+  }
+
   const filtered = filter.kind !== "all"
   const filteredItems = allItems.filter(matchesFilter)
   const unpackedInFilter = filteredItems.filter((item) => !isPacked(item))
@@ -201,6 +279,7 @@ export function PackingItems({
       {(persons.length > 0 || !isEmpty) && (
         <PersonChips
           persons={persons}
+          checkable={checkable}
           items={allItems}
           isPacked={isPacked}
           filter={filter}
@@ -241,14 +320,26 @@ export function PackingItems({
               {bundlesToAdd.map((bundle) => (
                 <SelectItem key={bundle.id} value={bundle.id}>
                   {bundle.name} ({bundle.itemCount} ting)
+                  {bundle.personName && !targetName
+                    ? ` · til ${bundle.personName}`
+                    : ""}
                   {bundle.fits ? " · passer" : ""}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
         )}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setAddingGroup((open) => !open)}
+          aria-expanded={addingGroup}
+        >
+          <ListPlus className="h-4 w-4" data-icon="inline-start" />
+          Underliste
+        </Button>
         <PersonsDialog persons={persons} />
-        {!isEmpty && (
+        {checkable && !isEmpty && (
           <div className="ml-auto flex items-center gap-2">
             <Switch
               id="hide-packed"
@@ -262,7 +353,33 @@ export function PackingItems({
         )}
       </div>
 
-      {isEmpty && (
+      {addingGroup && (
+        <form
+          className="flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault()
+            handleCreateGroup()
+          }}
+        >
+          <Input
+            autoFocus
+            placeholder="Navn på underlisten, f.eks. Til bilen"
+            aria-label="Navn på underlisten"
+            value={newGroup}
+            onChange={(e) => setNewGroup(e.target.value)}
+            disabled={isPending}
+          />
+          <Button
+            type="submit"
+            disabled={isPending || !newGroup.trim()}
+            aria-label="Opprett underliste"
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
+        </form>
+      )}
+
+      {isEmpty && subLists.length === 0 && (
         <Card className="flex flex-col items-center justify-center px-4 py-10 text-center">
           <Package className="mb-3 h-8 w-8 text-muted-foreground" />
           <p className="text-sm text-muted-foreground">Listen er tom</p>
@@ -275,7 +392,7 @@ export function PackingItems({
         </Card>
       )}
 
-      {filter.kind === "person" && unpackedInFilter.length > 0 && (
+      {checkable && filter.kind === "person" && unpackedInFilter.length > 0 && (
         <div>
           <Button
             variant="outline"
@@ -303,19 +420,24 @@ export function PackingItems({
         const items = group.items
           .filter(matchesFilter)
           .map((item) => ({ ...item, packed: isPacked(item) }))
-        if (items.length === 0) return null
+        // An empty sub-list still shows, so things can be added to it.
+        if (items.length === 0 && (group.kind !== "group" || filtered)) {
+          return null
+        }
         const packedCount = items.filter((item) => item.packed).length
-        const visible = hidePacked
-          ? items.filter((item) => !item.packed)
-          : items
+        const visible =
+          checkable && hidePacked ? items.filter((item) => !item.packed) : items
 
         return (
           <Card key={group.key} size="sm">
             <CardContent className="flex flex-col gap-1">
               <div className="flex items-center justify-between gap-2">
                 <h2 className="flex min-w-0 items-center gap-2 font-heading text-base font-semibold">
-                  {group.bundleId && (
+                  {group.kind === "bundle" && (
                     <Package className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  )}
+                  {group.kind === "group" && (
+                    <ListTree className="h-4 w-4 shrink-0 text-muted-foreground" />
                   )}
                   <span className="truncate">
                     {group.name}
@@ -327,24 +449,39 @@ export function PackingItems({
                     )}
                   </span>
                   <span className="shrink-0 text-xs font-normal text-muted-foreground tabular-nums">
-                    {packedCount}/{items.length}
+                    {checkable
+                      ? `${packedCount}/${items.length}`
+                      : `${items.length}`}
                   </span>
                 </h2>
-                {group.bundleId && (
+                {group.kind === "bundle" && (
                   <BundleMenu
                     disabled={isPending}
-                    hasPacked={packedCount > 0}
+                    hasPacked={checkable && packedCount > 0}
                     personName={group.personName}
                     onRemove={(keepPacked) =>
                       handleRemoveBundle(group, keepPacked)
                     }
                   />
                 )}
+                {group.kind === "group" && (
+                  <GroupMenu
+                    name={group.name}
+                    hasItems={items.length > 0}
+                    disabled={isPending}
+                    onRename={(name) => handleRenameGroup(group.groupId!, name)}
+                    onDelete={(keepItems) =>
+                      handleDeleteGroup(group.groupId!, keepItems)
+                    }
+                  />
+                )}
               </div>
               {visible.length === 0 ? (
-                <p className="py-2 text-sm text-muted-foreground">
-                  Alt er pakket
-                </p>
+                items.length > 0 ? (
+                  <p className="py-2 text-sm text-muted-foreground">
+                    Alt er pakket
+                  </p>
+                ) : null
               ) : (
                 <ul className="flex flex-col">
                   {visible.map((item) => (
@@ -352,12 +489,22 @@ export function PackingItems({
                       key={item.id}
                       item={item}
                       persons={persons}
+                      groups={subLists}
+                      checkable={checkable}
                       // A bundle section or a person filter already says who.
-                      showPerson={!group.bundleId && !filtered}
+                      showPerson={group.kind !== "bundle" && !filtered}
                       onToggle={(packed) => handleToggle(item, packed)}
                     />
                   ))}
                 </ul>
+              )}
+              {group.kind === "group" && (
+                <AddToGroupForm
+                  groupName={group.name}
+                  targetName={targetName}
+                  disabled={isPending}
+                  onAdd={(name) => handleAddToGroup(group.groupId!, name)}
+                />
               )}
             </CardContent>
           </Card>
@@ -402,12 +549,14 @@ export function PackingItems({
 /** Alle · Felles · one chip per person, each with how much is packed. */
 function PersonChips({
   persons,
+  checkable,
   items,
   isPacked,
   filter,
   onSelect,
 }: {
   persons: PackingPersonOption[]
+  checkable: boolean
   items: PackingItemView[]
   isPacked: (item: PackingItemView) => boolean
   filter: PersonFilter
@@ -417,7 +566,9 @@ function PersonChips({
 
   function progress(personId: string | null) {
     const own = items.filter((item) => item.personId === personId)
-    return `${own.filter(isPacked).length}/${own.length}`
+    return checkable
+      ? `${own.filter(isPacked).length}/${own.length}`
+      : `${own.length}`
   }
 
   const chips: Array<{ key: string; label: string; value: PersonFilter }> = [
@@ -469,6 +620,156 @@ function PersonChips({
         })}
       </div>
     </div>
+  )
+}
+
+/** The add field at the bottom of a sub-list. */
+function AddToGroupForm({
+  groupName,
+  targetName,
+  disabled,
+  onAdd,
+}: {
+  groupName: string
+  targetName: string | null
+  disabled: boolean
+  onAdd: (name: string) => Promise<boolean>
+}) {
+  const [name, setName] = useState("")
+
+  return (
+    <form
+      className="mt-1 flex gap-2"
+      onSubmit={async (e) => {
+        e.preventDefault()
+        const trimmed = name.trim()
+        if (!trimmed) return
+        if (await onAdd(trimmed)) setName("")
+      }}
+    >
+      <Input
+        className="h-9"
+        placeholder={
+          targetName
+            ? `Legg til i ${groupName} for ${targetName}`
+            : `Legg til i ${groupName}`
+        }
+        aria-label={`Legg til i ${groupName}`}
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        disabled={disabled}
+      />
+      <Button
+        type="submit"
+        variant="ghost"
+        size="icon"
+        disabled={disabled || !name.trim()}
+        aria-label={`Legg til i ${groupName}`}
+      >
+        <Plus className="h-4 w-4" />
+      </Button>
+    </form>
+  )
+}
+
+function GroupMenu({
+  name,
+  hasItems,
+  disabled,
+  onRename,
+  onDelete,
+}: {
+  name: string
+  hasItems: boolean
+  disabled: boolean
+  onRename: (name: string) => void
+  onDelete: (keepItems: boolean) => void
+}) {
+  const [renaming, setRenaming] = useState(false)
+  const [draft, setDraft] = useState(name)
+  const [confirming, setConfirming] = useState(false)
+
+  if (renaming) {
+    return (
+      <form
+        className="flex min-w-0 gap-1"
+        onSubmit={(e) => {
+          e.preventDefault()
+          const trimmed = draft.trim()
+          if (trimmed && trimmed !== name) onRename(trimmed)
+          setRenaming(false)
+        }}
+      >
+        <Input
+          autoFocus
+          className="h-8 w-40"
+          aria-label="Nytt navn"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setRenaming(false)
+          }}
+        />
+        <Button type="submit" size="sm" variant="outline">
+          Lagre
+        </Button>
+      </form>
+    )
+  }
+
+  return (
+    <DropdownMenu
+      onOpenChange={(open) => {
+        if (!open) setConfirming(false)
+      }}
+    >
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="shrink-0"
+          aria-label={`Handlinger for ${name}`}
+          disabled={disabled}
+        >
+          <MoreVertical className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem
+          onSelect={() => {
+            setDraft(name)
+            setRenaming(true)
+          }}
+        >
+          <Pencil className="mr-2 h-4 w-4" />
+          Gi nytt navn
+        </DropdownMenuItem>
+        {hasItems && (
+          <DropdownMenuItem onSelect={() => onDelete(true)}>
+            <Trash2 className="mr-2 h-4 w-4" />
+            Fjern underlisten, behold tingene
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuItem
+          variant="destructive"
+          onSelect={(e) => {
+            if (hasItems && !confirming) {
+              e.preventDefault()
+              setConfirming(true)
+              return
+            }
+            onDelete(false)
+          }}
+        >
+          <Trash2 className="mr-2 h-4 w-4" />
+          {!hasItems
+            ? "Slett underlisten"
+            : confirming
+              ? "Bekreft – tingene slettes også"
+              : "Slett underlisten med tingene"}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 

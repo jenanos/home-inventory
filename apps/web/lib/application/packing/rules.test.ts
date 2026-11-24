@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest"
 
-import { bundleFitsTrip, packingItemKey } from "./rules"
+import {
+  bundleFitsTrip,
+  hasDurationQuantities,
+  packingItemKey,
+  quantityForTrip,
+} from "./rules"
 
 const anyTrip = { season: null, duration: null, abroad: false } as const
 
@@ -42,5 +47,37 @@ describe("bundleFitsTrip", () => {
 describe("packingItemKey", () => {
   it("ignores case and extra spaces", () => {
     expect(packingItemKey("  Lade kabel ")).toBe(packingItemKey("lade  KABEL"))
+  })
+})
+
+describe("quantityForTrip", () => {
+  const boxers = {
+    quantity: 2,
+    quantityDay: null,
+    quantityWeekend: 3,
+    quantityWeek: 7,
+    quantityLong: null,
+  }
+
+  it("uses the number for the trip's length", () => {
+    expect(quantityForTrip(boxers, "WEEKEND")).toBe(3)
+    expect(quantityForTrip(boxers, "WEEK")).toBe(7)
+  })
+
+  it("falls back to the plain quantity", () => {
+    expect(quantityForTrip(boxers, "DAY")).toBe(2)
+    expect(quantityForTrip(boxers, "LONG")).toBe(2)
+    expect(quantityForTrip(boxers, null)).toBe(2)
+  })
+
+  it("tells whether any length has its own number", () => {
+    expect(hasDurationQuantities(boxers)).toBe(true)
+    expect(
+      hasDurationQuantities({
+        ...boxers,
+        quantityWeekend: null,
+        quantityWeek: 2,
+      })
+    ).toBe(false)
   })
 })

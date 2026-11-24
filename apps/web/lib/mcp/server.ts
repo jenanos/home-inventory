@@ -56,9 +56,13 @@ Events (calendar):
 - Gift wishes are shopping items on a gift list linked to the event. Add them with add-gift-wishes (it creates the list when needed); mark bought gifts with set-shopping-item-status. A private gift list keeps a surprise from the rest of the household.
 
 Packing lists:
-- A packing list is one trip, with season (SPRING, SUMMER, AUTUMN, WINTER), duration (DAY, WEEKEND 1–3 nights, WEEK 4–8 nights, LONG) and abroad.
+- A packing list has a kind: TEMPLATE (a reusable starting point such as "Hytta vinter", never packed), TRIP (a trip being planned or packed) or ARCHIVED (a finished trip, kept for reference). Do not put "Mal:" or similar in names; set kind instead. list-packing-lists takes kind.
+- A trip has season (SPRING, SUMMER, AUTUMN, WINTER), duration (DAY, WEEKEND 1–3 nights, WEEK 4–8 nights, LONG) and abroad. Start a trip from a template with duplicate-packing-list (kind TRIP, with the trip's name, dates and duration); when the trip is over, set kind ARCHIVED with update-packing-list.
 - A bundle is a reusable group of things packed together ("Treningstøy", "Vintertøy barn", "Utenlandsreise"). It can be limited to seasons, durations and trips abroad; with autoAdd it is added to every new list that fits. Prefer bundles over repeating the same items on every list, and check list-packing-bundles before creating one.
-- create-packing-list copies in the fitting autoAdd bundles and the bundles you name; a name already on the list is packed once. Tick things off with set-packing-items-packed; to reuse a list, unpack it or copy it with duplicate-packing-list.
+- A bundle can belong to one person (personId, e.g. "Astrids toalettsaker"); its things then go to that person whenever it is added without a personId. A bundle item can pack a different number per trip length (quantityByDuration, e.g. underwear { WEEKEND: 3, WEEK: 7 }); lists get the number for their duration.
+- After changing a bundle, offer to update the templates that use it with sync-packing-bundle-to-templates (dryRun first). Trips and finished trips are never changed by it.
+- create-packing-list copies in the fitting autoAdd bundles and the bundles you name; a name already on the list is packed once. Tick things off with set-packing-items-packed.
+- Sub-lists (create-packing-group, or groups on create-packing-list) hold things that belong together on one trip without being a bundle, e.g. "Til bilen". Items take groupId.
 - When packing for several people (a family trip), assign things with personId to people from list-packing-persons; they need not use the app, e.g. children, so add missing ones with create-packing-person. The same thing for two people is two items, and a bundle can be added once per person ("Vintertøy barn" for each child). get-packing-list and set-packing-items-packed take personId to work on one person's things.
 - Delete lists and bundles only when the user wants them gone, and confirm first.
 

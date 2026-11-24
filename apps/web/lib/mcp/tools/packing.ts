@@ -10,6 +10,7 @@ import {
   type PackingListDetail,
   type PackingListSummary,
 } from "../../application/packing/read"
+import { quantityByDurationOf } from "../../application/packing/rules"
 import {
   buildPageInfo,
   pageInfoSchema,
@@ -20,6 +21,7 @@ import { notFoundError, toolSuccess } from "../result"
 import { defineTool, READ_ONLY_ANNOTATIONS } from "./define"
 import {
   PACKING_DURATIONS,
+  PACKING_LIST_KINDS,
   PACKING_SEASONS,
   assertId,
   calendarDate,
@@ -32,7 +34,14 @@ import {
 
 // ─── Shapes ─────────────────────────────────────────────────────
 
+export const packingListKindSchema = z
+  .enum(PACKING_LIST_KINDS)
+  .describe(
+    "TEMPLATE = a reusable starting point that is never packed; TRIP = a trip being planned or packed; ARCHIVED = a finished trip kept for reference."
+  )
+
 const tripShape = {
+  kind: packingListKindSchema,
   season: z.enum(PACKING_SEASONS).nullable(),
   duration: z
     .enum(PACKING_DURATIONS)
@@ -61,6 +70,11 @@ export const packingItemSchema = z.object({
     .nullable()
     .describe("Who the item is for (list-packing-persons), or null if shared."),
   personName: z.string().nullable(),
+  groupId: z
+    .string()
+    .nullable()
+    .describe("The sub-list the item is in, or null."),
+  groupName: z.string().nullable(),
   updatedAt: timestampSchema,
 })
 
@@ -85,12 +99,37 @@ export const packingListCardSchema = z.object({
   bundles: z
     .array(z.object({ id: z.string(), name: z.string() }))
     .describe("Bundles with items on the list."),
+  groups: z
+    .array(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+        itemCount: z.number().int(),
+        packedCount: z.number().int(),
+        updatedAt: timestampSchema,
+      })
+    )
+    .describe("Sub-lists on this list, in order."),
   items: z.array(packingItemSchema),
   createdAt: timestampSchema,
   updatedAt: timestampSchema,
 })
 
-const packingListRowSchema = packingListCardSchema.omit({ items: true })
+const packingListRowSchema = packingListCardSchema.omit({
+  items: true,
+  groups: true,
+})
+
+const quantityByDurationSchema = z
+  .object({
+    DAY: z.number().int().optional(),
+    WEEKEND: z.number().int().optional(),
+    WEEK: z.number().int().optional(),
+    LONG: z.number().int().optional(),
+  })
+  .describe(
+    "How many to pack for each trip length that differs from quantity, e.g. { WEEKEND: 3, WEEK: 7 }. Lengths left out use quantity."
+  )
 
 export const packingBundleSchema = z.object({
   id: z.string(),
@@ -108,11 +147,19 @@ export const packingBundleSchema = z.object({
     .describe(
       "Added automatically to every new packing list that fits its seasons, durations and abroad rule."
     ),
+  personId: z
+    .string()
+    .nullable()
+    .describe(
+      "Whose bundle it is: its things go to this person when the bundle is added without a personId. Null: shared."
+    ),
+  personName: z.string().nullable(),
   items: z.array(
     z.object({
       id: z.string(),
       name: z.string(),
       quantity: z.number().int(),
+      quantityByDuration: quantityByDurationSchema,
       notes: z.string().nullable(),
     })
   ),
@@ -161,6 +208,7 @@ function personsOnList(items: PersonItem[]) {
 
 function serializeTrip(list: PackingListSummary | PackingListDetail) {
   return {
+    kind: list.kind,
     season: list.season,
     duration: list.duration,
     abroad: list.abroad,
@@ -189,20 +237,38 @@ export function serializePackingList(
     packedCount: list.items.filter((item) => item.packed).length,
     persons: personsOnList(list.items),
     bundles: bundlesOnList(list.items),
-    items: items.map((item) => ({
-      id: item.id,
-      name: item.name,
-      quantity: item.quantity,
-      packed: item.packed,
-      notes: item.notes,
-      bundleId: item.bundleId,
-      bundleName: item.bundle?.name ?? null,
-      personId: item.personId,
-      personName: item.person?.name ?? null,
-      updatedAt: timestamp(item.updatedAt),
-    })),
+    groups: list.groups.map((group) => {
+      const own = list.items.filter((item) => item.groupId === group.id)
+      return {
+        id: group.id,
+        name: group.name,
+        itemCount: own.length,
+        packedCount: own.filter((item) => item.packed).length,
+        updatedAt: timestamp(group.updatedAt),
+      }
+    }),
+    items: items.map(serializePackingItem),
     createdAt: timestamp(list.createdAt),
     updatedAt: timestamp(list.updatedAt),
+  }
+}
+
+export function serializePackingItem(
+  item: PackingListDetail["items"][number]
+): z.infer<typeof packingItemSchema> {
+  return {
+    id: item.id,
+    name: item.name,
+    quantity: item.quantity,
+    packed: item.packed,
+    notes: item.notes,
+    bundleId: item.bundleId,
+    bundleName: item.bundle?.name ?? null,
+    personId: item.personId,
+    personName: item.person?.name ?? null,
+    groupId: item.groupId,
+    groupName: item.group?.name ?? null,
+    updatedAt: timestamp(item.updatedAt),
   }
 }
 
@@ -217,10 +283,13 @@ export function serializePackingBundle(
     durations: bundle.durations,
     abroadOnly: bundle.abroadOnly,
     autoAdd: bundle.autoAdd,
+    personId: bundle.personId,
+    personName: bundle.person?.name ?? null,
     items: bundle.items.map((item) => ({
       id: item.id,
       name: item.name,
       quantity: item.quantity,
+      quantityByDuration: quantityByDurationOf(item),
       notes: item.notes,
     })),
     updatedAt: timestamp(bundle.updatedAt),
@@ -234,8 +303,14 @@ export const listPackingListsTool = defineTool({
   scope: "packing:read",
   title: "List packing lists",
   description:
-    "Lists the household's packing lists, upcoming departures first, with the trip's season, duration and abroad flag and how much is packed. get-packing-list returns the items.",
+    "Lists the household's packing lists, upcoming departures first, with the kind (TEMPLATE, TRIP or ARCHIVED), the trip's season, duration and abroad flag and how much is packed. get-packing-list returns the items.",
   inputSchema: {
+    kind: z
+      .enum(PACKING_LIST_KINDS)
+      .optional()
+      .describe(
+        "Only templates, trips or finished trips. Omit for every kind."
+      ),
     query: filterTextSchema
       .optional()
       .describe("Case-insensitive substring match on the name or notes."),
@@ -256,6 +331,7 @@ export const listPackingListsTool = defineTool({
     const page = resolvePageRequest(args)
     const { totalCount, lists } = await listPackingListsPage(session.context, {
       ...page,
+      kind: args.kind,
       query: args.query,
       season: args.season,
       duration: args.duration,
@@ -286,7 +362,7 @@ export const getPackingListTool = defineTool({
   scope: "packing:read",
   title: "Get a packing list",
   description:
-    "Returns one packing list with every item, whether it is packed, and the bundle it came from.",
+    "Returns one packing list with every item, whether it is packed, the bundle it came from, who it is for and its sub-list.",
   inputSchema: {
     listId: idSchema.describe("Id from list-packing-lists."),
     personId: idSchema

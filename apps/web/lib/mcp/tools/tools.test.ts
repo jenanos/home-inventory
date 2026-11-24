@@ -547,10 +547,20 @@ const PERSON = {
   updatedAt: new Date("2026-03-01T00:00:00Z"),
 }
 
+const GROUP = {
+  id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  listId: PACKING_LIST_ID,
+  name: "Til bilen",
+  sortOrder: 0,
+  createdAt: new Date("2026-03-01T00:00:00Z"),
+  updatedAt: new Date("2026-03-01T00:00:00Z"),
+}
+
 const PACKING_LIST_ROW = {
   id: PACKING_LIST_ID,
   householdId: "household-1",
   name: "Hytta påske",
+  kind: "TRIP",
   season: "SPRING",
   duration: "WEEKEND",
   abroad: false,
@@ -569,8 +579,11 @@ const PACKING_LIST_ROW = {
       sortOrder: 0,
       bundleId: BUNDLE_ID,
       bundle: BUNDLE_REF,
+      bundleItemId: "bundle-item-1",
       personId: PERSON.id,
       person: { id: PERSON.id, name: PERSON.name },
+      groupId: null,
+      group: null,
       createdAt: new Date("2026-03-01T00:00:00Z"),
       updatedAt: new Date("2026-03-01T00:00:00Z"),
     },
@@ -584,12 +597,16 @@ const PACKING_LIST_ROW = {
       sortOrder: 1,
       bundleId: null,
       bundle: null,
+      bundleItemId: null,
       personId: null,
       person: null,
+      groupId: GROUP.id,
+      group: { id: GROUP.id, name: GROUP.name },
       createdAt: new Date("2026-03-01T00:00:00Z"),
       updatedAt: new Date("2026-03-01T00:00:00Z"),
     },
   ],
+  groups: [GROUP],
 }
 
 const BUNDLE_ROW = {
@@ -600,6 +617,8 @@ const BUNDLE_ROW = {
   durations: ["WEEKEND", "WEEK"],
   abroadOnly: false,
   autoAdd: false,
+  personId: PERSON.id,
+  person: { id: PERSON.id, name: PERSON.name },
   createdAt: new Date("2026-03-01T00:00:00Z"),
   updatedAt: new Date("2026-03-01T00:00:00Z"),
   items: [
@@ -608,6 +627,10 @@ const BUNDLE_ROW = {
       bundleId: BUNDLE_ID,
       name: "Joggesko",
       quantity: 1,
+      quantityDay: null,
+      quantityWeekend: null,
+      quantityWeek: 2,
+      quantityLong: null,
       notes: null,
       sortOrder: 0,
       createdAt: new Date("2026-03-01T00:00:00Z"),
@@ -870,6 +893,47 @@ describe("packing", () => {
         persons: [{ name: "Ola", itemCount: 1, packedCount: 1 }],
         departureOn: "2026-04-01",
       },
+    })
+  })
+
+  it("shows the kind and the sub-lists with their progress", async () => {
+    const { structured } = await callTool("get-packing-list", {
+      listId: PACKING_LIST_ID,
+    })
+
+    expect(structured).toMatchObject({
+      list: {
+        kind: "TRIP",
+        groups: [{ name: "Til bilen", itemCount: 1, packedCount: 0 }],
+        items: [
+          { name: "Joggesko", groupId: null },
+          { name: "Ullsokker", groupName: "Til bilen" },
+        ],
+      },
+    })
+  })
+
+  it("shows a bundle's own person and its numbers per trip length", async () => {
+    const { structured } = await callTool("get-packing-bundle", {
+      bundleId: BUNDLE_ID,
+    })
+
+    expect(structured).toMatchObject({
+      bundle: {
+        personId: PERSON.id,
+        personName: "Ola",
+        items: [
+          { name: "Joggesko", quantity: 1, quantityByDuration: { WEEK: 2 } },
+        ],
+      },
+    })
+  })
+
+  it("filters lists by kind", async () => {
+    await callTool("list-packing-lists", { kind: "TEMPLATE" })
+
+    expect(mocks.packingListCount).toHaveBeenCalledWith({
+      where: expect.objectContaining({ kind: "TEMPLATE" }),
     })
   })
 

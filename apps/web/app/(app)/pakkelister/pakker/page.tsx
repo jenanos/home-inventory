@@ -2,7 +2,12 @@ import Link from "next/link"
 import { ArrowLeft, Package, Plus } from "lucide-react"
 import { Button } from "@workspace/ui/components/button"
 import { Card } from "@workspace/ui/components/card"
-import { listPackingBundles } from "@/lib/application/packing/read"
+import {
+  listBundleTemplateUsage,
+  listPackingBundles,
+  listPackingPersons,
+} from "@/lib/application/packing/read"
+import { quantityByDurationOf } from "@/lib/application/packing/rules"
 import {
   DURATION_SHORT_LABELS,
   DURATION_SLUGS,
@@ -30,12 +35,15 @@ export default async function PakkerPage({ searchParams }: PakkerPageProps) {
   const duration = durationFromSlug(params.varighet)
   const isFiltered = season !== undefined || duration !== undefined
 
-  const [bundles, allCount] = await Promise.all([
+  const [bundles, allCount, persons, usage] = await Promise.all([
     listPackingBundles(context, { season, duration }),
     isFiltered
       ? listPackingBundles(context).then((all) => all.length)
       : Promise.resolve(null),
+    listPackingPersons(context),
+    listBundleTemplateUsage(context),
   ])
+  const personOptions = persons.map(({ id, name }) => ({ id, name }))
   const totalCount = allCount ?? bundles.length
 
   const current = {
@@ -59,10 +67,12 @@ export default async function PakkerPage({ searchParams }: PakkerPageProps) {
             </h1>
             <p className="max-w-xl text-sm text-muted-foreground">
               En pakke er ting som pakkes sammen, f.eks. Treningstøy. Legg den
-              til en pakkeliste, så kommer alt med.
+              til en pakkeliste, så kommer alt med – til riktig person og med
+              antall som passer turens lengde.
             </p>
           </div>
           <BundleFormDialog
+            persons={personOptions}
             trigger={
               <Button className="self-start sm:self-auto">
                 <Plus className="mr-2 h-4 w-4" />
@@ -129,6 +139,7 @@ export default async function PakkerPage({ searchParams }: PakkerPageProps) {
           {bundles.map((bundle) => (
             <BundleCard
               key={bundle.id}
+              persons={personOptions}
               bundle={{
                 id: bundle.id,
                 name: bundle.name,
@@ -137,10 +148,14 @@ export default async function PakkerPage({ searchParams }: PakkerPageProps) {
                 durations: bundle.durations,
                 abroadOnly: bundle.abroadOnly,
                 autoAdd: bundle.autoAdd,
+                personId: bundle.personId,
+                personName: bundle.person?.name ?? null,
+                templates: usage.get(bundle.id) ?? [],
                 items: bundle.items.map((item) => ({
                   id: item.id,
                   name: item.name,
                   quantity: item.quantity,
+                  quantityByDuration: quantityByDurationOf(item),
                   notes: item.notes,
                 })),
               }}

@@ -9,6 +9,50 @@ import type {
   PackingSeasonValue,
 } from "@/lib/application/packing/rules"
 
+export type PackingListKindValue = "TEMPLATE" | "TRIP" | "ARCHIVED"
+
+/** In the order of the overview tabs. */
+export const PACKING_LIST_KINDS: readonly PackingListKindValue[] = [
+  "TRIP",
+  "TEMPLATE",
+  "ARCHIVED",
+]
+
+export const KIND_LABELS: Record<PackingListKindValue, string> = {
+  TRIP: "Turer",
+  TEMPLATE: "Maler",
+  ARCHIVED: "Historikk",
+}
+
+/** One list of the kind, for badges: "Mal", "Fullført". */
+export const KIND_SINGULAR_LABELS: Record<PackingListKindValue, string> = {
+  TRIP: "Tur",
+  TEMPLATE: "Mal",
+  ARCHIVED: "Fullført tur",
+}
+
+/** `?type=` on the overview; trips have none, since they are the default. */
+export const KIND_SLUGS: Record<PackingListKindValue, string | undefined> = {
+  TRIP: undefined,
+  TEMPLATE: "maler",
+  ARCHIVED: "historikk",
+}
+
+export function kindFromSlug(slug: string | undefined): PackingListKindValue {
+  return PACKING_LIST_KINDS.find((kind) => KIND_SLUGS[kind] === slug) ?? "TRIP"
+}
+
+/** "Helg 3 · Uke 7" for a bundle item with numbers per trip length. */
+export function describeQuantityByDuration(
+  byDuration: Partial<Record<PackingDurationValue, number>>
+) {
+  return PACKING_DURATIONS.filter((duration) => byDuration[duration])
+    .map(
+      (duration) => `${DURATION_SHORT_LABELS[duration]} ${byDuration[duration]}`
+    )
+    .join(" · ")
+}
+
 export const PACKING_SEASONS: readonly PackingSeasonValue[] = [
   "SPRING",
   "SUMMER",
