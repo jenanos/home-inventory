@@ -127,6 +127,7 @@ describe("write tool contracts", () => {
         "update-packing-bundle",
         "delete-packing-bundle",
         "sync-packing-bundle-to-templates",
+        "set-packing-categories",
         "create-packing-group",
         "update-packing-group",
         "delete-packing-group",

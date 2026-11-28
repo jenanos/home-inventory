@@ -1,5 +1,6 @@
 import {
   db,
+  PackingCategory,
   PackingDuration,
   PackingListKind,
   PackingSeason,
@@ -33,6 +34,7 @@ import {
   type PackingBundleWithItems,
   type PackingListDetail,
 } from "./read"
+import { guessPackingCategory } from "./categories"
 import {
   DURATION_QUANTITY_FIELD,
   bundleFitsTrip,
@@ -61,6 +63,7 @@ const GROUP = "underliste"
 const SEASON_VALUES = Object.values(PackingSeason)
 const DURATION_VALUES = Object.values(PackingDuration)
 const KIND_VALUES = Object.values(PackingListKind)
+const CATEGORY_VALUES = Object.values(PackingCategory)
 
 /** More than this of one thing is a typo, not luggage. */
 export const MAX_PACKING_QUANTITY = 999
@@ -123,6 +126,11 @@ export type PackingItemFields = {
   name: string
   quantity?: number
   notes?: string | null
+  /**
+   * What kind of thing it is (ADR 0018). Omitted on a new thing, it is
+   * guessed from the name; on an existing one it stays as it is.
+   */
+  category?: PackingCategory
 }
 
 /** A thing on a list: a bundle item's fields, and who it is for. */
@@ -211,17 +219,31 @@ function quantity(value: number | undefined) {
     : integerInRange(value, "Antall", { min: 1, max: MAX_PACKING_QUANTITY })
 }
 
+function category(value: PackingCategory | undefined) {
+  return value === undefined
+    ? undefined
+    : enumValue(value, CATEGORY_VALUES, "Kategori")
+}
+
+/** The fields of a thing; `category` stays undefined when not given. */
 function normalizeItem(input: PackingItemFields) {
   return {
     name: requiredText(input.name, "Navn"),
     quantity: quantity(input.quantity) ?? 1,
     notes: optionalText(input.notes, "Notat") ?? null,
+    category: category(input.category),
   }
 }
 
-function normalizeListItem(input: PackingListItemFields) {
+/**
+ * A new thing on a list. Without a category, it is guessed from the name and
+ * then from `hint`, such as the name of the sub-list it goes into.
+ */
+function normalizeListItem(input: PackingListItemFields, hint?: string) {
+  const item = normalizeItem(input)
   return {
-    ...normalizeItem(input),
+    ...item,
+    category: item.category ?? guessPackingCategory(item.name, hint),
     personId: optionalPersonId(input.personId) ?? null,
     groupId: optionalGroupId(input.groupId) ?? null,
   }
@@ -376,6 +398,7 @@ type NewListItem = {
   name: string
   quantity: number
   notes: string | null
+  category: PackingCategory
   bundleId: string | null
   bundleItemId?: string | null
   personId: string | null
@@ -499,6 +522,7 @@ function bundleEntries(
       name: item.name,
       quantity: quantityForTrip(item, duration),
       notes: item.notes,
+      category: item.category,
       bundleId: bundle.id,
       bundleItemId: item.id,
       personId,
@@ -628,9 +652,9 @@ function normalizeGroupInputs(groups: PackingGroupInput[]) {
       return {
         name,
         items: (group.items ?? []).map((item, itemIndex) =>
-          inBatch(itemIndex, "Ting", () => ({
-            ...normalizeListItem({ ...item, groupId: null }),
-          }))
+          inBatch(itemIndex, "Ting", () =>
+            normalizeListItem({ ...item, groupId: null }, name)
+          )
         ),
       }
     })
@@ -940,6 +964,7 @@ export async function duplicatePackingList(
               ? quantityForTrip(item.bundleItem, copyDuration)
               : item.quantity,
           notes: item.notes,
+          category: item.category,
           bundleId: item.bundleId,
           bundleItemId: item.bundleItemId,
           personId: item.personId,
@@ -1018,6 +1043,7 @@ export async function updatePackingItem(
       input.name === undefined ? undefined : requiredText(input.name, "Navn"),
     quantity: quantity(input.quantity),
     notes: optionalText(input.notes, "Notat"),
+    category: category(input.category),
     packed: optionalBoolean(input.packed, "Pakket"),
     personId,
     groupId,
@@ -1221,8 +1247,11 @@ export async function createPackingBundle(
   input: CreatePackingBundleInput
 ): Promise<PackingBundleWithItems> {
   const fields = normalizeBundleFields(input)
-  const items = normalizeBundleItems(input.items ?? []).map(withoutId)
   const name = requiredText(input.name, "Navn")
+  const items = normalizeBundleItems(input.items ?? []).map((item) => ({
+    ...withoutId(item),
+    category: item.category ?? guessPackingCategory(item.name, name),
+  }))
   await assertBundleNameFree(context, name)
 
   try {
@@ -1267,16 +1296,18 @@ function withoutId(item: NormalizedBundleItem) {
 /**
  * Writes the bundle's new set of things in place: matched things are
  * updated, so the list items copied from them keep their link; the rest are
- * created or removed.
+ * created or removed. A matched thing sent without a category keeps its own;
+ * a new one gets a guess from its name or the bundle's.
  */
 async function replaceBundleItems(
   tx: Tx,
-  bundleId: string,
+  bundle: { id: string; name: string },
   items: NormalizedBundleItem[]
 ) {
+  const bundleId = bundle.id
   const existing = await tx.packingBundleItem.findMany({
     where: { bundleId },
-    select: { id: true, name: true },
+    select: { id: true, name: true, category: true },
   })
   const unmatched = new Map(existing.map((item) => [item.id, item]))
   const byName = new Map(
@@ -1305,6 +1336,7 @@ async function replaceBundleItems(
       where: { bundleId, id: { in: [...unmatched.keys()] } },
     })
   }
+  const categoryOf = new Map(existing.map((item) => [item.id, item.category]))
   for (const [index, entry] of items.entries()) {
     const item = withoutId(entry)
     const target = targets[index]
@@ -1314,13 +1346,41 @@ async function replaceBundleItems(
         data: item,
         select: { id: true },
       })
+      const before = categoryOf.get(target)
+      if (item.category !== undefined && before !== item.category) {
+        await followCategory(tx, target, before!, item.category)
+      }
     } else {
       await tx.packingBundleItem.create({
-        data: { ...item, bundleId },
+        data: {
+          ...item,
+          category:
+            item.category ?? guessPackingCategory(item.name, bundle.name),
+          bundleId,
+        },
         select: { id: true },
       })
     }
   }
+}
+
+/**
+ * A bundle item's new category, on the list items copied from it that still
+ * have its old one: on every list, finished trips too, since a category only
+ * sorts the list and changes nothing that was packed. A category set by hand
+ * on the list stays (ADR 0018).
+ */
+async function followCategory(
+  tx: Tx,
+  bundleItemId: string,
+  from: PackingCategory,
+  to: PackingCategory
+) {
+  const result = await tx.packingItem.updateMany({
+    where: { bundleItemId, category: from },
+    data: { category: to },
+  })
+  return result.count
 }
 
 export async function updatePackingBundle(
@@ -1345,12 +1405,12 @@ export async function updatePackingBundle(
           await assertPersonsInHousehold(tx, context, [fields.personId])
           // The scoped update comes first: it is the household boundary for
           // the items written after it.
-          await tx.packingBundle.update({
+          const bundle = await tx.packingBundle.update({
             where: { ...scope, ...freshness(expectedUpdatedAt) },
             data: { ...fields, ...(items ? { updatedAt: new Date() } : {}) },
-            select: { id: true },
+            select: { id: true, name: true },
           })
-          if (items) await replaceBundleItems(tx, bundleId, items)
+          if (items) await replaceBundleItems(tx, bundle, items)
           return tx.packingBundle.findUniqueOrThrow({
             where: { id: bundleId },
             include: packingBundleInclude,
@@ -1498,8 +1558,8 @@ class DryRunRollback extends Error {
 
 /**
  * Brings the templates that use a bundle up to date with it: things added to
- * the bundle are added, changed names, notes and numbers (for the template's
- * trip length) are copied, and things taken out of the bundle are removed.
+ * the bundle are added, changed names, notes, categories and numbers (for the
+ * template's trip length) are copied, and things taken out of the bundle are removed.
  * Each person's copy of the bundle is updated on its own. Only templates are
  * touched; trips and finished trips keep what they were packed with.
  *
@@ -1551,6 +1611,7 @@ export async function syncBundleToTemplates(
               name: true,
               quantity: true,
               notes: true,
+              category: true,
               personId: true,
               bundleItemId: true,
             },
@@ -1595,6 +1656,7 @@ async function syncTemplate(
       name: string
       quantity: number
       notes: string | null
+      category: PackingCategory
       personId: string | null
       bundleItemId: string | null
     }>
@@ -1659,12 +1721,14 @@ async function syncTemplate(
         name: source.name,
         notes: source.notes,
         quantity: quantityForTrip(source, template.duration),
+        category: source.category,
         bundleItemId: source.id,
       }
       const differs =
         item.name !== next.name ||
         item.notes !== next.notes ||
-        item.quantity !== next.quantity
+        item.quantity !== next.quantity ||
+        item.category !== next.category
       if (differs || item.bundleItemId !== next.bundleItemId) {
         await tx.packingItem.update({
           where: { id: item.id },
@@ -1681,6 +1745,7 @@ async function syncTemplate(
         name: source.name,
         quantity: quantityForTrip(source, template.duration),
         notes: source.notes,
+        category: source.category,
         bundleId: bundle.id,
         bundleItemId: source.id,
         personId,
@@ -1858,4 +1923,174 @@ export async function deletePackingGroup(
         return { ...group, deletedItemCount: deletedItems }
       }),
   })
+}
+
+// ─── Categories ─────────────────────────────────────────────────
+
+export type SetPackingCategoriesInput = {
+  /** Things on lists, by id. */
+  items?: Array<{ itemId: string; category: PackingCategory }>
+  /**
+   * Things in bundles, by id. The list items copied from one follow along,
+   * unless their category was changed on the list.
+   */
+  bundleItems?: Array<{ bundleItemId: string; category: PackingCategory }>
+  /**
+   * Every thing with this name, on every list and in every bundle (case and
+   * spacing ignored): "Ullsokker" is clothing wherever it is.
+   */
+  names?: Array<{ name: string; category: PackingCategory }>
+}
+
+export type SetPackingCategoriesResult = {
+  /** List items whose category changed. */
+  itemCount: number
+  /** Bundle items whose category changed. */
+  bundleItemCount: number
+  /** Names in `names` that no thing in the household has. */
+  unmatchedNames: string[]
+}
+
+function normalizeCategoryEntries<T extends { category: PackingCategory }>(
+  entries: T[] | undefined,
+  label: string,
+  check: (entry: T) => void
+) {
+  if (entries === undefined) return []
+  if (!Array.isArray(entries)) {
+    throw validationError(`${label} må være en liste.`)
+  }
+  assertBatchSize(entries.length, label)
+  return entries.map((entry, index) =>
+    inBatch(index, label, () => {
+      check(entry)
+      return { ...entry, category: category(entry.category)! }
+    })
+  )
+}
+
+/**
+ * Sets the category of things on lists and in bundles, all or nothing: by id,
+ * or by name for everything with that name. A bundle item's new category also
+ * goes to the list items copied from it that still had its old one. Later
+ * entries win over earlier ones for the same thing.
+ */
+export async function setPackingCategories(
+  context: ApplicationContext,
+  input: SetPackingCategoriesInput
+): Promise<SetPackingCategoriesResult> {
+  const items = normalizeCategoryEntries(input.items, "Ting", (entry) =>
+    assertResourceId(entry?.itemId, ITEM)
+  )
+  const bundleItems = normalizeCategoryEntries(
+    input.bundleItems,
+    "Ting i pakker",
+    (entry) => assertResourceId(entry?.bundleItemId, "ting i pakken")
+  )
+  const names = normalizeCategoryEntries(input.names, "Navn", (entry) => {
+    requiredText(entry?.name, "Navn")
+  })
+  if (items.length + bundleItems.length + names.length === 0) {
+    throw validationError("Oppgi minst én ting, pakketing eller ett navn.")
+  }
+  const household = { householdId: context.householdId }
+
+  return db.$transaction(async (tx) => {
+    const changedItems = new Set<string>()
+    const changedBundleItems = new Set<string>()
+
+    /** Bundle items to a new category, with their copies on lists. */
+    async function setBundleItems(
+      rows: Array<{ id: string; category: PackingCategory }>,
+      to: PackingCategory
+    ) {
+      for (const row of rows) {
+        if (row.category === to) continue
+        await tx.packingBundleItem.update({
+          where: { id: row.id, bundle: household },
+          data: { category: to },
+          select: { id: true },
+        })
+        const followers = await tx.packingItem.findMany({
+          where: { bundleItemId: row.id, category: row.category },
+          select: { id: true },
+        })
+        await followCategory(tx, row.id, row.category, to)
+        changedBundleItems.add(row.id)
+        for (const follower of followers) changedItems.add(follower.id)
+        row.category = to
+      }
+    }
+
+    async function setItems(ids: string[], to: PackingCategory) {
+      if (ids.length === 0) return
+      const changing = await tx.packingItem.findMany({
+        where: { id: { in: ids }, list: household, category: { not: to } },
+        select: { id: true },
+      })
+      await tx.packingItem.updateMany({
+        where: { id: { in: ids }, list: household },
+        data: { category: to },
+      })
+      for (const item of changing) changedItems.add(item.id)
+    }
+
+    // By name first, so an entry by id can make an exception to it.
+    const unmatchedNames: string[] = []
+    if (names.length > 0) {
+      const [allItems, allBundleItems] = await Promise.all([
+        tx.packingItem.findMany({
+          where: { list: household },
+          select: { id: true, name: true },
+        }),
+        tx.packingBundleItem.findMany({
+          where: { bundle: household },
+          select: { id: true, name: true, category: true },
+        }),
+      ])
+      for (const entry of names) {
+        const key = packingItemKey(entry.name)
+        const matchingBundleItems = allBundleItems.filter(
+          (row) => packingItemKey(row.name) === key
+        )
+        const matchingItems = allItems
+          .filter((row) => packingItemKey(row.name) === key)
+          .map((row) => row.id)
+        if (matchingBundleItems.length + matchingItems.length === 0) {
+          unmatchedNames.push(entry.name.trim())
+          continue
+        }
+        await setBundleItems(matchingBundleItems, entry.category)
+        await setItems(matchingItems, entry.category)
+      }
+    }
+
+    if (bundleItems.length > 0) {
+      const ids = [...new Set(bundleItems.map((entry) => entry.bundleItemId))]
+      const rows = await tx.packingBundleItem.findMany({
+        where: { id: { in: ids }, bundle: household },
+        select: { id: true, category: true },
+      })
+      if (rows.length !== ids.length) throw notFound("ting i pakken")
+      const byId = new Map(rows.map((row) => [row.id, row]))
+      for (const entry of bundleItems) {
+        await setBundleItems([byId.get(entry.bundleItemId)!], entry.category)
+      }
+    }
+
+    if (items.length > 0) {
+      const ids = [...new Set(items.map((entry) => entry.itemId))]
+      const found = await tx.packingItem.count({
+        where: { id: { in: ids }, list: household },
+      })
+      if (found !== ids.length) throw notFound(ITEM)
+      for (const entry of items) await setItems([entry.itemId], entry.category)
+    }
+
+    return {
+      itemCount: changedItems.size,
+      bundleItemCount: changedBundleItems.size,
+      unmatchedNames,
+    }
+  }, BATCH_TRANSACTION_OPTIONS)
 }

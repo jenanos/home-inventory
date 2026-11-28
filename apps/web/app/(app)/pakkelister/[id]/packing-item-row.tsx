@@ -30,6 +30,8 @@ import { Badge } from "@workspace/ui/components/badge"
 import { Loader2, MoreHorizontal, Pencil, Save, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { deletePackingItems, updatePackingItem } from "@/lib/actions/packing"
+import type { PackingCategoryValue } from "@/lib/application/packing/categories"
+import { CATEGORY_LABELS, PACKING_CATEGORIES } from "@/lib/packing-labels"
 import type { PackingPersonOption } from "../persons-dialog"
 
 const SHARED = "__shared__"
@@ -41,6 +43,10 @@ export type PackingItemView = {
   quantity: number
   notes: string | null
   packed: boolean
+  category: PackingCategoryValue
+  /** Where it came from, shown when the list is sorted by category. */
+  bundleName: string | null
+  groupName: string | null
   personId: string | null
   personName: string | null
   groupId: string | null
@@ -54,6 +60,7 @@ export function PackingItemRow({
   groups,
   checkable,
   showPerson,
+  showSource = false,
   onToggle,
 }: {
   item: PackingItemView
@@ -64,6 +71,8 @@ export function PackingItemRow({
   checkable: boolean
   /** Off when the section or the filter already says who it is for. */
   showPerson: boolean
+  /** The bundle or sub-list it is in, when the section does not say. */
+  showSource?: boolean
   onToggle: (packed: boolean) => void
 }) {
   const router = useRouter()
@@ -123,6 +132,11 @@ export function PackingItemRow({
               </Badge>
             )}
           </span>
+          {showSource && (item.bundleName ?? item.groupName) && (
+            <span className="text-xs break-words text-muted-foreground">
+              {item.bundleName ?? item.groupName}
+            </span>
+          )}
           {item.notes && (
             <span className="text-xs break-words text-muted-foreground">
               {item.notes}
@@ -187,6 +201,7 @@ function EditItemDialog({
   const [notes, setNotes] = useState(item.notes ?? "")
   const [personId, setPersonId] = useState(item.personId ?? SHARED)
   const [groupId, setGroupId] = useState(item.groupId ?? NO_GROUP)
+  const [category, setCategory] = useState(item.category)
   const [error, setError] = useState("")
 
   function handleSave() {
@@ -205,6 +220,7 @@ function EditItemDialog({
         name: name.trim(),
         quantity: count,
         notes: notes.trim() || null,
+        category,
         personId: personId === SHARED ? null : personId,
         groupId: groupId === NO_GROUP ? null : groupId,
       })
@@ -252,6 +268,26 @@ function EditItemDialog({
               value={quantity}
               onChange={(e) => setQuantity(e.target.value)}
             />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label>Kategori</Label>
+            <Select
+              value={category}
+              onValueChange={(value) =>
+                setCategory(value as PackingCategoryValue)
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PACKING_CATEGORIES.map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {CATEGORY_LABELS[value]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           {persons.length > 0 && (
             <div className="flex flex-col gap-2">

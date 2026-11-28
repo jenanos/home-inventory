@@ -1,9 +1,13 @@
 import { z } from "zod"
 
+import { PACKING_CATEGORIES } from "../../application/packing/categories"
+import { CATEGORY_LABELS as CATEGORY_NAMES } from "../../packing-labels"
 import {
+  countPackingCategories,
   getPackingBundle,
   getPackingList,
   listPackingBundlesPage,
+  listPackingItemNames,
   listPackingListsPage,
   listPackingPersons,
   type PackingBundleWithItems,
@@ -34,6 +38,31 @@ import {
 
 // ─── Shapes ─────────────────────────────────────────────────────
 
+const CATEGORY_MEANINGS: Record<(typeof PACKING_CATEGORIES)[number], string> = {
+  CLOTHING: "clothes, shoes and accessories such as hats, gloves, belts",
+  TOILETRIES:
+    "toothbrush, skin care, sunscreen, hair and make-up things, glasses and contact lenses",
+  HEALTH: "medicine, first aid, plasters, insect repellent, contraception",
+  ELECTRONICS: "phones, chargers, cables, adapters, headphones, cameras",
+  DOCUMENTS: "passport, ID, cards, insurance, tickets, cash, wallet and keys",
+  KIDS: "nappies, dummies, prams, car seats, baby gear and toys",
+  FOOD: "food, snacks and drinks",
+  OUTDOOR: "hiking, camping, skiing, cycling, swimming and other sports gear",
+  HOME: "bedding, towels, kitchen and cleaning things for the cabin or a rental",
+  LEISURE: "books, magazines, games, crafts and music",
+  OTHER: "anything else",
+}
+
+export const packingCategorySchema = z
+  .enum(PACKING_CATEGORIES)
+  .describe(
+    `What kind of thing it is: ${PACKING_CATEGORIES.map((category) => `${category} = ${CATEGORY_MEANINGS[category]}`).join("; ")}.`
+  )
+
+export function categoryName(category: (typeof PACKING_CATEGORIES)[number]) {
+  return CATEGORY_NAMES[category]
+}
+
 export const packingListKindSchema = z
   .enum(PACKING_LIST_KINDS)
   .describe(
@@ -60,6 +89,7 @@ export const packingItemSchema = z.object({
   quantity: z.number().int(),
   packed: z.boolean(),
   notes: z.string().nullable(),
+  category: packingCategorySchema,
   bundleId: z
     .string()
     .nullable()
@@ -161,6 +191,7 @@ export const packingBundleSchema = z.object({
       quantity: z.number().int(),
       quantityByDuration: quantityByDurationSchema,
       notes: z.string().nullable(),
+      category: packingCategorySchema,
     })
   ),
   updatedAt: timestampSchema,
@@ -219,16 +250,24 @@ function serializeTrip(list: PackingListSummary | PackingListDetail) {
 
 /**
  * The list card. With `personId` only that person's things are listed
- * (`null`: the shared ones); the counts and people always cover the list.
+ * (`null`: the shared ones), and with `category` only that category's; the
+ * counts and people always cover the list.
  */
 export function serializePackingList(
   list: PackingListDetail,
-  { personId }: { personId?: string | null } = {}
+  {
+    personId,
+    category,
+  }: {
+    personId?: string | null
+    category?: (typeof PACKING_CATEGORIES)[number]
+  } = {}
 ): z.infer<typeof packingListCardSchema> {
-  const items =
-    personId === undefined
-      ? list.items
-      : list.items.filter((item) => item.personId === personId)
+  const items = list.items.filter(
+    (item) =>
+      (personId === undefined || item.personId === personId) &&
+      (category === undefined || item.category === category)
+  )
   return {
     id: list.id,
     name: list.name,
@@ -262,6 +301,7 @@ export function serializePackingItem(
     quantity: item.quantity,
     packed: item.packed,
     notes: item.notes,
+    category: item.category,
     bundleId: item.bundleId,
     bundleName: item.bundle?.name ?? null,
     personId: item.personId,
@@ -291,6 +331,7 @@ export function serializePackingBundle(
       quantity: item.quantity,
       quantityByDuration: quantityByDurationOf(item),
       notes: item.notes,
+      category: item.category,
     })),
     updatedAt: timestamp(bundle.updatedAt),
   }
@@ -362,7 +403,7 @@ export const getPackingListTool = defineTool({
   scope: "packing:read",
   title: "Get a packing list",
   description:
-    "Returns one packing list with every item, whether it is packed, the bundle it came from, who it is for and its sub-list.",
+    "Returns one packing list with every item, whether it is packed, its category, the bundle it came from, who it is for and its sub-list.",
   inputSchema: {
     listId: idSchema.describe("Id from list-packing-lists."),
     personId: idSchema
@@ -371,6 +412,10 @@ export const getPackingListTool = defineTool({
       .describe(
         "Only this person's things (from list-packing-persons), or null for the shared ones. Omit for everything."
       ),
+    category: z
+      .enum(PACKING_CATEGORIES)
+      .optional()
+      .describe("Only the things in this category."),
   },
   outputSchema: { list: packingListCardSchema },
   annotations: READ_ONLY_ANNOTATIONS,
@@ -379,7 +424,10 @@ export const getPackingListTool = defineTool({
     const list = await getPackingList(session.context, args.listId)
     if (!list) return notFoundError("pakkeliste")
 
-    const card = serializePackingList(list, { personId: args.personId })
+    const card = serializePackingList(list, {
+      personId: args.personId,
+      category: args.category,
+    })
     return toolSuccess(
       { list: card },
       `${list.name}: ${card.packedCount}/${card.itemCount} pakket.`
@@ -488,10 +536,93 @@ export const listPackingPersonsTool = defineTool({
   },
 })
 
+export const listPackingCategoriesTool = defineTool({
+  name: "list-packing-categories",
+  scope: "packing:read",
+  title: "List packing categories",
+  description:
+    "Lists the categories every thing on a packing list and in a bundle has, in the order the list page shows them, with the Norwegian name and how many things on lists and in bundles have each. The set is fixed. To check or correct categories, continue with list-packing-item-names and set-packing-categories.",
+  inputSchema: {},
+  outputSchema: {
+    categories: z.array(
+      z.object({
+        category: packingCategorySchema,
+        name: z.string().describe("The Norwegian name shown on the page."),
+        meaning: z.string(),
+        listItemCount: z.number().int(),
+        bundleItemCount: z.number().int(),
+      })
+    ),
+  },
+  annotations: READ_ONLY_ANNOTATIONS,
+  handler: async (_args, session) => {
+    const counts = await countPackingCategories(session.context)
+    const categories = PACKING_CATEGORIES.map((category) => ({
+      category,
+      name: CATEGORY_NAMES[category],
+      meaning: CATEGORY_MEANINGS[category],
+      listItemCount: counts.get(category)?.listItemCount ?? 0,
+      bundleItemCount: counts.get(category)?.bundleItemCount ?? 0,
+    }))
+    const other = counts.get("OTHER")
+
+    return toolSuccess(
+      { categories },
+      `${categories.length} kategorier. I «Annet»: ${other?.listItemCount ?? 0} ting på lister, ${other?.bundleItemCount ?? 0} i pakker.`
+    )
+  },
+})
+
+export const listPackingItemNamesTool = defineTool({
+  name: "list-packing-item-names",
+  scope: "packing:read",
+  title: "List things by category",
+  description:
+    "Lists every distinct thing on the household's packing lists and in its bundles, once per name and category, in category order: the overview for checking categories. Each row says how many list items and bundle items have that name and category and which bundles it is in. A name in two categories appears twice. Fix categories with set-packing-categories, preferably by name so every copy changes at once. Start with category OTHER to find what was not recognised.",
+  inputSchema: {
+    category: z
+      .enum(PACKING_CATEGORIES)
+      .optional()
+      .describe("Only this category, e.g. OTHER for the unrecognised ones."),
+    query: filterTextSchema
+      .optional()
+      .describe("Case-insensitive substring of the name."),
+    ...paginationInputSchema,
+  },
+  outputSchema: {
+    names: z.array(
+      z.object({
+        name: z.string(),
+        category: packingCategorySchema,
+        listItemCount: z.number().int(),
+        bundleItemCount: z.number().int(),
+        bundles: z.array(z.string()).describe("Bundles it is in, by name."),
+      })
+    ),
+    pageInfo: pageInfoSchema,
+  },
+  annotations: READ_ONLY_ANNOTATIONS,
+  handler: async (args, session) => {
+    const page = resolvePageRequest(args)
+    const all = await listPackingItemNames(session.context, {
+      category: args.category,
+      query: args.query,
+    })
+    const names = all.slice(page.offset, page.offset + page.limit)
+
+    return toolSuccess(
+      { names, pageInfo: buildPageInfo(page, names.length, all.length) },
+      `Fant ${all.length} navn${args.category ? ` i «${CATEGORY_NAMES[args.category]}»` : ""}.`
+    )
+  },
+})
+
 export const packingTools = [
   listPackingListsTool,
   getPackingListTool,
   listPackingBundlesTool,
   getPackingBundleTool,
   listPackingPersonsTool,
+  listPackingCategoriesTool,
+  listPackingItemNamesTool,
 ]

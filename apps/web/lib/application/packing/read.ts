@@ -1,5 +1,6 @@
 import {
   db,
+  type PackingCategory,
   type PackingDuration,
   type PackingListKind,
   type PackingSeason,
@@ -7,6 +8,8 @@ import {
 } from "@workspace/db"
 
 import type { ApplicationContext } from "../context"
+import { compareCategories } from "./categories"
+import { packingItemKey } from "./rules"
 
 export const packingItemOrder = [
   { sortOrder: "asc" as const },
@@ -300,3 +303,124 @@ export async function listPackingPersons(context: ApplicationContext) {
 export type PackingPersonRow = Awaited<
   ReturnType<typeof listPackingPersons>
 >[number]
+
+// ─── Categories ─────────────────────────────────────────────────
+
+export type PackingItemNameRow = {
+  /** As it is spelled in a bundle, else on the most recent list. */
+  name: string
+  category: PackingCategory
+  /** Things on lists with this name and category. */
+  listItemCount: number
+  /** Things in bundles with this name and category. */
+  bundleItemCount: number
+  /** The bundles they are in, by name. */
+  bundles: string[]
+}
+
+export type PackingItemNameFilter = {
+  category?: PackingCategory
+  /** Substring of the name. */
+  query?: string
+}
+
+/**
+ * Every distinct thing in the household's lists and bundles with its
+ * category, in category order and then by name: the overview to check and
+ * correct categories from. The same name in two categories is two rows.
+ */
+export async function listPackingItemNames(
+  context: ApplicationContext,
+  filter: PackingItemNameFilter = {}
+): Promise<PackingItemNameRow[]> {
+  const where = {
+    ...(filter.category ? { category: filter.category } : {}),
+    ...(filter.query
+      ? { name: { contains: filter.query, mode: "insensitive" as const } }
+      : {}),
+  }
+  const [items, bundleItems] = await Promise.all([
+    db.packingItem.findMany({
+      where: { ...where, list: { householdId: context.householdId } },
+      select: { name: true, category: true },
+      orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+    }),
+    db.packingBundleItem.findMany({
+      where: { ...where, bundle: { householdId: context.householdId } },
+      select: {
+        name: true,
+        category: true,
+        bundle: { select: { name: true } },
+      },
+      orderBy: [
+        { bundle: { name: "asc" } },
+        { sortOrder: "asc" },
+        { id: "asc" },
+      ],
+    }),
+  ])
+
+  const rows = new Map<string, PackingItemNameRow>()
+  function row(name: string, category: PackingCategory) {
+    const key = `${category}\u0000${packingItemKey(name)}`
+    let entry = rows.get(key)
+    if (!entry) {
+      entry = {
+        name,
+        category,
+        listItemCount: 0,
+        bundleItemCount: 0,
+        bundles: [],
+      }
+      rows.set(key, entry)
+    }
+    return entry
+  }
+  for (const item of bundleItems) {
+    const entry = row(item.name, item.category)
+    entry.bundleItemCount += 1
+    if (!entry.bundles.includes(item.bundle.name)) {
+      entry.bundles.push(item.bundle.name)
+    }
+  }
+  for (const item of items) row(item.name, item.category).listItemCount += 1
+
+  return [...rows.values()].sort(
+    (a, b) =>
+      compareCategories(a.category, b.category) ||
+      a.name.localeCompare(b.name, "nb-NO")
+  )
+}
+
+/** How many things on lists and in bundles have each category. */
+export async function countPackingCategories(context: ApplicationContext) {
+  const [items, bundleItems] = await Promise.all([
+    db.packingItem.groupBy({
+      by: ["category"],
+      where: { list: { householdId: context.householdId } },
+      _count: { _all: true },
+    }),
+    db.packingBundleItem.groupBy({
+      by: ["category"],
+      where: { bundle: { householdId: context.householdId } },
+      _count: { _all: true },
+    }),
+  ])
+  const counts = new Map<
+    PackingCategory,
+    { listItemCount: number; bundleItemCount: number }
+  >()
+  const entry = (category: PackingCategory) => {
+    const found = counts.get(category) ?? {
+      listItemCount: 0,
+      bundleItemCount: 0,
+    }
+    counts.set(category, found)
+    return found
+  }
+  for (const row of items) entry(row.category).listItemCount = row._count._all
+  for (const row of bundleItems) {
+    entry(row.category).bundleItemCount = row._count._all
+  }
+  return counts
+}
