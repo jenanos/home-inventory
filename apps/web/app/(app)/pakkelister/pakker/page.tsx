@@ -157,6 +157,7 @@ export default async function PakkerPage({ searchParams }: PakkerPageProps) {
                   quantity: item.quantity,
                   quantityByDuration: quantityByDurationOf(item),
                   notes: item.notes,
+                  category: item.category,
                 })),
               }}
             />

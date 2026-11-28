@@ -590,6 +590,22 @@ enum PackingDuration {
   LONG
 }
 
+/// What kind of thing an item is (ADR 0018), so a list can be shown by
+/// category instead of by bundle. Every item has one; OTHER when unknown.
+enum PackingCategory {
+  CLOTHING // Klær og sko
+  TOILETRIES // Toalettsaker
+  HEALTH // Medisiner og førstehjelp
+  ELECTRONICS // Elektronikk
+  DOCUMENTS // Dokumenter, penger og nøkler
+  KIDS // Barn og baby
+  FOOD // Mat og drikke
+  OUTDOOR // Tur og sport
+  HOME // Hjem og hytte
+  LEISURE // Underholdning
+  OTHER // Annet
+}
+
 /// What a packing list is for (ADR 0017). Replaces name prefixes such as
 /// "Mal:" that the lists used before.
 enum PackingListKind {
@@ -661,25 +677,27 @@ model PackingListGroup {
 }
 
 model PackingItem {
-  id           String   @id @default(uuid()) @db.Uuid
-  listId       String   @db.Uuid
+  id           String          @id @default(uuid()) @db.Uuid
+  listId       String          @db.Uuid
   name         String
-  quantity     Int      @default(1)
-  packed       Boolean  @default(false)
+  quantity     Int             @default(1)
+  packed       Boolean         @default(false)
   notes        String?
-  sortOrder    Int      @default(0)
+  /// Copied from the bundle item, or guessed from the name (ADR 0018).
+  category     PackingCategory @default(OTHER)
+  sortOrder    Int             @default(0)
   /// The bundle the item was copied from. Deleting the bundle keeps the item
   /// and clears the link.
-  bundleId     String?  @db.Uuid
+  bundleId     String?         @db.Uuid
   /// The bundle item it was copied from, so a template can follow later
   /// changes to the bundle. Cleared when the bundle item is removed.
-  bundleItemId String?  @db.Uuid
+  bundleItemId String?         @db.Uuid
   /// Who the item is for. Null means shared, or not decided.
-  personId     String?  @db.Uuid
+  personId     String?         @db.Uuid
   /// The sub-list it is in, if any.
-  groupId      String?  @db.Uuid
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  groupId      String?         @db.Uuid
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
 
   list       PackingList        @relation(fields: [listId], references: [id], onDelete: Cascade)
   bundle     PackingBundle?     @relation(fields: [bundleId], references: [id], onDelete: SetNull)
@@ -740,11 +758,11 @@ model PackingBundle {
 }
 
 model PackingBundleItem {
-  id              String   @id @default(uuid()) @db.Uuid
-  bundleId        String   @db.Uuid
+  id              String          @id @default(uuid()) @db.Uuid
+  bundleId        String          @db.Uuid
   name            String
   /// How many to pack when the trip's length is not set, or has no own number.
-  quantity        Int      @default(1)
+  quantity        Int             @default(1)
   /// How many for each trip length ("3 boksere til helg, 7 til uke"). Null
   /// falls back to `quantity`; `quantityForTrip` in packing/rules.ts.
   quantityDay     Int?
@@ -752,9 +770,11 @@ model PackingBundleItem {
   quantityWeek    Int?
   quantityLong    Int?
   notes           String?
-  sortOrder       Int      @default(0)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  /// Copied to the list items made from it (ADR 0018).
+  category        PackingCategory @default(OTHER)
+  sortOrder       Int             @default(0)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 
   bundle    PackingBundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
   listItems PackingItem[]

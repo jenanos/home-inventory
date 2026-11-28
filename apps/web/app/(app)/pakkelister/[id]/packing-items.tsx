@@ -1,6 +1,12 @@
 "use client"
 
-import { useOptimistic, useState, useTransition } from "react"
+import {
+  useOptimistic,
+  useState,
+  useSyncExternalStore,
+  useTransition,
+  type ReactNode,
+} from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@workspace/ui/components/button"
 import { Card, CardContent } from "@workspace/ui/components/card"
@@ -45,6 +51,7 @@ import {
   setAllPackingItemsPacked,
   togglePackingItem,
 } from "@/lib/actions/packing"
+import { CATEGORY_LABELS, PACKING_CATEGORIES } from "@/lib/packing-labels"
 import { PersonsDialog, type PackingPersonOption } from "../persons-dialog"
 import {
   PackingItemRow,
@@ -52,10 +59,13 @@ import {
   type PackingItemView,
 } from "./packing-item-row"
 
-/** A section on the list: a bundle's things, a sub-list, or the rest. */
+/**
+ * A section on the list: a bundle's things, a sub-list, or the rest; or, when
+ * the list is shown by category, one category.
+ */
 export type ItemGroup = {
   key: string
-  kind: "bundle" | "group" | "loose"
+  kind: "bundle" | "group" | "loose" | "category"
   /** The bundle, for a bundle section. */
   bundleId: string | null
   /** The sub-list, for a sub-list section. */
@@ -80,7 +90,72 @@ export type BundleToAdd = {
 /** The person filter: everyone, the shared things, or one person. */
 type PersonFilter = { kind: "all" } | { kind: "person"; id: string | null }
 
+/** By bundle and sub-list, as the list is put together, or by category. */
+type ListView = "bundles" | "categories"
+
 const SHARED = "__shared__"
+
+/** Remembered in this browser only; a convenience, not a setting. */
+const VIEW_STORAGE_KEY = "pakkeliste-visning"
+
+/** Used when storage is blocked, so the choice still lasts for the visit. */
+let fallbackView: ListView = "bundles"
+const viewListeners = new Set<() => void>()
+
+function readStoredView(): ListView {
+  try {
+    const stored = window.localStorage.getItem(VIEW_STORAGE_KEY)
+    return stored === "categories" || stored === "bundles"
+      ? stored
+      : fallbackView
+  } catch {
+    return fallbackView
+  }
+}
+
+function storeView(view: ListView) {
+  fallbackView = view
+  try {
+    window.localStorage.setItem(VIEW_STORAGE_KEY, view)
+  } catch {
+    // Private windows and blocked storage: the fallback keeps it.
+  }
+  for (const listener of viewListeners) listener()
+}
+
+function subscribeToView(listener: () => void) {
+  viewListeners.add(listener)
+  window.addEventListener("storage", listener)
+  return () => {
+    viewListeners.delete(listener)
+    window.removeEventListener("storage", listener)
+  }
+}
+
+/** The chosen view; by bundle on the server and until the browser says. */
+function useListView() {
+  return useSyncExternalStore(
+    subscribeToView,
+    readStoredView,
+    () => "bundles" as const
+  )
+}
+
+/** One section per category in display order, things by name within it. */
+function categorySections(items: PackingItemView[]): ItemGroup[] {
+  return PACKING_CATEGORIES.map((category) => ({
+    key: `category:${category}`,
+    kind: "category" as const,
+    bundleId: null,
+    groupId: null,
+    personId: null,
+    name: CATEGORY_LABELS[category],
+    personName: null,
+    items: items
+      .filter((item) => item.category === category)
+      .sort((a, b) => a.name.localeCompare(b.name, "nb-NO")),
+  })).filter((section) => section.items.length > 0)
+}
 
 function reportSkipped(skippedNames: string[]) {
   if (skippedNames.length === 1) {
@@ -109,6 +184,7 @@ export function PackingItems({
   const [hidePacked, setHidePacked] = useState(false)
   const [newItem, setNewItem] = useState("")
   const [filter, setFilter] = useState<PersonFilter>({ kind: "all" })
+  const view = useListView()
   /** Who new things and bundles are for: a person id, or SHARED. */
   const [packFor, setPackFor] = useState(SHARED)
   /** Packed state shown at once, while the server catches up. */
@@ -271,6 +347,8 @@ export function PackingItems({
   }
 
   const filtered = filter.kind !== "all"
+  const byCategory = view === "categories"
+  const sections = byCategory ? categorySections(allItems) : groups
   const filteredItems = allItems.filter(matchesFilter)
   const unpackedInFilter = filteredItems.filter((item) => !isPacked(item))
 
@@ -286,6 +364,8 @@ export function PackingItems({
           onSelect={selectFilter}
         />
       )}
+
+      {!isEmpty && <ViewChips view={view} onSelect={storeView} />}
 
       <div className="flex flex-wrap items-center gap-2">
         {persons.length > 0 && (
@@ -416,7 +496,7 @@ export function PackingItems({
         </p>
       )}
 
-      {groups.map((group) => {
+      {sections.map((group) => {
         const items = group.items
           .filter(matchesFilter)
           .map((item) => ({ ...item, packed: isPacked(item) }))
@@ -493,6 +573,7 @@ export function PackingItems({
                       checkable={checkable}
                       // A bundle section or a person filter already says who.
                       showPerson={group.kind !== "bundle" && !filtered}
+                      showSource={byCategory}
                       onToggle={(packed) => handleToggle(item, packed)}
                     />
                   ))}
@@ -543,6 +624,69 @@ export function PackingItems({
         </Button>
       </form>
     </div>
+  )
+}
+
+/** Pakker · Kategorier: how the list is divided into sections. */
+function ViewChips({
+  view,
+  onSelect,
+}: {
+  view: ListView
+  onSelect: (view: ListView) => void
+}) {
+  const options: Array<{ value: ListView; label: string }> = [
+    { value: "bundles", label: "Pakker" },
+    { value: "categories", label: "Kategorier" },
+  ]
+  return (
+    <div className="flex items-start gap-2">
+      <span className="flex h-6.5 w-14 shrink-0 items-center text-xs text-muted-foreground">
+        Vis etter
+      </span>
+      <div
+        role="radiogroup"
+        aria-label="Vis listen etter"
+        className="flex min-w-0 flex-1 flex-wrap gap-1.5"
+      >
+        {options.map((option) => (
+          <Chip
+            key={option.value}
+            active={view === option.value}
+            onClick={() => onSelect(option.value)}
+          >
+            {option.label}
+          </Chip>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function Chip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={active}
+      onClick={onClick}
+      className={cn(
+        "shrink-0 rounded-full border px-3 py-1 text-xs font-medium whitespace-nowrap tabular-nums transition-colors",
+        active
+          ? "border-primary bg-primary text-primary-foreground"
+          : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+      )}
+    >
+      {children}
+    </button>
   )
 }
 
@@ -601,21 +745,13 @@ function PersonChips({
             (chip.value.kind === "all" ||
               (filter.kind === "person" && chip.value.id === filter.id))
           return (
-            <button
+            <Chip
               key={chip.key}
-              type="button"
-              role="radio"
-              aria-checked={active}
+              active={active}
               onClick={() => onSelect(chip.value)}
-              className={cn(
-                "shrink-0 rounded-full border px-3 py-1 text-xs font-medium whitespace-nowrap tabular-nums transition-colors",
-                active
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
-              )}
             >
               {chip.label}
-            </button>
+            </Chip>
           )
         })}
       </div>

@@ -39,6 +39,10 @@ const mocks = vi.hoisted(() => ({
   packingBundleFindMany: vi.fn(),
   packingBundleFindFirst: vi.fn(),
   packingPersonFindMany: vi.fn(),
+  packingItemFindMany: vi.fn(),
+  packingItemGroupBy: vi.fn(),
+  packingBundleItemFindMany: vi.fn(),
+  packingBundleItemGroupBy: vi.fn(),
 }))
 
 vi.mock("@workspace/db", async (importOriginal) => ({
@@ -109,6 +113,14 @@ vi.mock("@workspace/db", async (importOriginal) => ({
       findFirst: mocks.packingBundleFindFirst,
     },
     packingPerson: { findMany: mocks.packingPersonFindMany },
+    packingItem: {
+      findMany: mocks.packingItemFindMany,
+      groupBy: mocks.packingItemGroupBy,
+    },
+    packingBundleItem: {
+      findMany: mocks.packingBundleItemFindMany,
+      groupBy: mocks.packingBundleItemGroupBy,
+    },
   },
 }))
 
@@ -494,6 +506,22 @@ beforeEach(() => {
   mocks.packingBundleFindMany.mockResolvedValue([BUNDLE_ROW])
   mocks.packingBundleFindFirst.mockResolvedValue(BUNDLE_ROW)
   mocks.packingPersonFindMany.mockResolvedValue([PERSON])
+  mocks.packingItemFindMany.mockResolvedValue(
+    PACKING_LIST_ROW.items.map(({ name, category }) => ({ name, category }))
+  )
+  mocks.packingItemGroupBy.mockResolvedValue([
+    { category: "CLOTHING", _count: { _all: 2 } },
+  ])
+  mocks.packingBundleItemFindMany.mockResolvedValue(
+    BUNDLE_ROW.items.map(({ name, category }) => ({
+      name,
+      category,
+      bundle: { name: BUNDLE_ROW.name },
+    }))
+  )
+  mocks.packingBundleItemGroupBy.mockResolvedValue([
+    { category: "CLOTHING", _count: { _all: 1 } },
+  ])
 })
 
 const EVENT_ID = "77777777-7777-4777-8777-777777777777"
@@ -576,6 +604,7 @@ const PACKING_LIST_ROW = {
       quantity: 1,
       packed: true,
       notes: null,
+      category: "CLOTHING",
       sortOrder: 0,
       bundleId: BUNDLE_ID,
       bundle: BUNDLE_REF,
@@ -594,6 +623,7 @@ const PACKING_LIST_ROW = {
       quantity: 3,
       packed: false,
       notes: null,
+      category: "CLOTHING",
       sortOrder: 1,
       bundleId: null,
       bundle: null,
@@ -632,6 +662,7 @@ const BUNDLE_ROW = {
       quantityWeek: 2,
       quantityLong: null,
       notes: null,
+      category: "CLOTHING",
       sortOrder: 0,
       createdAt: new Date("2026-03-01T00:00:00Z"),
       updatedAt: new Date("2026-03-01T00:00:00Z"),
@@ -746,6 +777,8 @@ const HAPPY_PATH_ARGS: Array<[string, Record<string, unknown>]> = [
   ["list-packing-bundles", {}],
   ["get-packing-bundle", { bundleId: BUNDLE_ID }],
   ["list-packing-persons", {}],
+  ["list-packing-categories", {}],
+  ["list-packing-item-names", {}],
   ["list-attachments", { targetType: "plant", targetId: PLANT_ID }],
   ["get-attachment", { attachmentId: ATTACHMENT_ID }],
 ]

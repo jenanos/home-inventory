@@ -21,8 +21,12 @@ import {
   SelectValue,
 } from "@workspace/ui/components/select"
 import { cn } from "@workspace/ui/lib/utils"
-import { Clock, Loader2, Plus, Save, X } from "lucide-react"
+import { Loader2, Plus, Save, SlidersHorizontal, X } from "lucide-react"
 import { toast } from "sonner"
+import {
+  guessPackingCategory,
+  type PackingCategoryValue,
+} from "@/lib/application/packing/categories"
 import type {
   PackingDurationValue,
   PackingSeasonValue,
@@ -34,7 +38,9 @@ import {
 } from "@/lib/actions/packing"
 import type { PackingPersonOption } from "../persons-dialog"
 import {
+  CATEGORY_LABELS,
   DURATION_SHORT_LABELS,
+  PACKING_CATEGORIES,
   PACKING_DURATIONS,
   PACKING_SEASONS,
   SEASON_LABELS,
@@ -62,6 +68,7 @@ export type EditableBundle = {
     quantity: number
     quantityByDuration: Partial<Record<PackingDurationValue, number>>
     notes: string | null
+    category: PackingCategoryValue
   }>
 }
 
@@ -73,8 +80,10 @@ type ItemDraft = {
   quantity: string
   /** Blank: use the plain quantity for that trip length. */
   byDuration: ByDuration
-  showDurations: boolean
+  /** The category and the numbers per trip length are shown. */
+  showDetails: boolean
   notes: string | null
+  category: PackingCategoryValue
 }
 
 const EMPTY_BY_DURATION: ByDuration = {
@@ -85,15 +94,17 @@ const EMPTY_BY_DURATION: ByDuration = {
 }
 
 let draftCounter = 0
-function newDraft(name = ""): ItemDraft {
+/** A new thing, with the category guessed from its name or the bundle's. */
+function newDraft(name: string, bundleName: string): ItemDraft {
   draftCounter += 1
   return {
     key: `draft-${draftCounter}`,
     name,
     quantity: "1",
     byDuration: EMPTY_BY_DURATION,
-    showDurations: false,
+    showDetails: false,
     notes: null,
+    category: guessPackingCategory(name, bundleName),
   }
 }
 
@@ -110,8 +121,9 @@ function draftsFrom(bundle: EditableBundle | undefined): ItemDraft[] {
       name: item.name,
       quantity: String(item.quantity),
       byDuration,
-      showDurations: Object.keys(item.quantityByDuration).length > 0,
+      showDetails: Object.keys(item.quantityByDuration).length > 0,
       notes: item.notes,
+      category: item.category,
     }
   })
 }
@@ -230,7 +242,7 @@ export function BundleFormDialog({
   function addItem() {
     const trimmed = newItem.trim()
     if (!trimmed) return
-    setItems((previous) => [...previous, newDraft(trimmed)])
+    setItems((previous) => [...previous, newDraft(trimmed, name)])
     setNewItem("")
   }
 
@@ -246,7 +258,9 @@ export function BundleFormDialog({
       return
     }
     // A name typed but not yet added still belongs in the bundle.
-    const drafts = newItem.trim() ? [...items, newDraft(newItem.trim())] : items
+    const drafts = newItem.trim()
+      ? [...items, newDraft(newItem.trim(), name)]
+      : items
     const filled = drafts.filter((item) => item.name.trim())
     const invalid = filled.find(
       (item) =>
@@ -284,6 +298,7 @@ export function BundleFormDialog({
           ])
         ),
         notes: item.notes,
+        category: item.category,
       })),
     }
 
@@ -443,18 +458,18 @@ export function BundleFormDialog({
                       />
                       <Button
                         type="button"
-                        variant={item.showDurations ? "secondary" : "ghost"}
+                        variant={item.showDetails ? "secondary" : "ghost"}
                         size="icon-sm"
                         className="shrink-0"
-                        aria-label={`Antall etter varighet for ${item.name}`}
-                        aria-expanded={item.showDurations}
+                        aria-label={`Kategori og antall etter varighet for ${item.name}`}
+                        aria-expanded={item.showDetails}
                         onClick={() =>
                           updateItem(item.key, {
-                            showDurations: !item.showDurations,
+                            showDetails: !item.showDetails,
                           })
                         }
                       >
-                        <Clock className="h-4 w-4" />
+                        <SlidersHorizontal className="h-4 w-4" />
                       </Button>
                       <Button
                         type="button"
@@ -471,10 +486,13 @@ export function BundleFormDialog({
                         <X className="h-4 w-4" />
                       </Button>
                     </div>
-                    {item.showDurations && (
-                      <DurationQuantities
+                    {item.showDetails && (
+                      <ItemDetails
                         item={item}
-                        onChange={(byDuration) =>
+                        onCategoryChange={(category) =>
+                          updateItem(item.key, { category })
+                        }
+                        onDurationsChange={(byDuration) =>
                           updateItem(item.key, { byDuration })
                         }
                       />
@@ -507,9 +525,9 @@ export function BundleFormDialog({
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              <Clock className="mr-1 inline h-3 w-3 align-[-2px]" />
-              gir eget antall per varighet, f.eks. 3 boksere til helg og 7 til
-              en uke.
+              <SlidersHorizontal className="mr-1 inline h-3 w-3 align-[-2px]" />
+              viser kategorien og gir eget antall per varighet, f.eks. 3 boksere
+              til helg og 7 til en uke. Kategorien gjettes ut fra navnet.
             </p>
             {isEdit && (
               <p className="text-xs text-muted-foreground">
@@ -533,6 +551,52 @@ export function BundleFormDialog({
   )
 }
 
+/** The category, and Dag · Helg · Uke · Lang with their own numbers. */
+function ItemDetails({
+  item,
+  onCategoryChange,
+  onDurationsChange,
+}: {
+  item: ItemDraft
+  onCategoryChange: (category: PackingCategoryValue) => void
+  onDurationsChange: (byDuration: ByDuration) => void
+}) {
+  return (
+    <div className="flex flex-col gap-2 rounded-md bg-muted/50 p-2">
+      <div className="flex items-center gap-2">
+        <Label
+          htmlFor={`${item.key}-category`}
+          className="shrink-0 text-xs font-normal"
+        >
+          Kategori
+        </Label>
+        <Select
+          value={item.category}
+          onValueChange={(value) =>
+            onCategoryChange(value as PackingCategoryValue)
+          }
+        >
+          <SelectTrigger
+            id={`${item.key}-category`}
+            size="sm"
+            className="min-w-0 flex-1 bg-background"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {PACKING_CATEGORIES.map((value) => (
+              <SelectItem key={value} value={value}>
+                {CATEGORY_LABELS[value]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <DurationQuantities item={item} onChange={onDurationsChange} />
+    </div>
+  )
+}
+
 /** Dag · Helg · Uke · Lang: own numbers, blank for the plain quantity. */
 function DurationQuantities({
   item,
@@ -542,7 +606,7 @@ function DurationQuantities({
   onChange: (byDuration: ByDuration) => void
 }) {
   return (
-    <div className="grid grid-cols-4 gap-2 rounded-md bg-muted/50 p-2">
+    <div className="grid grid-cols-4 gap-2">
       {PACKING_DURATIONS.map((duration) => {
         const id = `${item.key}-${duration}`
         return (

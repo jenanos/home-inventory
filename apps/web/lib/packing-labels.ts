@@ -3,6 +3,7 @@
  * components.
  */
 
+import type { PackingCategoryValue } from "@/lib/application/packing/categories"
 import type {
   BundleConditions,
   PackingDurationValue,
@@ -51,6 +52,22 @@ export function describeQuantityByDuration(
       (duration) => `${DURATION_SHORT_LABELS[duration]} ${byDuration[duration]}`
     )
     .join(" · ")
+}
+
+export { PACKING_CATEGORIES } from "@/lib/application/packing/categories"
+
+export const CATEGORY_LABELS: Record<PackingCategoryValue, string> = {
+  CLOTHING: "Klær og sko",
+  TOILETRIES: "Toalettsaker",
+  HEALTH: "Medisiner og førstehjelp",
+  ELECTRONICS: "Elektronikk",
+  DOCUMENTS: "Dokumenter, penger og nøkler",
+  KIDS: "Barn og baby",
+  FOOD: "Mat og drikke",
+  OUTDOOR: "Tur og sport",
+  HOME: "Hjem og hytte",
+  LEISURE: "Underholdning",
+  OTHER: "Annet",
 }
 
 export const PACKING_SEASONS: readonly PackingSeasonValue[] = [

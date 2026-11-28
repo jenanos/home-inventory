@@ -16,6 +16,7 @@ import {
   deletePackingList,
   duplicatePackingList,
   removeBundleFromList,
+  setPackingCategories,
   setPackingItemsPacked,
   syncBundleToTemplates,
   updatePackingBundle,
@@ -32,7 +33,9 @@ import {
   UPDATE_ANNOTATIONS,
 } from "./define"
 import {
+  categoryName,
   packingBundleSchema,
+  packingCategorySchema,
   packingItemSchema,
   packingListCardSchema,
   packingListKindSchema,
@@ -80,6 +83,11 @@ const itemInputSchema = z.object({
     .optional()
     .describe("How many to pack. Defaults to 1."),
   notes: shortTextInputSchema,
+  category: packingCategorySchema
+    .optional()
+    .describe(
+      "What kind of thing it is. Omit to have it guessed from the name (OTHER when nothing matches)."
+    ),
 })
 
 const personIdInputSchema = idSchema
@@ -129,6 +137,11 @@ const bundleItemUpdateInputSchema = bundleItemInputSchema.extend({
     .optional()
     .describe(
       "The item's id from get-packing-bundle. Send it for every existing item, so renames keep their link to templates; items without an id match by name."
+    ),
+  category: packingCategorySchema
+    .optional()
+    .describe(
+      "What kind of thing it is. Omit to keep an existing item's category, or to guess one for a new item. A changed category also goes to the list items copied from it that still had the old one."
     ),
 })
 
@@ -409,12 +422,15 @@ export const updatePackingItemTool = defineWriteTool({
   scope: "packing:write",
   title: "Update a thing on a packing list",
   description:
-    "Changes one item's name, quantity, notes, packed state, person or sub-list and leaves omitted fields as they are. To tick off several at once use set-packing-items-packed.",
+    "Changes one item's name, quantity, notes, category, packed state, person or sub-list and leaves omitted fields as they are. To tick off several at once use set-packing-items-packed; to set many categories at once use set-packing-categories.",
   inputSchema: {
     itemId: idSchema.describe("Id from get-packing-list."),
     name: nameInputSchema.optional(),
     quantity: z.number().int().min(1).max(MAX_PACKING_QUANTITY).optional(),
     notes: shortTextInputSchema,
+    category: packingCategorySchema
+      .optional()
+      .describe("Change the category. Omit to leave as is."),
     packed: z.boolean().optional(),
     personId: idSchema
       .nullable()
@@ -689,7 +705,7 @@ export const syncPackingBundleToTemplatesTool = defineWriteTool({
   scope: "packing:write",
   title: "Update templates from a bundle",
   description:
-    "Brings the templates (kind TEMPLATE) that use a bundle up to date with it: new things are added, changed names, notes and numbers are copied (for the template's duration) and things taken out of the bundle are removed, for each person's copy. Trips and finished trips are never changed. Use dryRun first to show the user what would change.",
+    "Brings the templates (kind TEMPLATE) that use a bundle up to date with it: new things are added, changed names, notes, categories and numbers are copied (for the template's duration) and things taken out of the bundle are removed, for each person's copy. Trips and finished trips are never changed. Use dryRun first to show the user what would change.",
   inputSchema: {
     bundleId: idSchema.describe("Id from list-packing-bundles."),
     listIds: z
@@ -739,6 +755,78 @@ export const syncPackingBundleToTemplatesTool = defineWriteTool({
       summary: `${result.dryRun ? "Forhåndsvisning, ikke lagret: " : ""}${result.bundle.name}: ${text}`,
       resourceId: result.bundle.id,
       dryRun: result.dryRun,
+    }
+  },
+})
+
+// ─── Categories ─────────────────────────────────────────────────
+
+export const setPackingCategoriesTool = defineWriteTool({
+  name: "set-packing-categories",
+  scope: "packing:write",
+  title: "Set categories of packing things",
+  description: `Sets the category of things on packing lists and in bundles, in one all-or-nothing call with up to ${MAX_BATCH_SIZE} entries of each kind. names is usually best: every thing with that name (case-insensitive) on every list and in every bundle gets the category, e.g. { name: 'Ullsokker', category: 'CLOTHING' }. bundleItems sets one thing in a bundle; the list items copied from it follow unless their category was changed on the list. items sets single things on a list, e.g. an exception to a name. Entries by id are applied after the names. Find what to fix with list-packing-item-names (category OTHER for what was not recognised). Categories only sort the list; nothing is packed or unpacked.`,
+  inputSchema: {
+    names: z
+      .array(
+        z.object({ name: nameInputSchema, category: packingCategorySchema })
+      )
+      .max(MAX_BATCH_SIZE)
+      .optional()
+      .describe("By name, from list-packing-item-names."),
+    bundleItems: z
+      .array(
+        z.object({
+          bundleItemId: idSchema.describe("Item id from get-packing-bundle."),
+          category: packingCategorySchema,
+        })
+      )
+      .max(MAX_BATCH_SIZE)
+      .optional(),
+    items: z
+      .array(
+        z.object({
+          itemId: idSchema.describe("Item id from get-packing-list."),
+          category: packingCategorySchema,
+        })
+      )
+      .max(MAX_BATCH_SIZE)
+      .optional(),
+  },
+  outputSchema: {
+    itemCount: z
+      .number()
+      .int()
+      .describe("Things on lists whose category changed."),
+    bundleItemCount: z
+      .number()
+      .int()
+      .describe("Things in bundles whose category changed."),
+    unmatchedNames: z
+      .array(z.string())
+      .describe(
+        "Names no thing in the household has; nothing was changed for them."
+      ),
+  },
+  annotations: UPDATE_ANNOTATIONS,
+  resourceType: "packing_item",
+  handler: async (args, session) => {
+    const result = await setPackingCategories(session.context, args)
+    const single =
+      args.names?.length === 1 &&
+      !args.items?.length &&
+      !args.bundleItems?.length
+        ? ` (${args.names[0]!.name} → ${categoryName(args.names[0]!.category)})`
+        : ""
+    const unmatched =
+      result.unmatchedNames.length > 0
+        ? ` Fant ikke: ${result.unmatchedNames.join(", ")}.`
+        : ""
+
+    return {
+      structuredContent: result,
+      summary: `Endret kategori på ${result.itemCount} ting på lister og ${result.bundleItemCount} i pakker${single}.${unmatched}`,
+      resourceId: null,
     }
   },
 })
@@ -949,6 +1037,7 @@ export const packingWriteTools = [
   updatePackingBundleTool,
   deletePackingBundleTool,
   syncPackingBundleToTemplatesTool,
+  setPackingCategoriesTool,
   createPackingGroupTool,
   updatePackingGroupTool,
   deletePackingGroupTool,
