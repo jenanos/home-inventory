@@ -991,7 +991,10 @@ export async function addPackingItems(
   assertResourceId(listId, LIST)
   assertBatchSize(items.length, "Ting")
   const normalized = items.map((item, index) =>
-    inBatch(index, "Ting", () => normalizeListItem(item))
+    inBatch(index, "Ting", () => ({
+      ...normalizeListItem(item),
+      guessed: item.category === undefined,
+    }))
   )
 
   const appended = await db.$transaction(async (tx) => {
@@ -1010,11 +1013,20 @@ export async function addPackingItems(
       list.id,
       normalized.map((item) => item.groupId)
     )
+    // A guess may fall back to the sub-list's name, as when it is created.
+    const groupNames = await subListNames(tx, list.id, normalized)
 
     return appendItems(
       tx,
       list.id,
-      normalized.map((item) => ({ ...item, bundleId: null })),
+      normalized.map(({ guessed, ...item }) => ({
+        ...item,
+        category:
+          guessed && item.groupId
+            ? guessPackingCategory(item.name, groupNames.get(item.groupId))
+            : item.category,
+        bundleId: null,
+      })),
       options
     )
   }, BATCH_TRANSACTION_OPTIONS)
@@ -1025,6 +1037,23 @@ export async function addPackingItems(
     createdItemIds: appended.createdIds,
     skipped: appended.skipped,
   }
+}
+
+/** The names of the sub-lists the items go into, by id. */
+async function subListNames(
+  tx: Tx,
+  listId: string,
+  items: Array<{ groupId: string | null }>
+) {
+  const ids = [
+    ...new Set(items.map((item) => item.groupId).filter((id) => id !== null)),
+  ]
+  if (ids.length === 0) return new Map<string, string>()
+  const groups = await tx.packingListGroup.findMany({
+    where: { id: { in: ids }, listId },
+    select: { id: true, name: true },
+  })
+  return new Map(groups.map((group) => [group.id, group.name]))
 }
 
 export async function updatePackingItem(
@@ -2006,9 +2035,11 @@ export async function setPackingCategories(
     ) {
       for (const row of rows) {
         if (row.category === to) continue
+        // The bundle counts as changed, so a client holding an older copy
+        // of it gets a conflict instead of writing the old category back.
         await tx.packingBundleItem.update({
           where: { id: row.id, bundle: household },
-          data: { category: to },
+          data: { category: to, bundle: { update: { updatedAt: new Date() } } },
           select: { id: true },
         })
         const followers = await tx.packingItem.findMany({

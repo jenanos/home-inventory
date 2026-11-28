@@ -87,6 +87,19 @@ describe("categories on new things", () => {
       Kaffe: "FOOD",
       "Kaffe til hytta": "HOME",
     })
+
+    // Added later to the sub-list: its name is still the fallback.
+    const group = list.groups.find((entry) => entry.name === "Førstehjelp")!
+    const inGroup = await addPackingItems(context, list.id, [
+      { name: "Mer fra apoteket", groupId: group.id },
+      { name: "Sokker", groupId: group.id },
+      { name: "Noe annet", groupId: group.id, category: "OTHER" },
+    ])
+    expect(categories(inGroup.list)).toMatchObject({
+      "Mer fra apoteket": "HEALTH",
+      Sokker: "CLOTHING",
+      "Noe annet": "OTHER",
+    })
   })
 
   it("rejects an unknown category", async () => {
@@ -270,11 +283,19 @@ describe("setPackingCategories", () => {
     const belt = bundle.items.find((item) => item.name === "Pulsbelte")!
 
     await setPackingCategories(context, {
-      bundleItems: [{ bundleItemId: belt.id, category: "ELECTRONICS" }],
+      bundleItems: [{ bundleItemId: belt.id, category: "OUTDOOR" }],
     })
 
+    // The bundle changed, so a write based on the old copy is refused.
+    await expect(
+      updatePackingBundle(context, bundle.id, {
+        items: bundle.items.map((item) => ({ id: item.id, name: item.name })),
+        expectedUpdatedAt: bundle.updatedAt,
+      })
+    ).rejects.toMatchObject({ code: "CONFLICT" })
+
     expect(categories(await getPackingList(context, list.id))).toMatchObject({
-      Pulsbelte: "ELECTRONICS",
+      Pulsbelte: "OUTDOOR",
     })
   })
 
